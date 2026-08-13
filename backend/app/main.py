@@ -1,23 +1,36 @@
-import os
+import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.api.routes import health, trips
+from app.core.config import settings
+from app.core.database import close_db
+
+logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO))
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info(f"Starting {settings.APP_NAME} (env={settings.APP_ENV}, port={settings.PORT})...")
+    yield
+    logger.info(f"Shutting down {settings.APP_NAME}...")
+    await close_db()
+
 
 app = FastAPI(
-    title="TripVerse API",
-    description="Backend service for TripVerse agentic 3D travel-planning universe",
-    version="0.1.0",
+    title=settings.APP_NAME,
+    description="Backend gateway service for TripVerse agentic travel-planning workspace",
+    version=settings.VERSION,
+    lifespan=lifespan,
+    debug=settings.DEBUG,
 )
 
-# CORS configuration strictly restricted to frontend dev server origins
-allowed_origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
-
+# CORS configuration strictly restricted to configured origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -29,5 +42,6 @@ app.include_router(trips.router)
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)
+
+    uvicorn.run("app.main:app", host="0.0.0.0", port=settings.PORT, reload=settings.DEBUG)
+

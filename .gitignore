@@ -42,3 +42,6 @@ htmlcov/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Project documentation / AI agent memory
+docs/
