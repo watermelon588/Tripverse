@@ -59,6 +59,15 @@ async def check_database_connection() -> dict:
         return {"status": "disconnected", "driver": engine.name, "details": str(e)}
 
 
+async def init_db():
+    """Initialize database tables according to registered ORM models."""
+    import app.models  # noqa: F401
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database schema initialized.")
+
+
 async def close_db():
     """Dispose connection pool on application shutdown."""
     await engine.dispose()
+

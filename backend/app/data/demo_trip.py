@@ -1,6 +1,7 @@
-from app.schemas.trip import GraphEdge, GraphNode, NodeType, TripResponse
+from app.schemas.trip import DemoTripResponse, GraphEdge, GraphNode, NodeType
 
-DEMO_TRIP_DATA = TripResponse(
+DEMO_TRIP_DATA = DemoTripResponse(
+
     id="demo-trip",
     destination="Japan",
     days=10,
