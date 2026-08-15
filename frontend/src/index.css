@@ -1,64 +1,54 @@
 @import "tailwindcss";
+@import "./styles/home.css";
 
 @layer base {
   :root {
-    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    --font-heading: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+    --font-display: 'Jockey One', system-ui, sans-serif;
+    --font-ui: 'Satoshi', 'Lato', system-ui, sans-serif;
+    --font-body: 'Lato', system-ui, sans-serif;
+
+    --color-white: #ffffff;
+    --color-gray: #d9d9d9;
+    --color-black: #1f1e1e;
+    --color-muted: #c5c5c5;
   }
 
   body {
-    font-family: var(--font-sans);
-    background-color: #030712;
-    color: #f8fafc;
+    font-family: var(--font-body);
+    background-color: var(--color-white);
+    color: var(--color-black);
     overflow-x: hidden;
-  }
-
-  h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-heading);
   }
 }
 
-/* Custom scrollbars */
+/* Universe view helpers (legacy) */
+.universe-shell {
+  background-color: #030712;
+  color: #f8fafc;
+}
+
+.universe-shell h1,
+.universe-shell h2,
+.universe-shell h3,
+.universe-shell h4,
+.universe-shell h5,
+.universe-shell h6 {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(31, 30, 30, 0.08);
 }
+
 ::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.4);
-  border-radius: 9999px;
+  background: rgba(31, 30, 30, 0.35);
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(129, 140, 248, 0.8);
-}
-
-/* Glassmorphism helpers */
-.glass-panel {
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-}
-
-.glass-card {
-  background: rgba(30, 41, 59, 0.5);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-/* Glow effects */
-.glow-indigo {
-  box-shadow: 0 0 25px rgba(99, 102, 241, 0.35);
-}
-
-.glow-purple {
-  box-shadow: 0 0 25px rgba(168, 85, 247, 0.35);
-}
-
-.glow-cyan {
-  box-shadow: 0 0 25px rgba(6, 182, 212, 0.35);
+  background: rgba(31, 30, 30, 0.55);
 }

@@ -43,5 +43,29 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# Media files
+media/
+**/media/
+*.mp4
+*.webm
+*.ogg
+*.mp3
+*.wav
+*.flac
+*.aac
+*.mov
+*.avi
+*.mkv
+
+# Database files & TypeScript build artifacts
+*.db
+*.sqlite
+*.sqlite3
+*.tsbuildinfo
+**/tsconfig*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+vite.config.js.timestamp*
+
 # Project documentation / AI agent memory
 docs/
