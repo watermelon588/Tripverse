@@ -26,7 +26,7 @@ async def test_create_trip(client: AsyncClient):
     assert "session_id" in data
     assert "assistant_message" in data
     assert data["assistant_message"]["role"] == "ASSISTANT"
-    assert data["assistant_message"]["content"] == "Where do you want to head out to?"
+    assert data["assistant_message"]["content"] == "Welcome Rohit. Where do you want to head out to?"
 
 
 @pytest.mark.asyncio
