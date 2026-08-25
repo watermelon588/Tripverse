@@ -71,7 +71,11 @@ Verify backend APIs:
 - API Root: [http://localhost:8000](http://localhost:8000)
 - Health Check: [http://localhost:8000/api/health](http://localhost:8000/api/health)
 - Demo Trip Graph: [http://localhost:8000/api/trips/demo](http://localhost:8000/api/trips/demo)
-- OpenAPI Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+- Create Trip Session: `POST http://localhost:8000/api/trips`
+- Send Trip Message: `POST http://localhost:8000/api/trips/{trip_id}/messages`
+- Get Trip State: `GET http://localhost:8000/api/trips/{trip_id}`
+- Get Trip Messages: `GET http://localhost:8000/api/trips/{trip_id}/messages`
+- Interactive OpenAPI Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ---
 
