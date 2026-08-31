@@ -11,13 +11,19 @@ class TripRepository:
     """Repository handling database access for Trip entities."""
 
     async def create_trip(
-        self, db: AsyncSession, currency: str = "INR"
+        self,
+        db: AsyncSession,
+        currency: str = "INR",
+        user_id: Optional[str] = None,
+        guest_id: Optional[str] = None,
     ) -> Trip:
-        """Create and flush a new Trip record."""
+        """Create and flush a new Trip record (belonging to either user_id or guest_id)."""
         new_trip = Trip(
             status=TripStatus.DRAFT,
             onboarding_status=OnboardingStatus.IN_PROGRESS,
             currency=currency,
+            user_id=user_id,
+            guest_id=guest_id,
         )
         db.add(new_trip)
         await db.flush()
@@ -30,3 +36,21 @@ class TripRepository:
         stmt = select(Trip).where(Trip.id == trip_id)
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def get_by_user_id(
+        self, db: AsyncSession, user_id: str
+    ) -> list[Trip]:
+        """Fetch all trips created by an authenticated user."""
+        stmt = select(Trip).where(Trip.user_id == user_id).order_by(Trip.created_at.desc())
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_by_guest_id(
+        self, db: AsyncSession, guest_id: str
+    ) -> list[Trip]:
+        """Fetch all trips created by a guest."""
+        stmt = select(Trip).where(Trip.guest_id == guest_id).order_by(Trip.created_at.desc())
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
+
+

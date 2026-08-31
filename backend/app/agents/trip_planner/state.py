@@ -1,7 +1,10 @@
 from typing import TypedDict
 
+
 class TripPlanningState(TypedDict):
     trip_id: str
+    user_id: str | None
+    guest_id: str | None
     user_message: str
 
     destination: str | None

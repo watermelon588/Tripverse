@@ -26,7 +26,10 @@ class Trip(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         primary_key=True, default=uuid.uuid4, index=True
     )
+    user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    guest_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     destination: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
     origin_text: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     origin_latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     origin_longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

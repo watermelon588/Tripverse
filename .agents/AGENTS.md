@@ -38,3 +38,8 @@ After completing any development session or major task milestone, you MUST perfo
 3. **Global Trackers Update**:
    - Update [`docs/CURRENT_STATE.md`](file:///c:/Users/Rohit%20Maity/Desktop/coding/Webdev/project/TripVerse/docs/CURRENT_STATE.md) with updated capabilities and current status.
    - Append a session entry to [`docs/DEVELOPMENT_LOG.md`](file:///c:/Users/Rohit%20Maity/Desktop/coding/Webdev/project/TripVerse/docs/DEVELOPMENT_LOG.md).
+
+4. **Endpoint Testing & API Docs Update**:
+   - Whenever any new backend endpoint is registered or existing endpoint contracts are modified, you MUST update [`docs/BACKEND_ENDPOINT_TESTING.md`](file:///c:/Users/Rohit%20Maity/Desktop/coding/Webdev/project/TripVerse/docs/BACKEND_ENDPOINT_TESTING.md) with exact Postman/cURL test instructions, request bodies, and expected responses.
+   - Update [`docs/architecture/API_REFERENCE.md`](file:///c:/Users/Rohit%20Maity/Desktop/coding/Webdev/project/TripVerse/docs/architecture/API_REFERENCE.md).
+

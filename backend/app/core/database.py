@@ -64,7 +64,14 @@ async def init_db():
     import app.models  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if "postgresql" in engine.name:
+            try:
+                await conn.execute(text("ALTER TABLE trips ADD COLUMN IF NOT EXISTS guest_id VARCHAR(64);"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_trips_guest_id ON trips(guest_id);"))
+            except Exception as e:
+                logger.debug(f"PostgreSQL migration check note: {e}")
     logger.info("Database schema initialized.")
+
 
 
 async def close_db():
