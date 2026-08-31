@@ -38,8 +38,15 @@ class TripService:
         new_session = await self.conversation_repo.create_session(db, new_trip.id)
 
         # 3. Invoke Trip Planner LangGraph agent
-        graph_input = {"name": "Rohit", "assistant_response": ""}
-        graph_result = trip_planner_graph.invoke(graph_input)
+        initial_state = {
+            "trip_id": "abc-123",
+            "user_message": "Japan for 10 days",
+            "destination": None,
+            "duration_days": None,
+            "origin": None,
+            "assistant_response": "",
+        }
+        graph_result = trip_planner_graph.invoke(initial_state)
 
         # 4. Save initial Assistant greeting message
         initial_msg = await self.message_repo.create_message(
