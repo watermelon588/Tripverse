@@ -6,8 +6,11 @@ import { Home } from './pages/Home';
 import { Explore } from './pages/Explore';
 import { CreateTrip } from './pages/CreateTrip';
 import { TripUniverse } from './pages/TripUniverse';
+import { LoginPage } from './pages/LoginPage';
+import { SignupPage } from './pages/SignupPage';
+import { ProfilePage } from './pages/ProfilePage';
 
-type ViewState = 'home' | 'explore' | 'create' | 'universe';
+type ViewState = 'home' | 'explore' | 'create' | 'universe' | 'login' | 'signup' | 'profile';
 
 const getViewFromPath = (): ViewState => {
   if (typeof window === 'undefined') return 'home';
@@ -15,6 +18,9 @@ const getViewFromPath = (): ViewState => {
   if (path === '/explore') return 'explore';
   if (path === '/create') return 'create';
   if (path === '/universe') return 'universe';
+  if (path === '/login') return 'login';
+  if (path === '/signup') return 'signup';
+  if (path === '/profile') return 'profile';
   return 'home';
 };
 
@@ -66,17 +72,42 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 font-sans antialiased">
+    <div className="min-h-screen bg-white dark:bg-[#121212] text-[#1F1E1E] dark:text-white font-sans antialiased transition-colors duration-200">
       {view === 'home' && (
         <Home
           onStartPlanning={() => navigateTo('create')}
           onNavigateExplore={() => navigateTo('explore')}
+          onNavigateLogin={() => navigateTo('login')}
+          onNavigateSignup={() => navigateTo('signup')}
+          onNavigateProfile={() => navigateTo('profile')}
         />
       )}
       {view === 'explore' && (
         <Explore
           onStartPlanning={() => navigateTo('create')}
           onNavigateHome={() => navigateTo('home')}
+        />
+      )}
+      {view === 'login' && (
+        <LoginPage
+          onNavigateSignup={() => navigateTo('signup')}
+          onNavigateHome={() => navigateTo('home')}
+          onSuccess={() => navigateTo('create')}
+        />
+      )}
+      {view === 'signup' && (
+        <SignupPage
+          onNavigateLogin={() => navigateTo('login')}
+          onNavigateHome={() => navigateTo('home')}
+          onSuccess={() => navigateTo('create')}
+        />
+      )}
+      {view === 'profile' && (
+        <ProfilePage
+          onNavigateHome={() => navigateTo('home')}
+          onNavigateExplore={() => navigateTo('explore')}
+          onStartPlanning={() => navigateTo('create')}
+          onOpenUniverse={() => navigateTo('universe')}
         />
       )}
       {view === 'create' && (

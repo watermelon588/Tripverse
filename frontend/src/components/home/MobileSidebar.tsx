@@ -7,6 +7,8 @@ import {
   LogoMarkIcon,
   ResourcesIcon,
 } from './HomeIcons';
+import { useAuth } from '../../context/AuthContext';
+import { User } from 'lucide-react';
 
 const SIDEBAR_LINKS = [
   { label: 'Start Chatting', icon: ChatIcon, key: 'chat' },
@@ -23,6 +25,7 @@ interface MobileSidebarProps {
   onLogin: () => void;
   onNavigateExplore?: () => void;
   onNavigateHome?: () => void;
+  onNavigateProfile?: () => void;
 }
 
 export function MobileSidebar({
@@ -32,7 +35,10 @@ export function MobileSidebar({
   onLogin,
   onNavigateExplore,
   onNavigateHome,
+  onNavigateProfile,
 }: MobileSidebarProps) {
+  const { user } = useAuth();
+
   const handleItemClick = (key: string) => {
     onClose();
     if (key === 'explore' && onNavigateExplore) {
@@ -89,27 +95,55 @@ export function MobileSidebar({
           ))}
         </nav>
 
-        <div className="home-sidebar__actions">
-          <button
-            type="button"
-            className="home-sidebar__cta home-sidebar__cta--primary"
-            onClick={() => {
-              onClose();
-              onGetStarted();
-            }}
-          >
-            Get started
-          </button>
-          <button
-            type="button"
-            className="home-sidebar__cta home-sidebar__cta--secondary"
-            onClick={() => {
-              onClose();
-              onLogin();
-            }}
-          >
-            Log in
-          </button>
+        <div className="home-sidebar__actions flex flex-col gap-3 pt-4 border-t border-[#D9D9D9]">
+          {user ? (
+            <>
+              <button
+                type="button"
+                className="w-full py-3 px-4 bg-[#1F1E1E] text-white font-extrabold text-xs uppercase tracking-widest rounded-none flex items-center justify-center gap-2 hover:bg-black transition-colors"
+                onClick={() => {
+                  onClose();
+                  onNavigateProfile?.();
+                }}
+              >
+                <User className="w-4 h-4" />
+                <span>My Profile</span>
+              </button>
+              <button
+                type="button"
+                className="w-full py-3 px-4 bg-transparent text-[#1F1E1E] border-2 border-[#1F1E1E] font-extrabold text-xs uppercase tracking-widest rounded-none flex items-center justify-center gap-2 hover:bg-[#D9D9D9]/40 transition-colors"
+                onClick={() => {
+                  onClose();
+                  onLogin();
+                }}
+              >
+                <span>Switch / Log In</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="w-full py-3 px-4 bg-[#1F1E1E] text-white font-extrabold text-xs uppercase tracking-widest rounded-none hover:bg-black transition-colors shadow-none"
+                onClick={() => {
+                  onClose();
+                  onGetStarted();
+                }}
+              >
+                Get started
+              </button>
+              <button
+                type="button"
+                className="w-full py-3 px-4 bg-white text-[#1F1E1E] border-2 border-[#1F1E1E] font-extrabold text-xs uppercase tracking-widest rounded-none hover:bg-[#D9D9D9]/40 transition-colors shadow-none"
+                onClick={() => {
+                  onClose();
+                  onLogin();
+                }}
+              >
+                Log In
+              </button>
+            </>
+          )}
         </div>
       </aside>
     </>

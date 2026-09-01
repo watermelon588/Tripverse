@@ -8,24 +8,22 @@ import { useLenis } from '../hooks/useLenis';
 interface HomeProps {
   onStartPlanning: () => void;
   onNavigateExplore?: () => void;
+  onNavigateLogin?: () => void;
+  onNavigateSignup?: () => void;
+  onNavigateProfile?: () => void;
 }
 
-export function Home({ onStartPlanning, onNavigateExplore }: HomeProps) {
+export function Home({
+  onStartPlanning,
+  onNavigateExplore,
+  onNavigateLogin,
+  onNavigateSignup,
+  onNavigateProfile,
+}: HomeProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
   useLenis(true);
-
-  useEffect(() => {
-    document.documentElement.classList.remove('dark');
-    document.body.style.backgroundColor = '#ffffff';
-    document.body.style.color = '#1f1e1e';
-
-    return () => {
-      document.body.style.backgroundColor = '';
-      document.body.style.color = '';
-    };
-  }, []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -43,7 +41,18 @@ export function Home({ onStartPlanning, onNavigateExplore }: HomeProps) {
 
   const handleGetStarted = () => {
     setSidebarOpen(false);
-    onStartPlanning();
+    if (onNavigateSignup) {
+      onNavigateSignup();
+    } else {
+      onStartPlanning();
+    }
+  };
+
+  const handleLogin = () => {
+    setSidebarOpen(false);
+    if (onNavigateLogin) {
+      onNavigateLogin();
+    }
   };
 
   return (
@@ -53,19 +62,21 @@ export function Home({ onStartPlanning, onNavigateExplore }: HomeProps) {
         onMenuOpen={() => setSidebarOpen(true)}
         onGetStarted={handleGetStarted}
         onNavigateExplore={onNavigateExplore}
+        onNavigateProfile={onNavigateProfile}
       />
 
       <MobileSidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         onGetStarted={handleGetStarted}
-        onLogin={() => setSidebarOpen(false)}
+        onLogin={handleLogin}
         onNavigateExplore={onNavigateExplore}
+        onNavigateProfile={onNavigateProfile}
       />
 
       <main>
         <Hero
-          onStartPlanning={handleGetStarted}
+          onStartPlanning={onStartPlanning}
           onPlayVideo={() => {
             /* Placeholder — video asset not in scope */
           }}
