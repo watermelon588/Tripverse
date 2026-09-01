@@ -69,3 +69,4 @@ vite.config.js.timestamp*
 
 # Project documentation / AI agent memory
 docs/
+local/

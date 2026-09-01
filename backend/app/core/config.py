@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     SUPABASE_SECRET: str = ""
     SUPABASE_JWT_SECRET: str = ""
 
+    # Google Gemini LLM Configuration
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.6-flash"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

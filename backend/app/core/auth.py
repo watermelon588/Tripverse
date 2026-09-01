@@ -25,6 +25,7 @@ class RequestIdentity(BaseModel):
     """Application-level resolved request identity (either Authenticated User or Guest)."""
     user_id: Optional[str] = None
     guest_id: Optional[str] = None
+    user_name: Optional[str] = None
 
     @property
     def is_authenticated(self) -> bool:
@@ -151,12 +152,18 @@ async def get_request_identity(
     """
     user_id: Optional[str] = None
     guest_id: Optional[str] = None
+    user_name: Optional[str] = None
 
     # 1. Resolve authenticated user if token is provided
     if credentials and credentials.credentials:
         user = await get_optional_user(credentials)
         if user:
             user_id = user.id
+            user_name = (
+                user.user_metadata.get("full_name")
+                or user.user_metadata.get("name")
+                or (user.email.split("@")[0].capitalize() if user.email else None)
+            )
 
     # 2. Resolve guest UUID if header is provided
     if x_guest_id:
@@ -178,4 +185,4 @@ async def get_request_identity(
             detail="Cannot supply both authenticated user credentials and X-Guest-ID.",
         )
 
-    return RequestIdentity(user_id=user_id, guest_id=guest_id)
+    return RequestIdentity(user_id=user_id, guest_id=guest_id, user_name=user_name)
