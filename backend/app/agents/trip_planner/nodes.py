@@ -1,13 +1,18 @@
 from app.agents.trip_planner.state import TripPlanningState
+from app.services.llm.service import llm_service
 
 
-def welcome_node(state: TripPlanningState) -> dict:
-    """Greeting node for initializing trip planning session."""
+async def welcome_node(state: TripPlanningState) -> dict:
+    """
+    Greeting node for initializing trip planning session with AI-generated welcome.
+    Delegates generation to LLMService, keeping LangGraph decoupled from provider details.
+    """
+    user_name = state.get("user_name")
     user_message = state.get("user_message", "")
 
-    if not user_message:
-        return {
-            "assistant_response": "Hi! I'm your AI travel planner. Where would you like to go?"
-        }
+    response = await llm_service.generate_welcome_greeting(
+        user_name=user_name,
+        user_message=user_message,
+    )
 
-    return {"assistant_response": f"Exploring {user_message} for you..."}
+    return {"assistant_response": response}

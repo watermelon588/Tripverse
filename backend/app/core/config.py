@@ -18,8 +18,18 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
     ]
 
-    # Database connection string (PostgreSQL / Neon compatible, SQLite fallback for zero-config dev)
+    # Database connection string (PostgreSQL / Supabase compatible, SQLite fallback for zero-config dev)
     DATABASE_URL: str = "sqlite+aiosqlite:///./tripverse.db"
+
+    # Supabase Configuration
+    SUPABASE_URL: str = ""
+    SUPABASE_KEY: str = ""
+    SUPABASE_SECRET: str = ""
+    SUPABASE_JWT_SECRET: str = ""
+
+    # Google Gemini LLM Configuration
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.6-flash"
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -82,7 +82,10 @@ class ConversationSessionResponse(BaseModel):
 
 class TripResponse(BaseModel):
     id: UUID
+    user_id: Optional[str] = None
+    guest_id: Optional[str] = None
     destination: Optional[str] = None
+
     origin_text: Optional[str] = None
     origin_latitude: Optional[float] = None
     origin_longitude: Optional[float] = None
@@ -94,6 +97,7 @@ class TripResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
 
 
 class TripStateResponse(BaseModel):

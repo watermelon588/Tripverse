@@ -1,4 +1,5 @@
 import { LogoMarkIcon, MenuIcon } from './HomeIcons';
+import { UserMenu } from '../auth/UserMenu';
 
 const NAV_LINKS = [
   { label: 'How it works', href: '#how-it-works', key: 'how' },
@@ -71,10 +72,14 @@ export function Navbar({
           ))}
         </nav>
 
-        <button type="button" className="home-navbar__cta" onClick={onGetStarted}>
-          Get started
-        </button>
+        <div className="flex items-center gap-3">
+          <UserMenu />
+          <button type="button" className="home-navbar__cta" onClick={onGetStarted}>
+            Get started
+          </button>
+        </div>
       </div>
     </header>
   );
 }
+
