@@ -3,37 +3,96 @@
 
 @layer base {
   :root {
-    --font-display: 'Jockey One', system-ui, sans-serif;
-    --font-ui: 'Satoshi', 'Lato', system-ui, sans-serif;
+    --font-grand-hero: 'Jockey One', system-ui, sans-serif;
+    --font-display: 'Lato', system-ui, sans-serif;
+    --font-ui: 'Lato', system-ui, sans-serif;
     --font-body: 'Lato', system-ui, sans-serif;
 
     --color-white: #ffffff;
     --color-gray: #d9d9d9;
     --color-black: #1f1e1e;
-    --color-muted: #c5c5c5;
+    --color-muted: #737373;
+
+    --bg-primary: #ffffff;
+    --bg-surface: #f9f9f9;
+    --text-primary: #1f1e1e;
+    --text-secondary: rgba(31, 30, 30, 0.7);
+    --border-primary: #d9d9d9;
+  }
+
+  /* Universal Sharp Edges Constraint (border-radius = 0 for entire app) */
+  *,
+  *::before,
+  *::after,
+  button,
+  input,
+  select,
+  textarea,
+  dialog,
+  [role="dialog"],
+  [role="button"],
+  [role="menu"],
+  [role="tab"] {
+    border-radius: 0 !important;
   }
 
   body {
     font-family: var(--font-body);
-    background-color: var(--color-white);
-    color: var(--color-black);
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
     overflow-x: hidden;
   }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-body);
+    letter-spacing: -0.01em;
+  }
+
+  button, input, select, textarea, nav, [role="tab"] {
+    font-family: var(--font-body);
+  }
+
+  /* Default Button Hover Animation across the Entire Application */
+  button,
+  [role="button"],
+  .btn,
+  .button {
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease !important;
+  }
+
+  button:hover:not(:disabled),
+  [role="button"]:hover:not(:disabled),
+  .btn:hover:not(:disabled),
+  .button:hover:not(:disabled) {
+    transform: translateY(-2px);
+  }
+
+  button:active:not(:disabled),
+  [role="button"]:active:not(:disabled),
+  .btn:active:not(:disabled),
+  .button:active:not(:disabled) {
+    transform: translateY(0);
+  }
+}
+
+/* Only the Grand Hero Heading retains Jockey One */
+.home-display,
+.font-grand-hero {
+  font-family: var(--font-grand-hero) !important;
+}
+
+/* All other sections, headings, UI controls, forms, and pages use Lato */
+.font-display,
+.font-ui,
+.font-body {
+  font-family: var(--font-body) !important;
 }
 
 /* Universe view helpers (legacy) */
 .universe-shell {
   background-color: #030712;
   color: #f8fafc;
-}
-
-.universe-shell h1,
-.universe-shell h2,
-.universe-shell h3,
-.universe-shell h4,
-.universe-shell h5,
-.universe-shell h6 {
-  font-family: 'Space Grotesk', system-ui, sans-serif;
 }
 
 ::-webkit-scrollbar {

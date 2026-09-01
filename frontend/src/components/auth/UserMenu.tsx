@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { LogOut, User as UserIcon, Sparkles } from 'lucide-react';
-import { AuthModal } from './AuthModal';
+import { LogOut, User as UserIcon } from 'lucide-react';
 
-export const UserMenu: React.FC = () => {
+interface UserMenuProps {
+  onNavigateProfile?: () => void;
+}
+
+export const UserMenu: React.FC<UserMenuProps> = ({ onNavigateProfile }) => {
   const { user, signOut } = useAuth();
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -20,66 +22,85 @@ export const UserMenu: React.FC = () => {
   }, []);
 
   if (!user) {
-    return (
-      <>
-        <button
-          type="button"
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-wider text-white/90 bg-white/10 hover:bg-white/20 border border-white/15 backdrop-blur-md transition-all hover:scale-[1.03] active:scale-[0.98]"
-        >
-          <UserIcon className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Sign In</span>
-        </button>
-        <AuthModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
-      </>
-    );
+    return null;
   }
 
   const displayName =
     user.user_metadata?.full_name ||
     user.email?.split('@')[0] ||
-    'Voyager';
+    'VOYAGER';
 
   const initials = displayName.substring(0, 2).toUpperCase();
 
+  const handleProfileClick = () => {
+    setIsDropdownOpen(false);
+    if (onNavigateProfile) {
+      onNavigateProfile();
+    }
+  };
+
   return (
     <div className="relative" ref={dropdownRef}>
+      {/* Clean User Trigger Badge (No Border, No Hover Transform) */}
       <button
         type="button"
         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-        className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/15 border border-white/15 backdrop-blur-md transition-all text-white"
+        className="flex items-center gap-2 px-2 py-1.5 bg-transparent text-[#1F1E1E] border-0 outline-none rounded-none !transform-none hover:!transform-none active:!transform-none cursor-pointer select-none"
+        aria-expanded={isDropdownOpen}
+        aria-label="User Account Menu"
+        style={{ transform: 'none' }}
       >
-        <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white shadow-sm">
+        <div className="w-5 h-5 bg-[#1F1E1E] text-white flex items-center justify-center text-[10px] font-black uppercase rounded-none shrink-0">
           {initials}
         </div>
-        <span className="text-xs font-medium text-neutral-200 hidden sm:inline-block max-w-[100px] truncate">
+        <span className="text-xs font-black tracking-wider uppercase max-w-[120px] truncate font-body">
           {displayName}
         </span>
       </button>
 
+      {/* Dropdown Panel */}
       {isDropdownOpen && (
-        <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-neutral-900/95 border border-white/10 p-2 shadow-2xl backdrop-blur-xl z-50 text-white animate-fade-in">
-          <div className="px-3 py-2.5 border-b border-white/10 mb-1">
-            <p className="text-xs font-medium text-white truncate">{displayName}</p>
-            <p className="text-[11px] text-neutral-400 truncate">{user.email}</p>
-          </div>
-
-          <div className="py-1">
-            <div className="flex items-center gap-2 px-3 py-2 text-xs text-indigo-300">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>TripVerse Cloud Connected</span>
+        <div className="absolute right-0 mt-2 w-64 bg-white border border-[#D9D9D9] p-0 shadow-xl z-50 text-[#1F1E1E] rounded-none">
+          {/* Header Info Banner */}
+          <div className="p-3.5 bg-[#F9F9F9] border-b border-[#D9D9D9]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 bg-[#1F1E1E] text-white flex items-center justify-center text-xs font-black uppercase rounded-none shrink-0">
+                {initials}
+              </div>
+              <div className="overflow-hidden">
+                <p className="text-xs font-black uppercase tracking-wide truncate font-body">{displayName}</p>
+                <p className="text-[11px] font-medium text-[#1F1E1E]/60 truncate font-body">{user.email}</p>
+              </div>
+            </div>
+            <div className="mt-2.5 pt-2 border-t border-[#D9D9D9] flex items-center justify-between text-[9px] font-bold tracking-widest uppercase text-[#1F1E1E]/70 font-body">
+              <span>VOYAGER MEMBER</span>
+              <span className="text-emerald-600 font-extrabold">CLOUD ACTIVE</span>
             </div>
           </div>
 
-          <div className="border-t border-white/10 pt-1">
+          {/* Action Links */}
+          <div className="p-1.5 flex flex-col gap-0.5">
             <button
+              type="button"
+              onClick={handleProfileClick}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold uppercase tracking-wider text-[#1F1E1E] hover:bg-[#F9F9F9] rounded-none transition-colors text-left cursor-pointer font-body"
+            >
+              <UserIcon className="w-4 h-4 text-[#1F1E1E]" />
+              <span>Dedicated Profile</span>
+            </button>
+          </div>
+
+          {/* Sign Out Action */}
+          <div className="p-1.5 border-t border-[#D9D9D9]">
+            <button
+              type="button"
               onClick={async () => {
                 setIsDropdownOpen(false);
                 await signOut();
               }}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-red-400 hover:bg-red-500/10 transition-colors text-left"
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold uppercase tracking-wider text-red-600 hover:bg-red-50 rounded-none transition-colors text-left cursor-pointer font-body"
             >
-              <LogOut className="w-3.5 h-3.5" />
+              <LogOut className="w-4 h-4" />
               <span>Sign Out</span>
             </button>
           </div>

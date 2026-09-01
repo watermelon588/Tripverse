@@ -13,6 +13,7 @@ interface NavbarProps {
   scrolled: boolean;
   onNavigateExplore?: () => void;
   onNavigateHome?: () => void;
+  onNavigateProfile?: () => void;
 }
 
 export function Navbar({
@@ -21,6 +22,7 @@ export function Navbar({
   scrolled,
   onNavigateExplore,
   onNavigateHome,
+  onNavigateProfile,
 }: NavbarProps) {
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, key: string) => {
     if (key === 'explore' && onNavigateExplore) {
@@ -73,7 +75,7 @@ export function Navbar({
         </nav>
 
         <div className="flex items-center gap-3">
-          <UserMenu />
+          <UserMenu onNavigateProfile={onNavigateProfile} />
           <button type="button" className="home-navbar__cta" onClick={onGetStarted}>
             Get started
           </button>
