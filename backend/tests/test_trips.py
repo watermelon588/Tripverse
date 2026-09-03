@@ -29,8 +29,7 @@ async def test_create_trip_anonymous(client: AsyncClient):
     assert "session_id" in data
     assert "assistant_message" in data
     assert data["assistant_message"]["role"] == "ASSISTANT"
-    assert "TripVerse" in data["assistant_message"]["content"]
-
+    assert data["assistant_message"]["content"] == "Where do you want to travel?"
 
 
 @pytest.mark.asyncio

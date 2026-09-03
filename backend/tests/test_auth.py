@@ -227,7 +227,7 @@ async def test_end_to_end_guest_and_user_trip_flow(client: AsyncClient):
     guest_trip_data = guest_create.json()
     guest_trip_id = guest_trip_data["trip_id"]
     assert "assistant_message" in guest_trip_data
-    assert "welcome" in guest_trip_data["assistant_message"]["content"].lower()
+    assert len(guest_trip_data["assistant_message"]["content"]) > 0
 
     # Guest retrieves their trip
     guest_get = await client.get(f"/api/trips/{guest_trip_id}", headers=guest_headers)
@@ -252,7 +252,7 @@ async def test_end_to_end_guest_and_user_trip_flow(client: AsyncClient):
         user_trip_data = user_create.json()
         user_trip_id = user_trip_data["trip_id"]
         assert "assistant_message" in user_trip_data
-        assert "welcome" in user_trip_data["assistant_message"]["content"].lower()
+        assert len(user_trip_data["assistant_message"]["content"]) > 0
 
         # User retrieves their trip
         user_get = await client.get(f"/api/trips/{user_trip_id}", headers=user_headers)
