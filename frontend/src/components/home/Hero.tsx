@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -17,10 +16,7 @@ interface HeroProps {
   onPlayVideo?: () => void;
 }
 
-export function Hero({
-  onStartPlanning,
-  onPlayVideo,
-}: HeroProps) {
+export function Hero({ onStartPlanning, onPlayVideo }: HeroProps) {
   const sectionRef = useRef<HTMLElement>(null);
 
   const backgroundRef = useRef<HTMLDivElement>(null);
@@ -34,28 +30,28 @@ export function Hero({
 
   const [imagesReady, setImagesReady] = useState(false);
 
-useEffect(() => {
-  const images = [heroImage, heroForeground];
+  useEffect(() => {
+    const images = [heroImage, heroForeground];
 
-  let loaded = 0;
+    let loaded = 0;
 
-  const handleLoaded = () => {
-    loaded += 1;
+    const handleLoaded = () => {
+      loaded += 1;
 
-    if (loaded === images.length) {
-      setImagesReady(true);
-    }
-  };
+      if (loaded === images.length) {
+        setImagesReady(true);
+      }
+    };
 
-  images.forEach((src) => {
-    const image = new Image();
+    images.forEach((src) => {
+      const image = new Image();
 
-    image.onload = handleLoaded;
-    image.onerror = handleLoaded;
+      image.onload = handleLoaded;
+      image.onerror = handleLoaded;
 
-    image.src = src;
-  });
-}, []);
+      image.src = src;
+    });
+  }, []);
 
   /*
    * --------------------------------------------------------------------------
@@ -227,14 +223,8 @@ useEffect(() => {
       {/* TYPOGRAPHY PLANE                                                   */}
       {/* ------------------------------------------------------------------ */}
 
-      <div
-        className="home-hero__title-layer"
-        aria-hidden="true"
-      >
-        <h1
-          ref={titleRef}
-          className="home-hero__title home-display"
-        >
+      <div className="home-hero__title-layer" aria-hidden="true">
+        <h1 ref={titleRef} className="home-hero__title home-display">
           TRIPVERSE
         </h1>
       </div>
