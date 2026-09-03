@@ -81,17 +81,18 @@ class TripService:
         # 3. Invoke Trip Planner LangGraph agent
         initial_state = {
             "trip_id": str(new_trip.id),
-            "user_id": user_id,
-            "guest_id": guest_id,
+            "user_id": str(user_id) if user_id else None,
+            "guest_id": str(guest_id) if guest_id else None,
             "user_name": user_name,
             "user_message": "",
             "destination": None,
             "duration_days": None,
             "origin": None,
+            "onboarding_complete": False,
+            "missing_fields": ["destination", "duration_days"],
             "assistant_response": "",
         }
         graph_result = await trip_planner_graph.ainvoke(initial_state)
-
 
         # 4. Save initial Assistant greeting message
         initial_msg = await self.message_repo.create_message(
