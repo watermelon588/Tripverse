@@ -10,6 +10,16 @@ export interface ApiRequestOptions extends RequestInit {
   skipAuth?: boolean;
 }
 
+// In-memory token cache to avoid awaiting supabase.auth.getSession() on every API call
+let cachedAccessToken: string | null = null;
+let cachedTokenExpiresAt: number = 0;
+
+// Listen to Supabase auth events to keep token cache hot
+supabase.auth.onAuthStateChange((_event, session) => {
+  cachedAccessToken = session?.access_token ?? null;
+  cachedTokenExpiresAt = session?.expires_at ? session.expires_at * 1000 : 0;
+});
+
 /**
  * Centralized API fetch wrapper for TripVerse.
  * Automatically injects:
@@ -32,11 +42,20 @@ export async function apiFetch<T = any>(
 
   if (!skipAuth) {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      let token = cachedAccessToken;
+      const now = Date.now();
 
-      if (session?.access_token) {
+      // If cache miss or token expiring within 60 seconds, fetch session
+      if (!token || now >= cachedTokenExpiresAt - 60000) {
+        const { data: { session } } = await supabase.auth.getSession();
+        token = session?.access_token ?? null;
+        cachedAccessToken = token;
+        cachedTokenExpiresAt = session?.expires_at ? session.expires_at * 1000 : 0;
+      }
+
+      if (token) {
         // Authenticated User Identity
-        headers.set('Authorization', `Bearer ${session.access_token}`);
+        headers.set('Authorization', `Bearer ${token}`);
         headers.delete('X-Guest-ID');
       } else {
         // Guest Identity

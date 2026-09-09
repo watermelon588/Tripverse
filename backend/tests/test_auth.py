@@ -272,3 +272,41 @@ async def test_end_to_end_guest_and_user_trip_flow(client: AsyncClient):
                 logout_res = await client.post("/api/auth/logout", headers=user_headers)
                 assert logout_res.status_code == 200
                 assert logout_res.json()["status"] == "success"
+
+
+@pytest.mark.asyncio
+async def test_local_jwt_decode_and_cache_avoids_remote_auth():
+    """Verify that valid JWTs decode locally and cache in memory, NEVER calling remote Supabase API."""
+    import jwt
+    import time
+    from fastapi.security import HTTPAuthorizationCredentials
+    from app.core.auth import get_current_user, _TOKEN_CACHE
+
+    test_user_id = str(uuid.uuid4())
+    payload = {
+        "sub": test_user_id,
+        "email": "fastuser@example.com",
+        "role": "authenticated",
+        "user_metadata": {"full_name": "Fast User"},
+        "exp": int(time.time()) + 3600,
+    }
+    # Encode token (unverified or signed)
+    token = jwt.encode(payload, "a-secure-32-byte-secret-key-12345", algorithm="HS256")
+    creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+
+    # Clear cache before test
+    _TOKEN_CACHE.pop(token, None)
+
+    with patch("app.core.auth._verify_token_with_supabase") as mock_remote:
+        # First call: local JWT decode, no remote call
+        user1 = await get_current_user(creds)
+        assert user1.id == test_user_id
+        assert user1.email == "fastuser@example.com"
+        mock_remote.assert_not_called()
+
+        # Second call: in-memory cache hit, no remote call
+        user2 = await get_current_user(creds)
+        assert user2.id == test_user_id
+        mock_remote.assert_not_called()
+

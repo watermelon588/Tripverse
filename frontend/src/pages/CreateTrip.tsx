@@ -1,180 +1,468 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Sparkles, MapPin, Calendar, DollarSign, Compass, ArrowRight } from 'lucide-react';
+import { CreateSidebar } from '../components/create/CreateSidebar';
+import { ChatWorkspace } from '../components/create/ChatWorkspace';
+import { SpatialWorkspace } from '../components/create/SpatialWorkspace';
+import { ChatSessionItem } from '../components/create/ChatHistory';
+import { ChatMessageItem } from '../components/create/ChatMessage';
+import { CurrentTripContext } from '../components/create/CurrentTrip';
 import { TripFormData } from '../types/trip';
+import { useTheme } from '../context/ThemeContext';
+import { createTrip, sendTripMessage, getTripMessages } from '../services/tripService';
 
 interface CreateTripProps {
-  onBuildUniverse: (formData: TripFormData) => void;
+  onBuildUniverse?: (formData: TripFormData) => void;
+  onNavigateHome?: () => void;
+  onNavigateExplore?: () => void;
+  onNavigateProfile?: () => void;
+  onNavigateLogin?: () => void;
+  onNavigateSignup?: () => void;
 }
 
-const INTEREST_OPTIONS = [
-  { id: 'food', label: 'Food', emoji: '🍜', color: 'from-emerald-500/20 to-teal-500/20 border-emerald-500/50 text-emerald-300' },
-  { id: 'anime', label: 'Anime', emoji: '🌸', color: 'from-pink-500/20 to-rose-500/20 border-pink-500/50 text-pink-300' },
-  { id: 'nature', label: 'Nature', emoji: '⛩️', color: 'from-emerald-500/20 to-green-500/20 border-green-500/50 text-green-300' },
-  { id: 'culture', label: 'Culture', emoji: '🏮', color: 'from-amber-500/20 to-orange-500/20 border-amber-500/50 text-amber-300' },
-  { id: 'tech', label: 'Technology', emoji: '🤖', color: 'from-cyan-500/20 to-blue-500/20 border-cyan-500/50 text-cyan-300' },
-  { id: 'shopping', label: 'Shopping', emoji: '🛍️', color: 'from-purple-500/20 to-violet-500/20 border-purple-500/50 text-purple-300' },
+// Initial mock conversation sessions for realistic UI demonstration and testing
+const INITIAL_SESSIONS: ChatSessionItem[] = [
+  {
+    id: 'session-japan-2026',
+    title: 'Japan Sakura Voyage',
+    timestamp: '2 hours ago',
+    preview: '10 days covering Tokyo, Kyoto, Nara, and Osaka temples...',
+    messageCount: 3,
+    tripContext: {
+      destination: 'Japan',
+      days: 10,
+      budget: 3500,
+    },
+  },
+  {
+    id: 'session-swiss-2026',
+    title: 'Swiss Alps Expedition',
+    timestamp: 'Yesterday',
+    preview: 'Scenic rail & hiking through Zurich, Interlaken, and Zermatt...',
+    messageCount: 2,
+    tripContext: {
+      destination: 'Switzerland',
+      days: 7,
+      budget: 4200,
+    },
+  },
 ];
 
-export const CreateTrip: React.FC<CreateTripProps> = ({ onBuildUniverse }) => {
-  const [destination, setDestination] = useState('Japan');
-  const [days, setDays] = useState(10);
-  const [budget, setBudget] = useState(120000);
-  const [selectedInterests, setSelectedInterests] = useState<string[]>([
-    'food',
-    'anime',
-    'nature',
-    'culture',
-  ]);
+const INITIAL_MESSAGES_MAP: Record<string, ChatMessageItem[]> = {
+  'session-japan-2026': [
+    {
+      id: 'msg-1',
+      sender: 'user',
+      content:
+        'Plan a 10-day cultural journey to Japan focusing on traditional temples, tea ceremonies, vibrant street food in Osaka, and modern art in Tokyo with a budget of $3,500.',
+      timestamp: '10:30 AM',
+      metadata: {
+        destination: 'Japan',
+        duration: '10 Days',
+        budget: '$3,500',
+      },
+    },
+    {
+      id: 'msg-2',
+      sender: 'system',
+      content:
+        'Trip context captured: Japan (10 days, $3,500 budget). Agent planning stage initialized.',
+      timestamp: '10:31 AM',
+      stage: 'ONBOARDING CHECKPOINT',
+    },
+    {
+      id: 'msg-3',
+      sender: 'assistant',
+      content:
+        'Welcome to TripVerse Planning. I have mapped your initial 10-day route starting in Tokyo (Days 1–4), transitioning via Shinkansen to Kyoto & Nara (Days 5–8), and concluding with culinary explorations in Osaka (Days 9–10). Would you like to refine specific districts in Tokyo or start reviewing hotel recommendations?',
+      timestamp: '10:31 AM',
+    },
+  ],
+  'session-swiss-2026': [
+    {
+      id: 'msg-s1',
+      sender: 'user',
+      content:
+        'Create a 7-day scenic road and rail trip across Switzerland covering Zurich, Interlaken, and Zermatt with scenic hiking and alpine vistas.',
+      timestamp: 'Yesterday',
+      metadata: {
+        destination: 'Switzerland',
+        duration: '7 Days',
+        budget: '$4,200',
+      },
+    },
+    {
+      id: 'msg-s2',
+      sender: 'system',
+      content:
+        'Trip context captured: Switzerland (7 days, $4,200 budget). Route topology ready for review.',
+      timestamp: 'Yesterday',
+      stage: 'ROUTE TOPOLOGY',
+    },
+  ],
+};
 
-  const toggleInterest = (interestId: string) => {
-    setSelectedInterests((prev) =>
-      prev.includes(interestId)
-        ? prev.filter((id) => id !== interestId)
-        : [...prev, interestId]
-    );
-  };
+const INITIAL_TRIP_CONTEXT_MAP: Record<string, CurrentTripContext> = {
+  'session-japan-2026': {
+    title: 'Japan Sakura Voyage',
+    destination: 'Japan (Tokyo, Kyoto, Osaka)',
+    days: 10,
+    budget: 3500,
+    currency: 'USD',
+    travelers: 2,
+    status: 'ONBOARDING',
+    interests: ['Culture', 'Temples', 'Food', 'Modern Art'],
+  },
+  'session-swiss-2026': {
+    title: 'Swiss Alps Expedition',
+    destination: 'Switzerland (Zurich, Zermatt)',
+    days: 7,
+    budget: 4200,
+    currency: 'USD',
+    travelers: 1,
+    status: 'ROUTING',
+    interests: ['Hiking', 'Scenic Trains', 'Nature'],
+  },
+};
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onBuildUniverse({
-      destination,
-      days,
-      budget,
-      interests: selectedInterests,
+export const CreateTrip: React.FC<CreateTripProps> = ({
+  onBuildUniverse,
+  onNavigateHome,
+  onNavigateExplore,
+  onNavigateProfile,
+  onNavigateLogin,
+  onNavigateSignup,
+}) => {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+
+  const [sessions, setSessions] = useState<ChatSessionItem[]>(INITIAL_SESSIONS);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [messagesMap, setMessagesMap] =
+    useState<Record<string, ChatMessageItem[]>>(INITIAL_MESSAGES_MAP);
+  const [tripContextMap, setTripContextMap] =
+    useState<Record<string, CurrentTripContext>>(INITIAL_TRIP_CONTEXT_MAP);
+  const [sessionTripIdMap, setSessionTripIdMap] = useState<Record<string, string>>({});
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const saved = localStorage.getItem('tripverse-sidebar-open');
+    if (saved !== null) return saved === 'true';
+    return window.innerWidth >= 1024;
+  });
+
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    if (typeof window === 'undefined') return 320;
+    const saved = localStorage.getItem('tripverse-sidebar-width');
+    if (saved) {
+      const parsed = parseInt(saved, 10);
+      if (!isNaN(parsed) && parsed >= 240 && parsed <= 520) return parsed;
+    }
+    return 320;
+  });
+
+  const handleToggleSidebar = () => {
+    setIsSidebarOpen((prev) => {
+      const next = !prev;
+      localStorage.setItem('tripverse-sidebar-open', String(next));
+      return next;
     });
   };
 
+  const handleSidebarClose = () => {
+    setIsSidebarOpen(false);
+    localStorage.setItem('tripverse-sidebar-open', 'false');
+  };
+
+  const handleSidebarWidthChange = (newWidth: number) => {
+    setSidebarWidth(newWidth);
+    localStorage.setItem('tripverse-sidebar-width', String(newWidth));
+  };
+
+  const [isSpatialOpen, setIsSpatialOpen] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  const activeMessages = activeSessionId ? messagesMap[activeSessionId] || [] : [];
+  const activeTripContext = activeSessionId ? tripContextMap[activeSessionId] || null : null;
+  const activeSession = sessions.find((s) => s.id === activeSessionId);
+
+  // New Chat Handler
+  const handleNewChat = () => {
+    setActiveSessionId(null);
+  };
+
+  // Select Session Handler
+  const handleSelectSession = (id: string) => {
+    setActiveSessionId(id);
+  };
+
+  // Delete Session Handler
+  const handleDeleteSession = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+    if (activeSessionId === id) {
+      setActiveSessionId(null);
+    }
+  };
+
+  // Send Message Handler — Connected to Backend LangGraph Agent
+  const handleSendMessage = async (content: string, _attachments?: File[]) => {
+    let currentId = activeSessionId;
+
+    // If starting from empty welcome state, create a new local session
+    if (!currentId) {
+      currentId = `session-${Date.now()}`;
+      const title = content.slice(0, 32).trim() + (content.length > 32 ? '...' : '');
+
+      const newSession: ChatSessionItem = {
+        id: currentId,
+        title: title.toUpperCase(),
+        timestamp: 'Just now',
+        preview: content.slice(0, 60) + '...',
+        messageCount: 1,
+      };
+
+      setSessions((prev) => [newSession, ...prev]);
+      setActiveSessionId(currentId);
+    }
+
+    const timeStr = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: true,
+    }).format(new Date());
+
+    const userMessage: ChatMessageItem = {
+      id: `msg-${Date.now()}`,
+      sender: 'user',
+      content,
+      timestamp: timeStr,
+    };
+
+    // Add user message immediately for responsive UX
+    setMessagesMap((prev) => ({
+      ...prev,
+      [currentId!]: [...(prev[currentId!] || []), userMessage],
+    }));
+
+    // Update preview in sidebar
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === currentId
+          ? {
+              ...s,
+              messageCount: (s.messageCount || 0) + 1,
+              timestamp: 'Just now',
+              preview: content.slice(0, 60) + '...',
+            }
+          : s
+      )
+    );
+
+    setIsLoading(true);
+
+    try {
+      // 1. Resolve or create backend trip ID
+      let backendTripId = sessionTripIdMap[currentId!];
+      if (!backendTripId) {
+        const createRes = await createTrip();
+        if (createRes?.trip_id) {
+          backendTripId = createRes.trip_id;
+          setSessionTripIdMap((prev) => ({ ...prev, [currentId!]: backendTripId }));
+        }
+      }
+
+      if (!backendTripId) {
+        throw new Error('Could not establish backend trip session');
+      }
+
+      // 2. Send message to backend LangGraph agent
+      const stateRes = await sendTripMessage(backendTripId, content);
+
+      if (stateRes) {
+        const trip = stateRes.trip;
+        const conversation = stateRes.conversation;
+
+        // 3. Extract assistant message directly from response (zero redundant roundtrips)
+        const assistantText =
+          stateRes.assistant_message?.content ||
+          (trip.destination && trip.duration_days
+            ? `Perfect! We have ${trip.duration_days} days in ${trip.destination}. We're ready to start planning!`
+            : `Where would you like to travel?`);
+
+
+        // Check if metadata was extracted
+        const extractedMetadata: any = {};
+        if (trip.destination) extractedMetadata.destination = trip.destination;
+        if (trip.duration_days) extractedMetadata.duration = `${trip.duration_days} Days`;
+        if (trip.origin_text) extractedMetadata.budget = trip.origin_text;
+
+        const assistantMessage: ChatMessageItem = {
+          id: `ast-${Date.now()}`,
+          sender: 'assistant',
+          content: assistantText,
+          timestamp: new Intl.DateTimeFormat('en-US', {
+            hour: 'numeric',
+            minute: 'numeric',
+            hour12: true,
+          }).format(new Date()),
+          metadata: Object.keys(extractedMetadata).length > 0 ? extractedMetadata : undefined,
+        };
+
+        const newMessagesList: ChatMessageItem[] = [
+          ...(messagesMap[currentId!] || []),
+          userMessage,
+          assistantMessage,
+        ];
+
+        // If onboarding complete, add system checkpoint notification
+        if (trip.onboarding_status === 'COMPLETE' || conversation?.current_stage === 'COMPLETE') {
+          const checkpointMessage: ChatMessageItem = {
+            id: `sys-${Date.now()}`,
+            sender: 'system',
+            content: `Trip parameters captured: ${trip.destination} (${trip.duration_days} Days${
+              trip.origin_text ? `, from ${trip.origin_text}` : ''
+            }). Onboarding complete.`,
+            timestamp: new Intl.DateTimeFormat('en-US', {
+              hour: 'numeric',
+              minute: 'numeric',
+              hour12: true,
+            }).format(new Date()),
+            stage: 'ONBOARDING CHECKPOINT',
+          };
+          newMessagesList.push(checkpointMessage);
+        }
+
+        setMessagesMap((prev) => ({
+          ...prev,
+          [currentId!]: newMessagesList,
+        }));
+
+        // 4. Update Trip Context for Sidebar & Spatial Workspace
+        if (trip.destination || trip.duration_days) {
+          const updatedContext: CurrentTripContext = {
+            title: trip.destination ? `${trip.destination} Expedition` : 'New Voyage',
+            destination: trip.destination || 'Unspecified',
+            days: trip.duration_days || 0,
+            budget: 0,
+            currency: 'USD',
+            travelers: 1,
+            status: trip.onboarding_status === 'COMPLETE' ? 'ROUTING' : 'ONBOARDING',
+            interests: ['Exploration', 'Culture'],
+          };
+
+          setTripContextMap((prev) => ({
+            ...prev,
+            [currentId!]: updatedContext,
+          }));
+
+          // Update session title in sidebar
+          if (trip.destination) {
+            setSessions((prev) =>
+              prev.map((s) =>
+                s.id === currentId
+                  ? {
+                      ...s,
+                      title: `${trip.destination} VOYAGE`.toUpperCase(),
+                      tripContext: {
+                        destination: trip.destination!,
+                        days: trip.duration_days || undefined,
+                      },
+                    }
+                  : s
+              )
+            );
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('Backend LangGraph interaction failed:', err);
+
+      // Graceful fallback system notification
+      const fallbackMessage: ChatMessageItem = {
+        id: `sys-err-${Date.now()}`,
+        sender: 'system',
+        content: `Backend response: ${err?.message || 'Agent service busy'}. Message recorded locally.`,
+        timestamp: new Intl.DateTimeFormat('en-US', {
+          hour: 'numeric',
+          minute: 'numeric',
+          hour12: true,
+        }).format(new Date()),
+        stage: 'AGENT STATUS',
+      };
+
+      setMessagesMap((prev) => ({
+        ...prev,
+        [currentId!]: [...(prev[currentId!] || []), fallbackMessage],
+      }));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Quick Starter Prompt Handler
+  const handleSelectPrompt = (promptText: string) => {
+    handleSendMessage(promptText);
+  };
+
+  // Launch Full Universe in legacy 3D canvas
+  const handleBuildFullUniverse = () => {
+    if (onBuildUniverse) {
+      onBuildUniverse({
+        destination: activeTripContext?.destination || 'Japan',
+        days: activeTripContext?.days || 10,
+        budget: activeTripContext?.budget || 3500,
+        interests: activeTripContext?.interests || ['Culture', 'Exploration'],
+      });
+    }
+  };
+
   return (
-    <div className="min-h-screen relative flex items-center justify-center p-4 sm:p-6 overflow-hidden bg-slate-950">
-      {/* Background Animated Gradient Blobs */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none animate-pulse" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl pointer-events-none animate-pulse delay-1000" />
-      <div className="absolute top-1/2 right-1/3 w-64 h-64 bg-cyan-600/15 rounded-full blur-3xl pointer-events-none" />
+    <div
+      className={`h-screen w-full flex overflow-hidden font-body ${
+        isDark
+          ? 'dark bg-[#121212] text-[#F5F5F5] selection:bg-white selection:text-[#1F1E1E]'
+          : 'bg-white text-[#1F1E1E] selection:bg-[#1F1E1E] selection:text-white'
+      }`}
+    >
+      {/* 1. Left Sidebar Column */}
+      <CreateSidebar
+        isOpen={isSidebarOpen}
+        onClose={handleSidebarClose}
+        width={sidebarWidth}
+        onWidthChange={handleSidebarWidthChange}
+        onNewChat={handleNewChat}
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onSelectSession={handleSelectSession}
+        onDeleteSession={handleDeleteSession}
+        currentTrip={activeTripContext}
+        onNavigateHome={onNavigateHome}
+        onNavigateProfile={onNavigateProfile}
+        onNavigateExplore={onNavigateExplore}
+        onExploreSpatial={() => setIsSpatialOpen(true)}
+      />
 
-      {/* Main Container */}
-      <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.96 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.5, ease: 'easeOut' }}
-        className="w-full max-w-xl relative z-10 glass-panel rounded-3xl p-6 sm:p-10 shadow-2xl border border-slate-700/50"
-      >
-        {/* App Title Badge */}
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <div className="px-3 py-1 rounded-full bg-indigo-950/80 border border-indigo-500/30 text-indigo-300 text-xs font-semibold uppercase tracking-widest flex items-center gap-1.5 shadow-indigo-500/20 glow-indigo">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            Agentic 3D Travel Engine
-          </div>
-        </div>
+      {/* 2. Main Central Chat Column */}
+      <ChatWorkspace
+        messages={activeMessages}
+        onSendMessage={handleSendMessage}
+        isSidebarOpen={isSidebarOpen}
+        onToggleSidebar={handleToggleSidebar}
+        onOpenMobileSidebar={() => setIsSidebarOpen(true)}
+        activeChatTitle={activeSession?.title}
+        isSpatialOpen={isSpatialOpen}
+        onToggleSpatial={() => setIsSpatialOpen(!isSpatialOpen)}
+        onSelectPrompt={handleSelectPrompt}
+        isLoading={isLoading}
+        onResetChat={handleNewChat}
+      />
 
-        <h1 className="text-4xl sm:text-5xl font-extrabold text-center tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent mb-1">
-          TripVerse
-        </h1>
-        <p className="text-center text-slate-400 text-sm mb-8">
-          Map your itinerary into an interactive 3D travel universe
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Destination */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-indigo-400" />
-              Where are you going?
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={destination}
-                onChange={(e) => setDestination(e.target.value)}
-                placeholder="e.g. Japan, Italy, Switzerland..."
-                className="w-full px-4 py-3.5 rounded-xl bg-slate-900/80 border border-slate-700/70 text-slate-100 font-medium placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all text-lg"
-                required
-              />
-            </div>
-          </div>
-
-          {/* Days & Budget Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Days */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-indigo-400" />
-                How many days?
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min={1}
-                  max={90}
-                  value={days}
-                  onChange={(e) => setDays(parseInt(e.target.value) || 1)}
-                  className="w-full px-4 py-3.5 rounded-xl bg-slate-900/80 border border-slate-700/70 text-slate-100 font-medium placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all text-lg"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Budget */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                <DollarSign className="w-4 h-4 text-indigo-400" />
-                Budget (INR)
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={`₹${budget.toLocaleString()}`}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/[^0-9]/g, '');
-                    setBudget(parseInt(val) || 0);
-                  }}
-                  className="w-full px-4 py-3.5 rounded-xl bg-slate-900/80 border border-slate-700/70 text-slate-100 font-medium placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all text-lg font-mono"
-                  required
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Interests Chips */}
-          <div className="space-y-2.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-              <Compass className="w-4 h-4 text-indigo-400" />
-              Interests
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              {INTEREST_OPTIONS.map((interest) => {
-                const isSelected = selectedInterests.includes(interest.id);
-                return (
-                  <button
-                    key={interest.id}
-                    type="button"
-                    onClick={() => toggleInterest(interest.id)}
-                    className={`px-3 py-2.5 rounded-xl border text-sm font-semibold flex items-center justify-center gap-2 transition-all duration-200 ${
-                      isSelected
-                        ? `bg-gradient-to-r ${interest.color} shadow-md scale-[1.02]`
-                        : 'bg-slate-900/50 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                    }`}
-                  >
-                    <span>{interest.emoji}</span>
-                    <span>{interest.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Submit Button */}
-          <div className="pt-2">
-            <button
-              type="submit"
-              className="w-full py-4 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:from-indigo-500 hover:via-purple-500 hover:to-indigo-500 text-white font-bold text-lg tracking-wide shadow-xl glow-indigo transition-all duration-200 flex items-center justify-center gap-2 group cursor-pointer"
-            >
-              <span>BUILD MY UNIVERSE</span>
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </button>
-          </div>
-        </form>
-      </motion.div>
+      {/* 3. Right Spatial Workspace Column (Future 3rd column, conditional) */}
+      <SpatialWorkspace
+        isOpen={isSpatialOpen}
+        onClose={() => setIsSpatialOpen(false)}
+        trip={activeTripContext}
+        onBuildFullUniverse={handleBuildFullUniverse}
+      />
     </div>
   );
 };

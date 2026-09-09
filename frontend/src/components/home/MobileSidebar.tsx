@@ -23,6 +23,7 @@ interface MobileSidebarProps {
   onClose: () => void;
   onGetStarted: () => void;
   onLogin: () => void;
+  onStartPlanning?: () => void;
   onNavigateExplore?: () => void;
   onNavigateHome?: () => void;
   onNavigateProfile?: () => void;
@@ -33,6 +34,7 @@ export function MobileSidebar({
   onClose,
   onGetStarted,
   onLogin,
+  onStartPlanning,
   onNavigateExplore,
   onNavigateHome,
   onNavigateProfile,
@@ -101,6 +103,16 @@ export function MobileSidebar({
               <button
                 type="button"
                 className="w-full py-3 px-4 bg-[#1F1E1E] text-white font-extrabold text-xs uppercase tracking-widest rounded-none flex items-center justify-center gap-2 hover:bg-black transition-colors"
+                onClick={() => {
+                  onClose();
+                  onStartPlanning?.();
+                }}
+              >
+                <span>Plan Expedition</span>
+              </button>
+              <button
+                type="button"
+                className="w-full py-3 px-4 bg-transparent text-[#1F1E1E] border-2 border-[#1F1E1E] font-extrabold text-xs uppercase tracking-widest rounded-none flex items-center justify-center gap-2 hover:bg-[#D9D9D9]/40 transition-colors"
                 onClick={() => {
                   onClose();
                   onNavigateProfile?.();
