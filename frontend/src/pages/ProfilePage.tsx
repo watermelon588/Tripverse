@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 import { LogoMarkIcon } from '../components/home/HomeIcons';
+import { uploadAvatar } from '../services/uploadService';
 import {
   User,
   Compass,
@@ -9,6 +11,8 @@ import {
   CheckCircle2,
   Calendar,
   Layers,
+  Plus,
+  Loader2,
 } from 'lucide-react';
 
 interface ProfilePageProps {
@@ -29,11 +33,50 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   const [displayName, setDisplayName] = useState(
     user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Voyager'
   );
+  const [avatarUrl, setAvatarUrl] = useState<string>(
+    user?.user_metadata?.avatar_url || localStorage.getItem('tripverse-user-avatar') || ''
+  );
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const email = user?.email || 'voyager@tripverse.ai';
   const initials = displayName.substring(0, 2).toUpperCase();
   const userId = user?.id || 'guest-session';
+
+  const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset value so re-selecting same file triggers change
+    e.target.value = '';
+
+    setIsUploading(true);
+    setUploadError(null);
+
+    const { url, error } = await uploadAvatar(file);
+    setIsUploading(false);
+
+    if (error || !url) {
+      setUploadError(error || 'Failed to upload photo');
+      setTimeout(() => setUploadError(null), 4000);
+      return;
+    }
+
+    setAvatarUrl(url);
+    localStorage.setItem('tripverse-user-avatar', url);
+
+    if (user) {
+      try {
+        await supabase.auth.updateUser({
+          data: { avatar_url: url },
+        });
+      } catch (err) {
+        console.warn('Failed to update Supabase user avatar metadata:', err);
+      }
+    }
+  };
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,13 +143,61 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             {/* Identity Card */}
             <div className="p-6 bg-[#F9F9F9] border-2 border-[#1F1E1E] rounded-none">
               <div className="flex items-start justify-between">
-                <div className="w-20 h-20 bg-[#1F1E1E] text-white flex items-center justify-center text-3xl font-black uppercase rounded-none border-2 border-[#1F1E1E] shrink-0">
-                  {initials}
+                {/* Hidden Native File Input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarFileChange}
+                />
+
+                {/* Interactive PFP Container (No extra button; clicking triggers file selection) */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => !isUploading && fileInputRef.current?.click()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      fileInputRef.current?.click();
+                    }
+                  }}
+                  title={avatarUrl ? 'Click to change profile picture' : 'Click to upload profile picture'}
+                  className="relative w-20 h-20 bg-[#1F1E1E] text-white flex items-center justify-center rounded-none border-2 border-[#1F1E1E] shrink-0 cursor-pointer overflow-hidden group select-none"
+                >
+                  {avatarUrl ? (
+                    <>
+                      <img
+                        src={avatarUrl}
+                        alt={displayName}
+                        className="w-full h-full object-cover rounded-none"
+                      />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Plus className="w-6 h-6 text-white" />
+                      </div>
+                    </>
+                  ) : (
+                    <Plus className="w-8 h-8 text-white group-hover:scale-110 transition-transform" />
+                  )}
+
+                  {isUploading && (
+                    <div className="absolute inset-0 bg-black/75 flex items-center justify-center">
+                      <Loader2 className="w-6 h-6 text-white animate-spin" />
+                    </div>
+                  )}
                 </div>
+
                 <div className="bg-[#1F1E1E] text-white px-2.5 py-1 text-[10px] font-bold tracking-widest uppercase rounded-none">
                   TIER 01
                 </div>
               </div>
+
+              {uploadError && (
+                <div className="mt-2.5 p-2 bg-red-50 border-l-2 border-red-600 text-red-600 text-[11px] font-bold">
+                  {uploadError}
+                </div>
+              )}
 
               <div className="mt-5">
                 <h2 className="text-xl font-black uppercase tracking-tight text-[#1F1E1E]">

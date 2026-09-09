@@ -61,6 +61,7 @@ export function Home({
         scrolled={scrolled}
         onMenuOpen={() => setSidebarOpen(true)}
         onGetStarted={handleGetStarted}
+        onStartPlanning={onStartPlanning}
         onNavigateExplore={onNavigateExplore}
         onNavigateProfile={onNavigateProfile}
       />
@@ -70,6 +71,7 @@ export function Home({
         onClose={() => setSidebarOpen(false)}
         onGetStarted={handleGetStarted}
         onLogin={handleLogin}
+        onStartPlanning={onStartPlanning}
         onNavigateExplore={onNavigateExplore}
         onNavigateProfile={onNavigateProfile}
       />
