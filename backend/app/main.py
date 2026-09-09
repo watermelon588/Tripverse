@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, health, trips
+from app.api.routes import auth, health, trips, upload
 from app.core.config import settings
 from app.core.database import close_db, init_db
 
@@ -42,6 +42,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(trips.router)
+app.include_router(upload.router)
 
 if __name__ == "__main__":
     import uvicorn
