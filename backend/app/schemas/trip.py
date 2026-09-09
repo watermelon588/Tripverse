@@ -103,6 +103,7 @@ class TripResponse(BaseModel):
 class TripStateResponse(BaseModel):
     trip: TripResponse
     conversation: ConversationSessionResponse
+    assistant_message: Optional[ConversationMessageResponse] = None
 
 
 class TripCreateResponse(BaseModel):
