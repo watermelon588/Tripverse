@@ -1,5 +1,6 @@
 import { LogoMarkIcon, MenuIcon } from './HomeIcons';
 import { UserMenu } from '../auth/UserMenu';
+import { useAuth } from '../../context/AuthContext';
 
 const NAV_LINKS = [
   { label: 'How it works', href: '#how-it-works', key: 'how' },
@@ -11,6 +12,7 @@ interface NavbarProps {
   onMenuOpen: () => void;
   onGetStarted: () => void;
   scrolled: boolean;
+  onStartPlanning?: () => void;
   onNavigateExplore?: () => void;
   onNavigateHome?: () => void;
   onNavigateProfile?: () => void;
@@ -20,10 +22,12 @@ export function Navbar({
   onMenuOpen,
   onGetStarted,
   scrolled,
+  onStartPlanning,
   onNavigateExplore,
   onNavigateHome,
   onNavigateProfile,
 }: NavbarProps) {
+  const { user } = useAuth();
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, key: string) => {
     if (key === 'explore' && onNavigateExplore) {
       e.preventDefault();
@@ -76,8 +80,12 @@ export function Navbar({
 
         <div className="flex items-center gap-3">
           <UserMenu onNavigateProfile={onNavigateProfile} />
-          <button type="button" className="home-navbar__cta" onClick={onGetStarted}>
-            Get started
+          <button
+            type="button"
+            className="home-navbar__cta"
+            onClick={user ? (onStartPlanning || onGetStarted) : onGetStarted}
+          >
+            {user ? 'Plan Expedition' : 'Get started'}
           </button>
         </div>
       </div>

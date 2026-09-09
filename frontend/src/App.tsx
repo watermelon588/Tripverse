@@ -72,7 +72,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#121212] text-[#1F1E1E] dark:text-white font-sans antialiased transition-colors duration-200">
+    <div className="min-h-screen bg-white text-[#1F1E1E] font-sans antialiased">
       {view === 'home' && (
         <Home
           onStartPlanning={() => navigateTo('create')}
@@ -111,7 +111,14 @@ export const App: React.FC = () => {
         />
       )}
       {view === 'create' && (
-        <CreateTrip onBuildUniverse={handleBuildUniverse} />
+        <CreateTrip
+          onBuildUniverse={handleBuildUniverse}
+          onNavigateHome={() => navigateTo('home')}
+          onNavigateExplore={() => navigateTo('explore')}
+          onNavigateProfile={() => navigateTo('profile')}
+          onNavigateLogin={() => navigateTo('login')}
+          onNavigateSignup={() => navigateTo('signup')}
+        />
       )}
       {view === 'universe' && (
         <TripUniverse

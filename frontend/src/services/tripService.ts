@@ -21,8 +21,24 @@ export interface TripCreateResponse {
   };
 }
 
+export interface TripModelResponse {
+  id: string;
+  user_id?: string | null;
+  guest_id?: string | null;
+  destination?: string | null;
+  origin_text?: string | null;
+  origin_latitude?: number | null;
+  origin_longitude?: number | null;
+  duration_days?: number | null;
+  currency?: string;
+  status: string;
+  onboarding_status: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface TripStateResponse {
-  trip: Trip;
+  trip: TripModelResponse;
   conversation: {
     id: string;
     trip_id: string;
@@ -32,7 +48,16 @@ export interface TripStateResponse {
     created_at: string;
     updated_at: string;
   };
+  assistant_message?: {
+    id: string;
+    role: string;
+    message_type: string;
+    content: string;
+    payload?: any;
+    created_at: string;
+  };
 }
+
 
 /**
  * Fetch the 3D demo trip graph (Japan 10 days).
@@ -110,4 +135,30 @@ export async function sendTripMessage(
   }
 
   return res.data;
+}
+
+export interface ConversationMessageApiItem {
+  id: string;
+  session_id: string;
+  role: string;
+  message_type: string;
+  content: string;
+  payload?: any;
+  created_at: string;
+}
+
+/**
+ * Retrieve all conversation messages for a trip.
+ */
+export async function getTripMessages(tripId: string): Promise<ConversationMessageApiItem[]> {
+  const res = await apiFetch<{ messages: ConversationMessageApiItem[] }>(
+    `/api/trips/${tripId}/messages`,
+    { method: 'GET' }
+  );
+
+  if (!res.ok || !res.data) {
+    return [];
+  }
+
+  return res.data.messages;
 }
