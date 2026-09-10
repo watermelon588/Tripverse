@@ -224,7 +224,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                 <div className="flex justify-between items-center text-[#1F1E1E]/80">
                   <span className="uppercase text-[11px]">AI Model:</span>
                   <span className="font-bold text-[10px] uppercase text-[#1F1E1E]">
-                    Gemini 3.6 Flash
+                    Gemini 3.1 Flash
                   </span>
                 </div>
               </div>

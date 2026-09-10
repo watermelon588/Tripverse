@@ -12,6 +12,7 @@ export interface ChatMessageItem {
   metadata?: {
     destination?: string;
     duration?: string;
+    origin?: string;
     budget?: string;
     interests?: string[];
   };
@@ -97,7 +98,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                 : 'bg-white dark:bg-[#1A1A1A] border-2 border-[#E5E5E5] dark:border-[#2E2E2E] text-[#1F1E1E] dark:text-[#F5F5F5] font-medium'
             }`}
           >
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <p className="whitespace-pre-wrap">
+              {message.content || (
+                <span className="inline-flex gap-1 items-center py-1">
+                  <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                  <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                  <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"></span>
+                </span>
+              )}
+            </p>
 
             {/* Extracted Metadata Pills */}
             {message.metadata && (
@@ -110,6 +119,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                 {message.metadata.duration && (
                   <span className="px-2 py-0.5 bg-[#F5F5F5] dark:bg-[#222222] border border-[#1F1E1E] dark:border-[#333333] text-[#1F1E1E] dark:text-[#F5F5F5] text-[10px] font-bold uppercase tracking-wider">
                     ⏳ {message.metadata.duration}
+                  </span>
+                )}
+                {message.metadata.origin && (
+                  <span className="px-2 py-0.5 bg-[#F5F5F5] dark:bg-[#222222] border border-[#1F1E1E] dark:border-[#333333] text-[#1F1E1E] dark:text-[#F5F5F5] text-[10px] font-bold uppercase tracking-wider">
+                    🛫 {message.metadata.origin}
                   </span>
                 )}
                 {message.metadata.budget && (

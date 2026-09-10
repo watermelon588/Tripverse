@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { getOrCreateGuestId } from '../lib/guest';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export interface ApiRequestOptions extends RequestInit {
   /**
@@ -21,6 +21,41 @@ supabase.auth.onAuthStateChange((_event, session) => {
 });
 
 /**
+ * Helper to construct authentication headers (Bearer token or Guest ID).
+ */
+export async function getAuthHeaders(skipAuth: boolean = false): Promise<Headers> {
+  const headers = new Headers();
+  if (skipAuth) return headers;
+
+  try {
+    let token = cachedAccessToken;
+    const now = Date.now();
+
+    // If cache miss or token expiring within 60 seconds, fetch session
+    if (!token || now >= cachedTokenExpiresAt - 60000) {
+      const { data: { session } } = await supabase.auth.getSession();
+      token = session?.access_token ?? null;
+      cachedAccessToken = token;
+      cachedTokenExpiresAt = session?.expires_at ? session.expires_at * 1000 : 0;
+    }
+
+    if (token) {
+      // Authenticated User Identity
+      headers.set('Authorization', `Bearer ${token}`);
+    } else {
+      // Guest Identity
+      const guestId = getOrCreateGuestId();
+      headers.set('X-Guest-ID', guestId);
+    }
+  } catch (err) {
+    console.warn('Error resolving auth state in apiClient, falling back to guest ID:', err);
+    headers.set('X-Guest-ID', getOrCreateGuestId());
+  }
+
+  return headers;
+}
+
+/**
  * Centralized API fetch wrapper for TripVerse.
  * Automatically injects:
  * - `Authorization: Bearer <token>` if an active Supabase user session exists.
@@ -33,40 +68,19 @@ export async function apiFetch<T = any>(
   options: ApiRequestOptions = {}
 ): Promise<{ data: T | null; status: number; ok: boolean; error?: string }> {
   const { skipAuth = false, headers: customHeaders, ...restOptions } = options;
+  const authHeaders = await getAuthHeaders(skipAuth);
   const headers = new Headers(customHeaders || {});
+
+  // Merge auth headers if not overridden
+  authHeaders.forEach((value, key) => {
+    if (!headers.has(key)) {
+      headers.set(key, value);
+    }
+  });
 
   // Set default JSON Content-Type if not already provided and sending a body
   if (!headers.has('Content-Type') && restOptions.body && typeof restOptions.body === 'string') {
     headers.set('Content-Type', 'application/json');
-  }
-
-  if (!skipAuth) {
-    try {
-      let token = cachedAccessToken;
-      const now = Date.now();
-
-      // If cache miss or token expiring within 60 seconds, fetch session
-      if (!token || now >= cachedTokenExpiresAt - 60000) {
-        const { data: { session } } = await supabase.auth.getSession();
-        token = session?.access_token ?? null;
-        cachedAccessToken = token;
-        cachedTokenExpiresAt = session?.expires_at ? session.expires_at * 1000 : 0;
-      }
-
-      if (token) {
-        // Authenticated User Identity
-        headers.set('Authorization', `Bearer ${token}`);
-        headers.delete('X-Guest-ID');
-      } else {
-        // Guest Identity
-        const guestId = getOrCreateGuestId();
-        headers.set('X-Guest-ID', guestId);
-        headers.delete('Authorization');
-      }
-    } catch (err) {
-      console.warn('Error resolving auth state in apiClient, falling back to guest ID:', err);
-      headers.set('X-Guest-ID', getOrCreateGuestId());
-    }
   }
 
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;

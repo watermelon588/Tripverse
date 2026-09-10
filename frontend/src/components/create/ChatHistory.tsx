@@ -107,13 +107,14 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      e.preventDefault();
                       onDeleteSession(session.id, e);
                     }}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-[#1F1E1E]/40 dark:text-[#F5F5F5]/40 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all shrink-0 cursor-pointer"
+                    className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1.5 text-[#1F1E1E]/40 dark:text-[#F5F5F5]/40 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all shrink-0 cursor-pointer z-10"
                     aria-label={`Delete ${session.title}`}
                     title="Delete session"
                   >
-                    <Trash2 className="w-3 h-3" />
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>

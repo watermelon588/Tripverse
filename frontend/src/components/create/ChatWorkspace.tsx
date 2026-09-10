@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
-import { Menu, Layers, Compass, RotateCcw, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Menu, Layers, RotateCcw, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { ChatMessage, ChatMessageItem } from './ChatMessage';
+import { AssistantAvatar } from './AssistantAvatar';
 import { ChatWelcome } from './ChatWelcome';
 import { ChatComposer } from './ChatComposer';
 import { ThemeToggle } from '../common/ThemeToggle';
@@ -37,7 +38,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   // Auto scroll handling: scroll to bottom on new messages, scroll to top on new chat / welcome screen
   useEffect(() => {
     if (scrollContainerRef.current) {
-      if (messages.length > 0) {
+      if (messages.length > 0 || isLoading) {
         scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
       } else {
         scrollContainerRef.current.scrollTop = 0;
@@ -115,7 +116,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto px-4 py-3 sm:px-6 sm:py-4 lg:px-8 flex flex-col"
       >
-        {!hasMessages ? (
+        {!hasMessages && !isLoading ? (
           <div className="w-full max-w-2xl mx-auto flex-1 flex flex-col justify-start pt-1 sm:pt-4 pb-6">
             <ChatWelcome onSelectPrompt={onSelectPrompt} />
           </div>
@@ -125,14 +126,17 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
               <ChatMessage key={msg.id} message={msg} />
             ))}
 
-            {/* Loading Indicator */}
+            {/* Thinking Animation (Borderless enlarged animated chibi sprite + thinking text) */}
             {isLoading && (
-              <div className="w-full my-4 flex items-start gap-3">
-                <div className="w-9 h-9 bg-[#1F1E1E] dark:bg-[#2A2A2A] text-white flex items-center justify-center font-bold text-xs uppercase animate-pulse border border-[#1F1E1E] dark:border-[#444444]">
-                  <Compass className="w-4 h-4 animate-spin" />
-                </div>
-                <div className="p-3 bg-white dark:bg-[#1A1A1A] border-2 border-[#1F1E1E] dark:border-[#2E2E2E] text-xs font-bold text-[#1F1E1E] dark:text-white flex items-center gap-2">
-                  <span>TripVerse AI is synthesizing voyage options...</span>
+              <div className="w-full my-4 flex items-center gap-3 font-body select-none pl-1">
+                <AssistantAvatar size="thinking" isThinking={true} />
+                <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-[#1F1E1E] dark:text-white">
+                  <span>Thinking</span>
+                  <span className="inline-flex gap-1 items-center">
+                    <span className="w-1.5 h-1.5 bg-[#1F1E1E] dark:bg-white rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                    <span className="w-1.5 h-1.5 bg-[#1F1E1E] dark:bg-white rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                    <span className="w-1.5 h-1.5 bg-[#1F1E1E] dark:bg-white rounded-full animate-bounce"></span>
+                  </span>
                 </div>
               </div>
             )}
