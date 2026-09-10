@@ -159,5 +159,24 @@ class TripService:
             conversation=ConversationSessionResponse.model_validate(active_session),
         )
 
+    async def delete_trip(
+        self,
+        db: AsyncSession,
+        trip_id: uuid.UUID,
+        identity: Optional[RequestIdentity] = None,
+    ) -> dict:
+        """Delete a trip and associated conversation records after authorization check."""
+        trip = await self.trip_repo.get_by_id(db, trip_id)
+        if not trip:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Trip with ID '{trip_id}' not found.",
+            )
+
+        self.verify_trip_ownership(trip, identity)
+        await self.trip_repo.delete_trip(db, trip)
+        await db.commit()
+        return {"success": True, "trip_id": str(trip_id)}
+
 
 trip_service = TripService()

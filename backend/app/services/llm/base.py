@@ -21,3 +21,25 @@ class LLMProvider(ABC):
         Generate completion text asynchronously given a prompt and optional parameters.
         """
         pass
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_instruction: Optional[str] = None,
+        temperature: float = 0.7,
+        max_output_tokens: Optional[int] = None,
+        **kwargs: Any,
+    ):
+        """
+        Generate completion tokens asynchronously as an async stream.
+        Default implementation yields the full generation if streaming not overridden.
+        """
+        result = await self.generate(
+            prompt=prompt,
+            system_instruction=system_instruction,
+            temperature=temperature,
+            max_output_tokens=max_output_tokens,
+            **kwargs,
+        )
+        if result:
+            yield result

@@ -1,6 +1,7 @@
 import uuid
 from typing import List
 from fastapi import APIRouter, Depends, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthenticatedUser, RequestIdentity, get_current_user, get_request_identity
@@ -35,6 +36,19 @@ async def get_my_trips(
     return await trip_service.get_user_trips(db, current_user.id)
 
 
+@router.get("", response_model=List[TripResponse])
+async def list_trips(
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    """Retrieve all trips associated with current identity (authenticated user or guest)."""
+    if identity.user_id:
+        return await trip_service.get_user_trips(db, identity.user_id)
+    elif identity.guest_id:
+        return await trip_service.get_guest_trips(db, identity.guest_id)
+    return []
+
+
 @router.post("", response_model=TripCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_trip(
     identity: RequestIdentity = Depends(get_request_identity),
@@ -55,6 +69,25 @@ async def send_trip_message(
     return await conversation_service.process_message(db, trip_id, request, identity=identity)
 
 
+@router.post("/{trip_id}/messages/stream")
+async def send_trip_message_stream(
+    trip_id: uuid.UUID,
+    request: SendMessageRequest,
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    """Process message and stream tokens via Server-Sent Events (SSE)."""
+    return StreamingResponse(
+        conversation_service.process_message_stream(db, trip_id, request, identity=identity),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.get("/{trip_id}", response_model=TripStateResponse)
 async def get_trip(
     trip_id: uuid.UUID,
@@ -73,3 +106,14 @@ async def get_trip_messages(
 ):
     """Retrieve ordered conversation messages for an authorized trip."""
     return await conversation_service.get_trip_messages(db, trip_id, identity=identity)
+
+
+@router.delete("/{trip_id}")
+async def delete_trip(
+    trip_id: uuid.UUID,
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a trip and its associated conversation sessions/messages."""
+    return await trip_service.delete_trip(db, trip_id, identity=identity)
+

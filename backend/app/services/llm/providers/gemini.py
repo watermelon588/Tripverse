@@ -22,7 +22,7 @@ class GeminiProvider(LLMProvider):
         model: Optional[str] = None,
     ):
         self._api_key = api_key or settings.GEMINI_API_KEY
-        self._model_name = model or model_name or settings.GEMINI_MODEL or "gemini-3.6-flash"
+        self._model_name = model or model_name or settings.GEMINI_MODEL or "gemini-3.1-flash-lite"
 
     def _get_client(self) -> genai.Client:
         """Create or return client bound to current execution environment."""
@@ -64,4 +64,39 @@ class GeminiProvider(LLMProvider):
 
         except Exception as e:
             logger.error(f"Gemini API invocation error: {type(e).__name__} - {str(e)}")
+            raise
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_instruction: Optional[str] = None,
+        temperature: float = 0.7,
+        max_output_tokens: Optional[int] = None,
+        **kwargs: Any,
+    ):
+        """
+        Generate completion tokens asynchronously as an SSE/token stream via Gemini API.
+        """
+        try:
+            client = self._get_client()
+
+            config = types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=temperature,
+                max_output_tokens=max_output_tokens,
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+            )
+
+            stream = await client.aio.models.generate_content_stream(
+                model=self._model_name,
+                contents=prompt,
+                config=config,
+            )
+
+            async for chunk in stream:
+                if chunk and chunk.text:
+                    yield chunk.text
+
+        except Exception as e:
+            logger.error(f"Gemini streaming API invocation error: {type(e).__name__} - {str(e)}")
             raise

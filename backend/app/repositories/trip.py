@@ -53,4 +53,12 @@ class TripRepository:
         result = await db.execute(stmt)
         return list(result.scalars().all())
 
+    async def delete_trip(
+        self, db: AsyncSession, trip: Trip
+    ) -> None:
+        """Delete a Trip record from database."""
+        await db.delete(trip)
+        await db.flush()
+
+
 

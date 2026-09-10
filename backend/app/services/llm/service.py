@@ -44,6 +44,22 @@ class LLMService:
             max_output_tokens=max_output_tokens,
         )
 
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_instruction: Optional[str] = None,
+        temperature: float = 0.7,
+        max_output_tokens: Optional[int] = None,
+    ):
+        """Delegate streaming token generation to the active LLM provider."""
+        async for token in self._provider.generate_stream(
+            prompt=prompt,
+            system_instruction=system_instruction,
+            temperature=temperature,
+            max_output_tokens=max_output_tokens,
+        ):
+            yield token
+
     async def generate_welcome_greeting(
         self,
         user_name: Optional[str] = None,

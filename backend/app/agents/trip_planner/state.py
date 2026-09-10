@@ -16,6 +16,7 @@ class TripPlanningState(TypedDict, total=False):
     duration_days: int | None
     origin: str | None
 
+    intent: str | None
     onboarding_complete: bool
     missing_fields: list[str]
 
