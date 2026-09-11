@@ -19,14 +19,12 @@ interface ProfilePageProps {
   onNavigateHome: () => void;
   onNavigateExplore?: () => void;
   onStartPlanning?: () => void;
-  onOpenUniverse?: () => void;
 }
 
 export const ProfilePage: React.FC<ProfilePageProps> = ({
   onNavigateHome,
   onNavigateExplore,
   onStartPlanning,
-  onOpenUniverse,
 }) => {
   const { user, signOut } = useAuth();
 
@@ -359,13 +357,13 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                     <span className="text-[10px] font-bold text-emerald-600 uppercase">
                       VOYAGE READY
                     </span>
-                    {onOpenUniverse && (
+                    {onStartPlanning && (
                       <button
                         type="button"
-                        onClick={onOpenUniverse}
+                        onClick={onStartPlanning}
                         className="text-[11px] font-extrabold uppercase tracking-wider bg-[#1F1E1E] text-white px-3 py-1.5 hover:bg-black transition-colors rounded-none"
                       >
-                        Launch 3D &rarr;
+                        Open Workspace &rarr;
                       </button>
                     )}
                   </div>
@@ -391,13 +389,13 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                     <span className="text-[10px] font-bold text-emerald-600 uppercase">
                       VOYAGE READY
                     </span>
-                    {onOpenUniverse && (
+                    {onStartPlanning && (
                       <button
                         type="button"
-                        onClick={onOpenUniverse}
+                        onClick={onStartPlanning}
                         className="text-[11px] font-extrabold uppercase tracking-wider bg-[#1F1E1E] text-white px-3 py-1.5 hover:bg-black transition-colors rounded-none"
                       >
-                        Launch 3D &rarr;
+                        Open Workspace &rarr;
                       </button>
                     )}
                   </div>

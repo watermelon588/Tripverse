@@ -1,8 +1,10 @@
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
-from app.services.llm.base import LLMProvider
+from app.services.llm.base import LLMProvider, LLMResult, ToolCall
 from app.services.llm.providers.gemini import GeminiProvider
+from app.services.llm.providers.groq import GroqProvider
 from app.services.llm.service import LLMService
 
 
@@ -25,23 +27,204 @@ class MockProvider(LLMProvider):
         return self.response_text
 
 
+# ==============================================================================
+# 1. Groq Provider Unit Tests
+# ==============================================================================
+
 @pytest.mark.asyncio
-async def test_llm_service_generate_delegation():
-    """Verify LLMService delegates generation to underlying provider."""
-    mock_provider = MockProvider("Custom generation output")
-    service = LLMService(provider=mock_provider)
+async def test_groq_provider_generate():
+    """Verify GroqProvider calls AsyncGroq client and returns formatted text."""
+    provider = GroqProvider(api_key="gsk-test-key", model="llama-3.3-70b-versatile")
 
-    result = await service.generate("Hello world", system_instruction="Be helpful")
-    assert result == "Custom generation output"
-    assert mock_provider.last_prompt == "Hello world"
-    assert mock_provider.last_system_instruction == "Be helpful"
+    mock_client = MagicMock()
+    mock_choice = MagicMock()
+    mock_choice.message.content = "Groq travel response"
+    mock_choice.message.tool_calls = None
+    mock_response = MagicMock()
+    mock_response.choices = [mock_choice]
 
+    mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+    with patch.object(provider, "_get_client", return_value=mock_client):
+        result = await provider.generate(
+            prompt="Plan 5 days in Kyoto",
+            system_instruction="You are a travel guide.",
+            temperature=0.7,
+            max_output_tokens=1000,
+        )
+
+        assert result == "Groq travel response"
+        mock_client.chat.completions.create.assert_called_once()
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
+        assert call_kwargs["model"] == "llama-3.3-70b-versatile"
+        assert len(call_kwargs["messages"]) == 2
+        assert call_kwargs["messages"][0]["role"] == "system"
+        assert call_kwargs["messages"][1]["role"] == "user"
+
+
+@pytest.mark.asyncio
+async def test_groq_provider_generate_with_tools():
+    """Verify GroqProvider converts tool functions and captures returned ToolCalls."""
+    provider = GroqProvider(api_key="gsk-test-key", model="llama-3.3-70b-versatile")
+
+    def get_user_location() -> dict:
+        """Get location tool."""
+        return {"action": "use_current_location"}
+
+    mock_client = MagicMock()
+    mock_choice = MagicMock()
+    mock_choice.message.content = "I'll fetch your location"
+    
+    mock_tc = MagicMock()
+    mock_tc.function.name = "get_user_location"
+    mock_tc.function.arguments = "{}"
+    mock_choice.message.tool_calls = [mock_tc]
+
+    mock_response = MagicMock()
+    mock_response.choices = [mock_choice]
+    mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+    with patch.object(provider, "_get_client", return_value=mock_client):
+        result = await provider.generate_with_tools(
+            prompt="use my location",
+            tools=[get_user_location],
+        )
+
+        assert isinstance(result, LLMResult)
+        assert result.text == "I'll fetch your location"
+        assert result.has_tool_calls is True
+        assert len(result.tool_calls) == 1
+        assert result.tool_calls[0].name == "get_user_location"
+        assert result.tool_calls[0].args == {}
+
+
+@pytest.mark.asyncio
+async def test_groq_provider_generate_stream():
+    """Verify GroqProvider generate_stream streams token chunks."""
+    provider = GroqProvider(api_key="gsk-test-key", model="llama-3.3-70b-versatile")
+
+    mock_client = MagicMock()
+
+    class MockChunk:
+        def __init__(self, delta_text):
+            mock_choice = MagicMock()
+            mock_choice.delta.content = delta_text
+            self.choices = [mock_choice]
+
+    async def mock_stream_gen(**kwargs):
+        for token in ["Exploring ", "Paris ", "in ", "spring!"]:
+            yield MockChunk(token)
+
+    mock_client.chat.completions.create = AsyncMock(side_effect=mock_stream_gen)
+
+    with patch.object(provider, "_get_client", return_value=mock_client):
+        tokens = []
+        async for t in provider.generate_stream("Tell me about Paris"):
+            tokens.append(t)
+
+        assert "".join(tokens) == "Exploring Paris in spring!"
+
+
+# ==============================================================================
+# 2. LLMService Primary (Groq) & Fallback (Gemini) Coordination Tests
+# ==============================================================================
+
+def test_llm_service_default_providers():
+    """Verify LLMService defaults to GroqProvider as primary and GeminiProvider as fallback."""
+    service = LLMService()
+    assert isinstance(service._primary_provider, GroqProvider)
+    assert isinstance(service._fallback_provider, GeminiProvider)
+
+
+@pytest.mark.asyncio
+async def test_llm_service_groq_success_gemini_not_called():
+    """Verify when primary Groq succeeds, Gemini fallback is never invoked."""
+    mock_groq = MockProvider("Groq response")
+    mock_gemini = MockProvider("Gemini response")
+
+    service = LLMService(primary_provider=mock_groq, fallback_provider=mock_gemini)
+
+    result = await service.generate("Plan trip")
+    assert result == "Groq response"
+    assert mock_groq.last_prompt == "Plan trip"
+    assert mock_gemini.last_prompt is None  # Gemini never called
+
+
+@pytest.mark.asyncio
+async def test_llm_service_groq_rate_limit_fallback_to_gemini():
+    """Verify when Groq raises rate limit / 429 quota error, service transparently falls back to Gemini."""
+    class RateLimitedGroq(LLMProvider):
+        async def generate(self, *args, **kwargs) -> str:
+            class RateLimitError(Exception):
+                status_code = 429
+            raise RateLimitError("Groq TPM/RPM limit reached (429 Too Many Requests)")
+
+    mock_gemini = MockProvider("Gemini fallback response")
+    service = LLMService(primary_provider=RateLimitedGroq(), fallback_provider=mock_gemini)
+
+    result = await service.generate("Plan 10 days in Italy", system_instruction="Be helpful", temperature=0.5)
+    assert result == "Gemini fallback response"
+    assert mock_gemini.last_prompt == "Plan 10 days in Italy"
+    assert mock_gemini.last_system_instruction == "Be helpful"
+
+
+@pytest.mark.asyncio
+async def test_llm_service_groq_rate_limit_fallback_with_tools():
+    """Verify tool calling transparently falls back to Gemini on Groq rate limit."""
+    class RateLimitedGroq(LLMProvider):
+        async def generate(self, *args, **kwargs) -> str:
+            class RateLimitError(Exception):
+                status_code = 429
+            raise RateLimitError("Rate limit exceeded")
+
+        async def generate_with_tools(self, *args, **kwargs) -> LLMResult:
+            class RateLimitError(Exception):
+                status_code = 429
+            raise RateLimitError("Rate limit exceeded")
+
+    class MockGeminiTools(LLMProvider):
+        async def generate(self, *args, **kwargs) -> str:
+            return "Gemini text"
+
+        async def generate_with_tools(self, prompt, system_instruction=None, tools=None, **kwargs) -> LLMResult:
+            return LLMResult(
+                text="Gemini tool text",
+                tool_calls=[ToolCall(name="get_user_location", args={})],
+            )
+
+    service = LLMService(primary_provider=RateLimitedGroq(), fallback_provider=MockGeminiTools())
+
+    result = await service.generate_with_tools("where am I")
+    assert result.text == "Gemini tool text"
+    assert result.has_tool_calls is True
+    assert result.tool_calls[0].name == "get_user_location"
+
+
+@pytest.mark.asyncio
+async def test_llm_service_non_limit_error_does_not_fallback():
+    """Verify non-limit errors (e.g. auth failure, bad request) raise directly without falling back."""
+    class AuthFailedGroq(LLMProvider):
+        async def generate(self, *args, **kwargs) -> str:
+            raise PermissionError("Invalid API key (401 Unauthorized)")
+
+    mock_gemini = MockProvider("Should not be called")
+    service = LLMService(primary_provider=AuthFailedGroq(), fallback_provider=mock_gemini)
+
+    with pytest.raises(PermissionError, match="Invalid API key"):
+        await service.generate("Test prompt")
+
+    assert mock_gemini.last_prompt is None
+
+
+# ==============================================================================
+# 3. Welcome Greeting & Gemini Provider Tests
+# ==============================================================================
 
 @pytest.mark.asyncio
 async def test_llm_service_welcome_authenticated():
     """Verify welcome greeting prompt is built for authenticated users with their name."""
     mock_provider = MockProvider("Welcome back Rohit! Where are we going?")
-    service = LLMService(provider=mock_provider)
+    service = LLMService(primary_provider=mock_provider)
 
     greeting = await service.generate_welcome_greeting(user_name="Rohit")
     assert greeting == "Welcome back Rohit! Where are we going?"
@@ -52,7 +235,7 @@ async def test_llm_service_welcome_authenticated():
 async def test_llm_service_welcome_guest():
     """Verify welcome greeting prompt is built for guest users."""
     mock_provider = MockProvider("Welcome to TripVerse! Where are we going?")
-    service = LLMService(provider=mock_provider)
+    service = LLMService(primary_provider=mock_provider)
 
     greeting = await service.generate_welcome_greeting(user_name=None)
     assert greeting == "Welcome to TripVerse! Where are we going?"
@@ -65,7 +248,7 @@ async def test_llm_service_welcome_fallback_on_error():
         async def generate(self, *args, **kwargs) -> str:
             raise RuntimeError("API key quota exceeded")
 
-    service = LLMService(provider=FailingProvider())
+    service = LLMService(primary_provider=FailingProvider(), fallback_provider=None)
     greeting_auth = await service.generate_welcome_greeting(user_name="Rohit")
     assert "Rohit" in greeting_auth
     assert "Where would you like to travel?" in greeting_auth

@@ -6,10 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthenticatedUser, RequestIdentity, get_current_user, get_request_identity
 from app.core.database import get_db
-from app.data.demo_trip import DEMO_TRIP_DATA
 from app.schemas.trip import (
     ConversationMessageListResponse,
-    DemoTripResponse,
     SendMessageRequest,
     TripCreateResponse,
     TripResponse,
@@ -19,12 +17,6 @@ from app.services.conversation import conversation_service
 from app.services.trip import trip_service
 
 router = APIRouter(prefix="/api/trips", tags=["trips"])
-
-
-@router.get("/demo", response_model=DemoTripResponse)
-def get_demo_trip():
-    """Returns the hardcoded 3D demo trip graph for Japan."""
-    return DEMO_TRIP_DATA
 
 
 @router.get("/me", response_model=List[TripResponse])
@@ -77,8 +69,17 @@ async def send_trip_message_stream(
     db: AsyncSession = Depends(get_db),
 ):
     """Process message and stream tokens via Server-Sent Events (SSE)."""
+    # 1. Pre-validate trip existence and ownership before initiating SSE stream
+    trip = await trip_service.trip_repo.get_by_id(db, trip_id)
+    if not trip:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Trip with ID '{trip_id}' not found.",
+        )
+    trip_service.verify_trip_ownership(trip, identity)
+
     return StreamingResponse(
-        conversation_service.process_message_stream(db, trip_id, request, identity=identity),
+        conversation_service.process_message_stream(trip_id=trip_id, request=request, identity=identity),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

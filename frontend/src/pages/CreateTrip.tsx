@@ -5,7 +5,6 @@ import { SpatialWorkspace } from '../components/create/SpatialWorkspace';
 import { ChatSessionItem } from '../components/create/ChatHistory';
 import { ChatMessageItem } from '../components/create/ChatMessage';
 import { CurrentTripContext } from '../components/create/CurrentTrip';
-import { TripFormData } from '../types/trip';
 import { useTheme } from '../context/ThemeContext';
 import {
   createTrip,
@@ -17,7 +16,6 @@ import {
 } from '../services/tripService';
 
 interface CreateTripProps {
-  onBuildUniverse?: (formData: TripFormData) => void;
   onNavigateHome?: () => void;
   onNavigateExplore?: () => void;
   onNavigateProfile?: () => void;
@@ -167,7 +165,6 @@ const INITIAL_TRIP_CONTEXT_MAP: Record<string, CurrentTripContext> = {
 };
 
 export const CreateTrip: React.FC<CreateTripProps> = ({
-  onBuildUniverse,
   onNavigateHome,
   onNavigateExplore,
   onNavigateProfile,
@@ -264,10 +261,11 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
           const sId = `session-${t.id}`;
           newMap[sId] = t.id;
 
-          if (t.destination || t.duration_days) {
+          if (t.destination || t.duration_days || t.origin_text) {
             newContextMap[sId] = {
               title: t.destination ? `${t.destination} Expedition` : 'New Voyage',
               destination: t.destination || 'Unspecified',
+              origin: t.origin_text || undefined,
               days: t.duration_days || 0,
               budget: 0,
               currency: t.currency || 'USD',
@@ -512,20 +510,24 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
           });
         },
         onMetadata: (meta) => {
-          if (meta.destination || meta.duration_days) {
-            setTripContextMap((prev) => ({
-              ...prev,
-              [currentId!]: {
-                title: meta.destination ? `${meta.destination} Expedition` : 'New Voyage',
-                destination: meta.destination || 'Unspecified',
-                days: meta.duration_days || 0,
-                budget: 0,
-                currency: 'USD',
-                travelers: 1,
-                status: meta.onboarding_complete ? 'ROUTING' : 'ONBOARDING',
-                interests: ['Exploration', 'Culture'],
-              },
-            }));
+          if (meta.destination || meta.duration_days || meta.origin) {
+            setTripContextMap((prev) => {
+              const current = prev[currentId!] || {};
+              return {
+                ...prev,
+                [currentId!]: {
+                  title: (meta.destination || current.destination) ? `${meta.destination || current.destination} Expedition` : 'New Voyage',
+                  destination: meta.destination || current.destination || 'Unspecified',
+                  origin: meta.origin || current.origin,
+                  days: meta.duration_days ?? current.days ?? 0,
+                  budget: 0,
+                  currency: 'USD',
+                  travelers: 1,
+                  status: meta.onboarding_complete ? 'ROUTING' : 'ONBOARDING',
+                  interests: ['Exploration', 'Culture'],
+                },
+              };
+            });
 
             if (meta.destination) {
               setSessions((prev) =>
@@ -543,6 +545,11 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
                 )
               );
             }
+          }
+        },
+        onAction: (actionEvent) => {
+          if (actionEvent.action === 'use_current_location') {
+            acquireBrowserLocation();
           }
         },
         onDone: (doneData) => {
@@ -615,6 +622,7 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
               [currentId!]: {
                 title: trip.destination ? `${trip.destination} Expedition` : 'New Voyage',
                 destination: trip.destination || 'Unspecified',
+                origin: trip.origin_text || undefined,
                 days: trip.duration_days || 0,
                 budget: 0,
                 currency: trip.currency || 'USD',
@@ -678,22 +686,362 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
     }
   };
 
+  // Browser Geolocation Trigger — Invoked when LLM issues get_user_location action or user explicitly clicks geolocation button
+  const acquireBrowserLocation = () => {
+    const currentId = activeSessionId;
+    if (!navigator.geolocation) {
+      const notice: ChatMessageItem = {
+        id: `sys-geo-${Date.now()}`,
+        sender: 'system',
+        content: 'Geolocation is not supported by your browser. Please enter your origin city manually.',
+        timestamp: formatTime(),
+        stage: 'LOCATION NOTICE',
+      };
+      if (currentId) {
+        setMessagesMap((prev) => ({
+          ...prev,
+          [currentId]: [...(prev[currentId] || []), notice],
+        }));
+      }
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        let resolvedCity = '';
+
+        try {
+          const geoRes = await fetch(
+            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`
+          );
+          if (geoRes.ok) {
+            const data = await geoRes.json();
+            const city = data.city || data.locality || data.principalSubdivision || '';
+            const country = data.countryName || '';
+            if (city && country) {
+              resolvedCity = `${city}, ${country}`;
+            } else if (city || country) {
+              resolvedCity = city || country;
+            }
+          }
+        } catch (_) {
+          try {
+            const osmRes = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10`
+            );
+            if (osmRes.ok) {
+              const osmData = await osmRes.json();
+              resolvedCity = osmData.address?.city || osmData.address?.town || osmData.address?.state || '';
+            }
+          } catch (_) {}
+        }
+
+        const label = resolvedCity || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+        await handleSendGeolocation(lat, lon, label);
+      },
+      (geoError) => {
+        let errorMsg = 'Could not access device location. Please enter your departure city manually.';
+        if (geoError.code === geoError.PERMISSION_DENIED) {
+          errorMsg = 'Location permission was denied. Please enter your departure city in the box below.';
+        } else if (geoError.code === geoError.TIMEOUT) {
+          errorMsg = 'Location request timed out. Please enter your departure city manually.';
+        }
+        const notice: ChatMessageItem = {
+          id: `sys-geo-err-${Date.now()}`,
+          sender: 'system',
+          content: errorMsg,
+          timestamp: formatTime(),
+          stage: 'LOCATION NOTICE',
+        };
+        if (currentId) {
+          setMessagesMap((prev) => ({
+            ...prev,
+            [currentId]: [...(prev[currentId] || []), notice],
+          }));
+        }
+      },
+      { timeout: 10000, enableHighAccuracy: false }
+    );
+  };
+
+  // Geolocation Origin Handler — Transmits coordinates and resolved city via UI_ACTION to the Backend Agent
+  const handleSendGeolocation = async (latitude: number, longitude: number, label?: string) => {
+    let currentId = activeSessionId;
+
+    if (!currentId) {
+      currentId = `session-${Date.now()}`;
+      const newSession: ChatSessionItem = {
+        id: currentId,
+        title: 'NEW VOYAGE',
+        timestamp: 'Just now',
+        preview: 'Setting current location...',
+        messageCount: 1,
+      };
+
+      setSessions((prev) => [newSession, ...prev]);
+      setActiveSessionId(currentId);
+      localStorage.setItem('tripverse-active-session-id', currentId);
+    }
+
+    const locationDisplay = label && label !== 'Detected Location' ? label : `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+    const timeStr = formatTime();
+    const userMessage: ChatMessageItem = {
+      id: `msg-${Date.now()}`,
+      sender: 'user',
+      content: `📍 Used current location: ${locationDisplay}`,
+      timestamp: timeStr,
+    };
+
+    const assistantMsgId = `ast-${Date.now()}`;
+
+    setMessagesMap((prev) => ({
+      ...prev,
+      [currentId!]: [...(prev[currentId!] || []), userMessage],
+    }));
+
+    setIsLoading(true);
+
+    try {
+      let backendTripId = sessionTripIdMap[currentId!];
+      if (!backendTripId) {
+        const createRes = await createTrip();
+        if (createRes?.trip_id) {
+          backendTripId = createRes.trip_id;
+          setSessionTripIdMap((prev) => {
+            const updated = { ...prev, [currentId!]: backendTripId };
+            localStorage.setItem('tripverse-session-trip-map', JSON.stringify(updated));
+            return updated;
+          });
+        }
+      }
+
+      if (!backendTripId) {
+        throw new Error('Could not establish backend trip session');
+      }
+
+      const streamPayload = {
+        action: 'SET_LOCATION',
+        latitude,
+        longitude,
+        label: locationDisplay,
+        origin_text: locationDisplay,
+      };
+
+      const executeStream = async (targetTripId: string) => {
+        await sendTripMessageStream(
+          targetTripId,
+          '',
+          {
+            onToken: (delta: string) => {
+              setIsLoading(false);
+              setMessagesMap((prev) => {
+                const list = prev[currentId!] || [];
+                const existingIndex = list.findIndex((msg) => msg.id === assistantMsgId);
+
+                if (existingIndex === -1) {
+                  const newAssistantMsg: ChatMessageItem = {
+                    id: assistantMsgId,
+                    sender: 'assistant',
+                    content: delta,
+                    timestamp: formatTime(),
+                  };
+                  return {
+                    ...prev,
+                    [currentId!]: [...list, newAssistantMsg],
+                  };
+                }
+
+                return {
+                  ...prev,
+                  [currentId!]: list.map((msg) =>
+                    msg.id === assistantMsgId ? { ...msg, content: msg.content + delta } : msg
+                  ),
+                };
+              });
+            },
+            onMetadata: (meta) => {
+              if (meta.destination || meta.duration_days || meta.origin) {
+                setTripContextMap((prev) => {
+                  const current = prev[currentId!] || {};
+                  return {
+                    ...prev,
+                    [currentId!]: {
+                      title: (meta.destination || current.destination)
+                        ? `${meta.destination || current.destination} Expedition`
+                        : 'New Voyage',
+                      destination: meta.destination || current.destination || 'Unspecified',
+                      origin: meta.origin || current.origin || locationDisplay,
+                      days: meta.duration_days ?? current.days ?? 0,
+                      budget: 0,
+                      currency: 'USD',
+                      travelers: 1,
+                      status: meta.onboarding_complete ? 'ROUTING' : 'ONBOARDING',
+                      interests: ['Exploration', 'Culture'],
+                    },
+                  };
+                });
+              }
+            },
+            onDone: (doneData) => {
+              setIsLoading(false);
+              const trip = doneData.trip;
+              const conv = doneData.conversation;
+
+              const extractedMetadata: any = {};
+              if (trip.destination) extractedMetadata.destination = trip.destination;
+              if (trip.duration_days) extractedMetadata.duration = `${trip.duration_days} Days`;
+              if (trip.origin_text) extractedMetadata.origin = trip.origin_text;
+
+              setMessagesMap((prev) => {
+                const list = prev[currentId!] || [];
+                const exists = list.some((msg) => msg.id === assistantMsgId);
+                let updated: ChatMessageItem[];
+
+                if (!exists) {
+                  const newMsg: ChatMessageItem = {
+                    id: assistantMsgId,
+                    sender: 'assistant',
+                    content: doneData.assistant_message?.content || '',
+                    timestamp: formatTime(),
+                    metadata:
+                      Object.keys(extractedMetadata).length > 0 ? extractedMetadata : undefined,
+                  };
+                  updated = [...list, newMsg];
+                } else {
+                  updated = list.map((msg) => {
+                    if (msg.id === assistantMsgId) {
+                      return {
+                        ...msg,
+                        content: doneData.assistant_message?.content || msg.content,
+                        metadata:
+                          Object.keys(extractedMetadata).length > 0 ? extractedMetadata : undefined,
+                      };
+                    }
+                    return msg;
+                  });
+                }
+
+                if (trip.onboarding_status === 'COMPLETE' || conv?.current_stage === 'COMPLETE') {
+                  const alreadyHasCheckpoint = updated.some(
+                    (m) => m.stage === 'ONBOARDING CHECKPOINT' && m.sender === 'system'
+                  );
+                  if (!alreadyHasCheckpoint) {
+                    const checkpointMessage: ChatMessageItem = {
+                      id: `sys-${Date.now()}`,
+                      sender: 'system',
+                      content: `Trip parameters captured: ${trip.destination} (${trip.duration_days} Days${
+                        trip.origin_text ? `, from ${trip.origin_text}` : ''
+                      }). Onboarding complete.`,
+                      timestamp: formatTime(),
+                      stage: 'ONBOARDING CHECKPOINT',
+                    };
+                    updated.push(checkpointMessage);
+                  }
+                }
+
+                return {
+                  ...prev,
+                  [currentId!]: updated,
+                };
+              });
+
+              if (trip.destination || trip.duration_days) {
+                setTripContextMap((prev) => ({
+                  ...prev,
+                  [currentId!]: {
+                    title: trip.destination ? `${trip.destination} Expedition` : 'New Voyage',
+                    destination: trip.destination || 'Unspecified',
+                    origin: trip.origin_text || label || locationDisplay,
+                    days: trip.duration_days || 0,
+                    budget: 0,
+                    currency: trip.currency || 'USD',
+                    travelers: 1,
+                    status: trip.onboarding_status === 'COMPLETE' ? 'ROUTING' : 'ONBOARDING',
+                    interests: ['Exploration', 'Culture'],
+                  },
+                }));
+              }
+            },
+            onError: (err) => {
+              setIsLoading(false);
+              console.error('Streaming interaction error:', err);
+              const fallbackMessage: ChatMessageItem = {
+                id: `sys-err-${Date.now()}`,
+                sender: 'system',
+                content: `Agent service notice: ${err?.message || 'Connection interrupted'}.`,
+                timestamp: formatTime(),
+                stage: 'AGENT STATUS',
+              };
+              setMessagesMap((prev) => ({
+                ...prev,
+                [currentId!]: [...(prev[currentId!] || []), fallbackMessage],
+              }));
+            },
+          },
+          'UI_ACTION',
+          streamPayload
+        );
+      };
+
+      try {
+        await executeStream(backendTripId);
+      } catch (streamErr: any) {
+        if (streamErr?.message?.includes('404') || streamErr?.message?.includes('not found') || streamErr?.message?.includes('Not Found')) {
+          console.warn('Trip session not found on backend. Re-creating trip session and retrying...');
+          const freshRes = await createTrip();
+          if (freshRes?.trip_id) {
+            backendTripId = freshRes.trip_id;
+            setSessionTripIdMap((prev) => {
+              const updated = { ...prev, [currentId!]: backendTripId };
+              localStorage.setItem('tripverse-session-trip-map', JSON.stringify(updated));
+              return updated;
+            });
+            await executeStream(backendTripId);
+            return;
+          }
+        }
+        throw streamErr;
+      }
+    } catch (err: any) {
+      console.error('Backend interaction failed:', err);
+      setIsLoading(false);
+      // Clean up stale session mapping on 404
+      if (err?.message?.includes('404') || err?.message?.includes('not found') || err?.message?.includes('Not Found')) {
+        setSessionTripIdMap((prev) => {
+          const updated = { ...prev };
+          delete updated[currentId!];
+          localStorage.setItem('tripverse-session-trip-map', JSON.stringify(updated));
+          return updated;
+        });
+      }
+      const fallbackMessage: ChatMessageItem = {
+        id: `sys-err-${Date.now()}`,
+        sender: 'system',
+        content: `Backend response: ${err?.message || 'Agent service busy'}. Message recorded locally.`,
+        timestamp: formatTime(),
+        stage: 'AGENT STATUS',
+      };
+      setMessagesMap((prev) => ({
+        ...prev,
+        [currentId!]: [...(prev[currentId!] || []), fallbackMessage],
+      }));
+    }
+  };
+
   // Quick Starter Prompt Handler
   const handleSelectPrompt = (promptText: string) => {
     handleSendMessage(promptText);
   };
 
-  // Launch Full Universe in legacy 3D canvas
-  const handleBuildFullUniverse = () => {
-    if (onBuildUniverse) {
-      onBuildUniverse({
-        destination: activeTripContext?.destination || 'Japan',
-        days: activeTripContext?.days || 10,
-        budget: activeTripContext?.budget || 3500,
-        interests: activeTripContext?.interests || ['Culture', 'Exploration'],
-      });
-    }
-  };
+  const isOriginPromptVisible = Boolean(
+    activeTripContext?.destination &&
+    activeTripContext?.days &&
+    !activeTripContext?.origin &&
+    activeTripContext?.status === 'ONBOARDING' &&
+    !isLoading
+  );
 
   return (
     <div
@@ -734,6 +1082,9 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
         onSelectPrompt={handleSelectPrompt}
         isLoading={isLoading}
         onResetChat={handleNewChat}
+        showOriginPrompt={isOriginPromptVisible}
+        onSubmitManualOrigin={(origin) => handleSendMessage(origin)}
+        onSubmitGeolocationOrigin={(lat, lon, label) => handleSendGeolocation(lat, lon, label)}
       />
 
       {/* 3. Right Spatial Workspace Column (Future 3rd column, conditional) */}
@@ -741,7 +1092,6 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
         isOpen={isSpatialOpen}
         onClose={() => setIsSpatialOpen(false)}
         trip={activeTripContext}
-        onBuildFullUniverse={handleBuildFullUniverse}
       />
     </div>
   );

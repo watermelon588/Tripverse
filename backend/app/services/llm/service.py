@@ -1,8 +1,9 @@
 import logging
-from typing import Optional
+from typing import Any, Optional
 
-from app.services.llm.base import LLMProvider
+from app.services.llm.base import LLMProvider, LLMResult, ToolCall
 from app.services.llm.providers.gemini import GeminiProvider
+from app.services.llm.providers.groq import GroqProvider
 
 logger = logging.getLogger(__name__)
 
@@ -15,19 +16,89 @@ WELCOME_SYSTEM_INSTRUCTION = (
 )
 
 
+_UNSET = object()
+
+
 class LLMService:
     """
     Application-level LLM Service.
-    Coordinates LLM provider calls, builds structured prompts, and provides safe fallbacks
-    so agent workflows never crash due to provider errors or rate limits.
+    Coordinates primary (Groq) and fallback (Gemini) LLM providers, builds structured prompts,
+    and provides transparent fallback when the primary provider encounters rate limits or quota limits.
     """
 
-    def __init__(self, provider: Optional[LLMProvider] = None):
-        self._provider = provider or GeminiProvider()
+    def __init__(
+        self,
+        primary_provider: Any = _UNSET,
+        fallback_provider: Any = _UNSET,
+        provider: Any = _UNSET,
+    ):
+        if provider is not _UNSET:
+            self._primary_provider = provider
+            self._fallback_provider = fallback_provider if fallback_provider is not _UNSET else None
+        else:
+            self._primary_provider = primary_provider if primary_provider is not _UNSET else GroqProvider()
+            self._fallback_provider = fallback_provider if fallback_provider is not _UNSET else GeminiProvider()
+
+    @property
+    def _provider(self) -> LLMProvider:
+        """Compatibility property for legacy provider references."""
+        return self._primary_provider
+
+    @_provider.setter
+    def _provider(self, val: LLMProvider) -> None:
+        self._primary_provider = val
 
     def set_provider(self, provider: LLMProvider) -> None:
-        """Allow runtime swapping of the underlying LLM provider."""
-        self._provider = provider
+        """Allow runtime swapping of the primary LLM provider."""
+        self._primary_provider = provider
+
+    def set_providers(
+        self,
+        primary: LLMProvider,
+        fallback: Optional[LLMProvider] = None,
+    ) -> None:
+        """Allow runtime swapping of both primary and fallback LLM providers."""
+        self._primary_provider = primary
+        self._fallback_provider = fallback
+
+    def _is_provider_limit_error(self, exc: Exception) -> bool:
+        """
+        Determine if an exception represents a rate limit, quota exhaustion, or capacity constraint.
+        Distinguishes limit errors from authentication, validation, or malformed request errors.
+        """
+        exc_type_name = type(exc).__name__
+
+        # Direct rate limit exception types across SDKs (Groq, OpenAI, Google)
+        if "RateLimit" in exc_type_name or "Quota" in exc_type_name or "ResourceExhausted" in exc_type_name:
+            return True
+
+        # HTTP 429 Status Code check
+        if hasattr(exc, "status_code") and exc.status_code == 429:
+            return True
+        if hasattr(exc, "response") and getattr(exc.response, "status_code", None) == 429:
+            return True
+
+        # Check for explicit message patterns
+        msg = str(exc).lower()
+        limit_keywords = [
+            "rate limit",
+            "rate_limit",
+            "quota exceeded",
+            "insufficient_quota",
+            "too many requests",
+            "resource_exhausted",
+            "tokens per minute",
+            "requests per minute",
+            "tpm limit",
+            "rpm limit",
+            "429",
+        ]
+        # Ensure we don't catch authentication or invalid request errors that mention keys
+        auth_keywords = ["unauthorized", "invalid api key", "authentication", "forbidden", "401", "403"]
+        if any(ak in msg for ak in auth_keywords) and "429" not in msg:
+            return False
+
+        return any(lk in msg for lk in limit_keywords)
 
     async def generate(
         self,
@@ -35,14 +106,76 @@ class LLMService:
         system_instruction: Optional[str] = None,
         temperature: float = 0.7,
         max_output_tokens: Optional[int] = None,
+        **kwargs: Any,
     ) -> str:
-        """Delegate raw text generation to the active LLM provider."""
-        return await self._provider.generate(
-            prompt=prompt,
-            system_instruction=system_instruction,
-            temperature=temperature,
-            max_output_tokens=max_output_tokens,
-        )
+        """
+        Generate completion text via the primary provider, automatically retrying with fallback on limit failure.
+        """
+        try:
+            return await self._primary_provider.generate(
+                prompt=prompt,
+                system_instruction=system_instruction,
+                temperature=temperature,
+                max_output_tokens=max_output_tokens,
+                **kwargs,
+            )
+        except Exception as exc:
+            if self._fallback_provider and self._is_provider_limit_error(exc):
+                logger.warning(
+                    "Primary LLM provider (%s) limit/quota reached (%s: %s). Falling back to %s.",
+                    type(self._primary_provider).__name__,
+                    type(exc).__name__,
+                    exc,
+                    type(self._fallback_provider).__name__,
+                )
+                return await self._fallback_provider.generate(
+                    prompt=prompt,
+                    system_instruction=system_instruction,
+                    temperature=temperature,
+                    max_output_tokens=max_output_tokens,
+                    **kwargs,
+                )
+            raise
+
+    async def generate_with_tools(
+        self,
+        prompt: str,
+        system_instruction: Optional[str] = None,
+        tools: Optional[list[Any]] = None,
+        temperature: float = 0.7,
+        max_output_tokens: Optional[int] = None,
+        **kwargs: Any,
+    ) -> LLMResult:
+        """
+        Generate completion text with tool calls via primary provider with automatic fallback on limit failure.
+        """
+        try:
+            return await self._primary_provider.generate_with_tools(
+                prompt=prompt,
+                system_instruction=system_instruction,
+                tools=tools,
+                temperature=temperature,
+                max_output_tokens=max_output_tokens,
+                **kwargs,
+            )
+        except Exception as exc:
+            if self._fallback_provider and self._is_provider_limit_error(exc):
+                logger.warning(
+                    "Primary LLM provider (%s) limit/quota reached in generate_with_tools (%s: %s). Falling back to %s.",
+                    type(self._primary_provider).__name__,
+                    type(exc).__name__,
+                    exc,
+                    type(self._fallback_provider).__name__,
+                )
+                return await self._fallback_provider.generate_with_tools(
+                    prompt=prompt,
+                    system_instruction=system_instruction,
+                    tools=tools,
+                    temperature=temperature,
+                    max_output_tokens=max_output_tokens,
+                    **kwargs,
+                )
+            raise
 
     async def generate_stream(
         self,
@@ -50,15 +183,39 @@ class LLMService:
         system_instruction: Optional[str] = None,
         temperature: float = 0.7,
         max_output_tokens: Optional[int] = None,
+        **kwargs: Any,
     ):
-        """Delegate streaming token generation to the active LLM provider."""
-        async for token in self._provider.generate_stream(
-            prompt=prompt,
-            system_instruction=system_instruction,
-            temperature=temperature,
-            max_output_tokens=max_output_tokens,
-        ):
-            yield token
+        """
+        Stream completion tokens via primary provider with automatic fallback on limit failure.
+        """
+        try:
+            async for token in self._primary_provider.generate_stream(
+                prompt=prompt,
+                system_instruction=system_instruction,
+                temperature=temperature,
+                max_output_tokens=max_output_tokens,
+                **kwargs,
+            ):
+                yield token
+        except Exception as exc:
+            if self._fallback_provider and self._is_provider_limit_error(exc):
+                logger.warning(
+                    "Primary LLM provider (%s) limit/quota reached in generate_stream (%s: %s). Falling back to %s.",
+                    type(self._primary_provider).__name__,
+                    type(exc).__name__,
+                    exc,
+                    type(self._fallback_provider).__name__,
+                )
+                async for token in self._fallback_provider.generate_stream(
+                    prompt=prompt,
+                    system_instruction=system_instruction,
+                    temperature=temperature,
+                    max_output_tokens=max_output_tokens,
+                    **kwargs,
+                ):
+                    yield token
+            else:
+                raise
 
     async def generate_welcome_greeting(
         self,
@@ -67,7 +224,7 @@ class LLMService:
     ) -> str:
         """
         Generate a dynamic, personalized welcome greeting for initializing a trip session.
-        Safely falls back to a deterministic greeting if the provider fails.
+        Safely falls back to a deterministic greeting if both providers fail.
         """
         prompt_parts = []
         if user_name:
@@ -84,7 +241,7 @@ class LLMService:
         prompt = "\n".join(prompt_parts)
 
         try:
-            response = await self._provider.generate(
+            response = await self.generate(
                 prompt=prompt,
                 system_instruction=WELCOME_SYSTEM_INSTRUCTION,
                 temperature=0.7,

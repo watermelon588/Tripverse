@@ -22,13 +22,22 @@ def extract_trip_info(
     updates: Dict[str, Any] = {}
 
     if message_type == MessageType.UI_ACTION and payload:
-        if payload.get("action") == "SET_LOCATION":
-            updates["origin_latitude"] = payload.get("latitude")
-            updates["origin_longitude"] = payload.get("longitude")
+        action = payload.get("action")
+        if action == "SET_LOCATION" or ("origin_latitude" in payload and "origin_longitude" in payload):
+            lat = payload.get("latitude") if payload.get("latitude") is not None else payload.get("origin_latitude")
+            lon = payload.get("longitude") if payload.get("longitude") is not None else payload.get("origin_longitude")
+            updates["origin_latitude"] = lat
+            updates["origin_longitude"] = lon
             if payload.get("label"):
                 updates["origin_text"] = payload["label"]
-            elif not current_trip.origin_text:
-                updates["origin_text"] = f"{payload.get('latitude')}, {payload.get('longitude')}"
+            elif payload.get("origin_text"):
+                updates["origin_text"] = payload["origin_text"]
+            elif not current_trip.origin_text and lat is not None and lon is not None:
+                updates["origin_text"] = f"{lat}, {lon}"
+        elif action == "SET_ORIGIN" or payload.get("origin_text"):
+            val = payload.get("origin_text") or payload.get("origin") or payload.get("label")
+            if val:
+                updates["origin_text"] = str(val).strip()
         return updates
 
     if message_type == MessageType.TEXT and content:
@@ -81,7 +90,7 @@ def extract_trip_info(
             if not current_trip.destination and not (duration_match and cleaned_dest.isdigit()):
                 updates["destination"] = cleaned_dest.title()
             elif current_trip.destination and current_trip.duration_days and not current_trip.origin_text:
-                # If destination & duration are already set, a short single word reply is likely origin
+                # If destination & duration are already set, a short reply is likely origin
                 if "origin_text" not in updates and not origin_match:
                     updates["origin_text"] = cleaned_dest.title()
 
@@ -92,14 +101,19 @@ def determine_next_step(
     trip: Trip, session: ConversationSession
 ) -> Tuple[ConversationStage, str]:
     """Select the next conversational prompt based on current trip state."""
-    # Check onboarding completion criteria
-    if trip.destination is not None and trip.duration_days is not None:
+    has_origin = bool(
+        (trip.origin_text and str(trip.origin_text).strip())
+        or (trip.origin_latitude is not None and trip.origin_longitude is not None)
+    )
+
+    # Check onboarding completion criteria (destination, duration_days, and origin must all be present)
+    if trip.destination is not None and trip.duration_days is not None and has_origin:
         trip.onboarding_status = OnboardingStatus.COMPLETE
         trip.status = TripStatus.PLANNING
         session.status = ConversationSessionStatus.COMPLETED
         session.current_stage = ConversationStage.COMPLETE
         
-        origin_str = f" starting from {trip.origin_text}" if trip.origin_text else ""
+        origin_str = f" from {trip.origin_text}" if trip.origin_text else ""
         message_content = (
             f"Perfect! We have {trip.duration_days} days in {trip.destination}{origin_str}. "
             f"We're ready to start planning!"
@@ -120,7 +134,7 @@ def determine_next_step(
         )
 
     # If origin missing
-    if trip.origin_text is None and trip.origin_latitude is None:
+    if not has_origin:
         session.current_stage = ConversationStage.ORIGIN
         return (
             ConversationStage.ORIGIN,

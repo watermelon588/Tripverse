@@ -27,15 +27,31 @@ class Settings(BaseSettings):
     SUPABASE_SECRET: str = ""
     SUPABASE_JWT_SECRET: str = ""
 
-    # Google Gemini LLM Configuration
+    # LLM Provider Configuration
+    LLM_PROVIDER: str = "groq"
+
+    # Groq LLM Configuration (Primary)
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
+
+    # Google Gemini LLM Configuration (Fallback)
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3.1-flash-lite"
+
+    # Tavily Web Search Configuration
+    TAVILY_API_KEY: str = ""
 
     # Cloudinary Configuration
     CLOUDINARY_CLOUD_NAME: str = ""
     CLOUDINARY_API_KEY: str = ""
     CLOUDINARY_API_SECRET: str = ""
     CLOUDINARY_URL: str = ""
+
+    # LangSmith Observability Configuration
+    LANGSMITH_TRACING: bool = False
+    LANGSMITH_ENDPOINT: str = "https://api.smith.langchain.com"
+    LANGSMITH_API_KEY: str = ""
+    LANGSMITH_PROJECT: str = "Tripverse"
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -58,3 +74,14 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Automatically sync LangSmith observability environment variables for LangGraph/LangChain runtime
+import os
+
+if settings.LANGSMITH_TRACING and settings.LANGSMITH_API_KEY:
+    os.environ["LANGSMITH_TRACING"] = "true"
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGSMITH_ENDPOINT"] = settings.LANGSMITH_ENDPOINT
+    os.environ["LANGSMITH_API_KEY"] = settings.LANGSMITH_API_KEY
+    os.environ["LANGSMITH_PROJECT"] = settings.LANGSMITH_PROJECT
+

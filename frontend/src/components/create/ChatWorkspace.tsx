@@ -4,6 +4,7 @@ import { ChatMessage, ChatMessageItem } from './ChatMessage';
 import { AssistantAvatar } from './AssistantAvatar';
 import { ChatWelcome } from './ChatWelcome';
 import { ChatComposer } from './ChatComposer';
+import { OriginPromptCard } from './OriginPromptCard';
 import { ThemeToggle } from '../common/ThemeToggle';
 
 interface ChatWorkspaceProps {
@@ -18,6 +19,9 @@ interface ChatWorkspaceProps {
   onSelectPrompt: (promptText: string) => void;
   isLoading?: boolean;
   onResetChat?: () => void;
+  showOriginPrompt?: boolean;
+  onSubmitManualOrigin?: (originText: string) => void;
+  onSubmitGeolocationOrigin?: (latitude: number, longitude: number, label?: string) => void;
 }
 
 export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
@@ -32,6 +36,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onSelectPrompt,
   isLoading = false,
   onResetChat,
+  showOriginPrompt = false,
+  onSubmitManualOrigin,
+  onSubmitGeolocationOrigin,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -125,6 +132,15 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             {messages.map((msg) => (
               <ChatMessage key={msg.id} message={msg} />
             ))}
+
+            {/* Inline Origin Collection Prompt Card */}
+            {showOriginPrompt && !isLoading && onSubmitManualOrigin && onSubmitGeolocationOrigin && (
+              <OriginPromptCard
+                onSubmitManual={onSubmitManualOrigin}
+                onSubmitGeolocation={onSubmitGeolocationOrigin}
+                disabled={isLoading}
+              />
+            )}
 
             {/* Thinking Animation (Borderless enlarged animated chibi sprite + thinking text) */}
             {isLoading && (

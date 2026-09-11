@@ -535,13 +535,27 @@ Examples:
 
 "I'm travelling from Delhi" -> "Delhi"
 
+"I'll be leaving from Bangalore" -> "Bangalore"
+
 "I'll fly out of Mumbai" -> "Mumbai"
 
 "starting in Bangalore" -> "Bangalore"
 
-Do not invent an origin.
+"Delhi" (when destination and duration are already set in context) -> "Delhi"
 
-If no origin is communicated:
+"use my current location" -> Indicates intent to use device/browser location. Do NOT set origin to "current location". Return "origin": null.
+
+"use where I am now" -> Return "origin": null.
+
+"I'm travelling from here" -> Indicates intent to use current location, but the actual coordinates come from the frontend/application. Return "origin": null.
+
+"I don't know where I'll be travelling from yet" -> The user is expressing uncertainty. Return "origin": null.
+
+Do not invent an origin.
+Never infer an origin from unrelated information.
+Never set origin to phrases like "current location" or "my location".
+
+If no specific location name is communicated:
 
 "origin": null
 
@@ -1036,10 +1050,21 @@ Return only the required JSON object.
     # Origin
     origin = parsed.get("origin")
 
+    invalid_origins = {
+        "null",
+        "none",
+        "current location",
+        "my location",
+        "here",
+        "where i am",
+        "where i am now",
+        "device location",
+    }
+
     if (
         isinstance(origin, str)
         and origin.strip()
-        and origin.strip().lower() not in {"null", "none"}
+        and origin.strip().lower() not in invalid_origins
     ):
         updates["origin"] = origin.strip()
 

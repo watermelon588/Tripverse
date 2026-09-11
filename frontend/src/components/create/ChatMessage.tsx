@@ -2,6 +2,7 @@ import React from 'react';
 import { AssistantAvatar } from './AssistantAvatar';
 import { User, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { MarkdownMessage } from './MarkdownMessage';
 
 export interface ChatMessageItem {
   id: string;
@@ -95,18 +96,20 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
             className={`p-4 text-sm leading-relaxed ${
               isUser
                 ? 'bg-[#1F1E1E] dark:bg-[#262626] text-white font-normal'
-                : 'bg-white dark:bg-[#1A1A1A] border-2 border-[#E5E5E5] dark:border-[#2E2E2E] text-[#1F1E1E] dark:text-[#F5F5F5] font-medium'
+                : 'bg-white dark:bg-[#1A1A1A] border-2 border-[#E5E5E5] dark:border-[#2E2E2E] text-[#1F1E1E] dark:text-[#F5F5F5] font-normal'
             }`}
           >
-            <p className="whitespace-pre-wrap">
-              {message.content || (
-                <span className="inline-flex gap-1 items-center py-1">
-                  <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                  <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                  <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"></span>
-                </span>
-              )}
-            </p>
+            {isUser ? (
+              <p className="whitespace-pre-wrap">{message.content}</p>
+            ) : message.content ? (
+              <MarkdownMessage content={message.content} />
+            ) : (
+              <span className="inline-flex gap-1 items-center py-1">
+                <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce"></span>
+              </span>
+            )}
 
             {/* Extracted Metadata Pills */}
             {message.metadata && (

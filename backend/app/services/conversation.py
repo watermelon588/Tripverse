@@ -1,7 +1,10 @@
+import logging
 import uuid
-from typing import Optional
+from typing import Any, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from app.agents.trip_planner.graph import trip_planner_graph
 from app.core.auth import RequestIdentity
@@ -77,13 +80,22 @@ class ConversationService:
 
         # 5. Handle UI actions if present
         if request.message_type == MessageType.UI_ACTION and request.payload:
-            if request.payload.get("action") == "SET_LOCATION":
-                trip.origin_latitude = request.payload.get("latitude")
-                trip.origin_longitude = request.payload.get("longitude")
+            action = request.payload.get("action")
+            if action == "SET_LOCATION" or ("origin_latitude" in request.payload and "origin_longitude" in request.payload):
+                lat = request.payload.get("latitude") if request.payload.get("latitude") is not None else request.payload.get("origin_latitude")
+                lon = request.payload.get("longitude") if request.payload.get("longitude") is not None else request.payload.get("origin_longitude")
+                trip.origin_latitude = lat
+                trip.origin_longitude = lon
                 if request.payload.get("label"):
                     trip.origin_text = request.payload.get("label")
-                elif not trip.origin_text:
-                    trip.origin_text = f"{request.payload.get('latitude')}, {request.payload.get('longitude')}"
+                elif request.payload.get("origin_text"):
+                    trip.origin_text = request.payload.get("origin_text")
+                elif not trip.origin_text and lat is not None and lon is not None:
+                    trip.origin_text = f"{lat}, {lon}"
+            elif action == "SET_ORIGIN" or request.payload.get("origin_text"):
+                val = request.payload.get("origin_text") or request.payload.get("origin") or request.payload.get("label")
+                if val:
+                    trip.origin_text = str(val).strip()
 
         # 6. Prepare state and invoke LangGraph trip planner agent
         user_name = identity.user_name if identity else None
@@ -96,6 +108,8 @@ class ConversationService:
             "destination": trip.destination,
             "duration_days": trip.duration_days,
             "origin": trip.origin_text,
+            "origin_latitude": trip.origin_latitude,
+            "origin_longitude": trip.origin_longitude,
             "onboarding_complete": trip.onboarding_status == OnboardingStatus.COMPLETE,
             "missing_fields": [],
             "assistant_response": "",
@@ -114,15 +128,25 @@ class ConversationService:
             trip.origin_text = graph_result["origin"]
 
         # Fallback to deterministic regex extraction if graph returned no updates
-        if not trip.destination or not trip.duration_days:
+        has_origin = bool(
+            (trip.origin_text and str(trip.origin_text).strip())
+            or (trip.origin_latitude is not None and trip.origin_longitude is not None)
+        )
+        if not trip.destination or not trip.duration_days or not has_origin:
             from app.services.onboarding import extract_trip_info as regex_extract
             regex_updates = regex_extract(request.content, request.payload, request.message_type, trip)
             for field, val in regex_updates.items():
                 if val is not None:
                     setattr(trip, field, val)
 
-        # Evaluate completion status
-        if trip.destination and trip.duration_days:
+        # Re-evaluate origin presence after fallback
+        has_origin = bool(
+            (trip.origin_text and str(trip.origin_text).strip())
+            or (trip.origin_latitude is not None and trip.origin_longitude is not None)
+        )
+
+        # Evaluate completion status (strictly destination + duration + origin)
+        if trip.destination and trip.duration_days and has_origin:
             trip.onboarding_status = OnboardingStatus.COMPLETE
             trip.status = TripStatus.PLANNING
             session.status = ConversationSessionStatus.COMPLETED
@@ -136,25 +160,33 @@ class ConversationService:
         else:
             trip.onboarding_status = OnboardingStatus.IN_PROGRESS
             session.status = ConversationSessionStatus.ACTIVE
-            session.current_stage = ConversationStage.TRIP_BASICS
-            if trip.destination and not trip.duration_days:
+            if not trip.destination:
+                session.current_stage = ConversationStage.TRIP_BASICS
+                assistant_text = (
+                    graph_result.get("assistant_response")
+                    or "Where do you want to travel?"
+                )
+            elif not trip.duration_days:
+                session.current_stage = ConversationStage.TRIP_BASICS
                 assistant_text = (
                     graph_result.get("assistant_response")
                     or f"Nice! How many days are you thinking for {trip.destination}?"
                 )
             else:
+                session.current_stage = ConversationStage.ORIGIN
                 assistant_text = (
                     graph_result.get("assistant_response")
-                    or "Where do you want to travel?"
+                    or f"Got it — {trip.duration_days} days in {trip.destination}. Where will you be travelling from?"
                 )
 
+        assistant_payload = graph_result.get("ui_action") or None
         assistant_msg = await self.message_repo.create_message(
             db,
             session_id=session.id,
             role=MessageRole.ASSISTANT,
             message_type=MessageType.TEXT,
             content=assistant_text,
-            payload=None,
+            payload=assistant_payload,
         )
 
         # 7. Commit and refresh
@@ -170,23 +202,57 @@ class ConversationService:
 
     async def process_message_stream(
         self,
+        db_or_trip_id: Any = None,
+        trip_id_or_request: Any = None,
+        request_or_identity: Any = None,
+        identity: Optional[RequestIdentity] = None,
+        db: Optional[AsyncSession] = None,
+        trip_id: Optional[uuid.UUID] = None,
+        request: Optional[SendMessageRequest] = None,
+    ):
+        """
+        Process user message and yield SSE events in real-time token streaming.
+        Supports both self-managed database session (production streaming) and
+        caller-injected session (offline tests).
+        """
+        if isinstance(db_or_trip_id, AsyncSession):
+            active_db = db_or_trip_id
+            target_trip_id = trip_id_or_request
+            target_request = request_or_identity
+            target_identity = identity
+            use_managed_db = False
+        else:
+            target_trip_id = trip_id if trip_id is not None else db_or_trip_id
+            target_request = request if request is not None else trip_id_or_request
+            target_identity = identity if identity is not None else request_or_identity
+            active_db = db
+            use_managed_db = active_db is None
+
+        if use_managed_db:
+            from app.core.database import async_session_maker
+            async with async_session_maker() as stream_db:
+                async for event in self._process_message_stream_impl(
+                    stream_db, target_trip_id, target_request, target_identity
+                ):
+                    yield event
+        else:
+            async for event in self._process_message_stream_impl(
+                active_db, target_trip_id, target_request, target_identity
+            ):
+                yield event
+
+    async def _process_message_stream_impl(
+        self,
         db: AsyncSession,
         trip_id: uuid.UUID,
         request: SendMessageRequest,
         identity: Optional[RequestIdentity] = None,
     ):
-        """
-        Process user message and yield SSE events in real-time token streaming.
-        Event schema:
-        - metadata: {"type": "metadata", "destination": ..., "duration_days": ..., "origin": ..., "onboarding_complete": bool}
-        - token: {"type": "token", "delta": "text chunk"}
-        - done: {"type": "done", "trip": {...}, "conversation": {...}, "assistant_message": {...}}
-        """
+        """Internal generator carrying out message processing and streaming on an active db session."""
         import json
         from app.agents.trip_planner.nodes.understand_user_msg_node import understand_user_message
         from app.agents.trip_planner.nodes.validate_state_node import validate_state
-        from app.agents.trip_planner.nodes.respond_to_user_node import RESPOND_TO_USER_SYSTEM_INSTRUCTION
-        from app.agents.trip_planner.nodes.planning_trip_node import PLANNING_TRIP_SYSTEM_INSTRUCTION
+        from app.agents.trip_planner.nodes.respond_to_user_node import respond_to_user
         from app.services.llm.service import llm_service
 
         # 1. Fetch trip & enforce ownership
@@ -213,11 +279,22 @@ class ConversationService:
 
         # 4. Handle UI actions if present
         if request.message_type == MessageType.UI_ACTION and request.payload:
-            if request.payload.get("action") == "SET_LOCATION":
-                trip.origin_latitude = request.payload.get("latitude")
-                trip.origin_longitude = request.payload.get("longitude")
+            action = request.payload.get("action")
+            if action == "SET_LOCATION" or ("origin_latitude" in request.payload and "origin_longitude" in request.payload):
+                lat = request.payload.get("latitude") if request.payload.get("latitude") is not None else request.payload.get("origin_latitude")
+                lon = request.payload.get("longitude") if request.payload.get("longitude") is not None else request.payload.get("origin_longitude")
+                trip.origin_latitude = lat
+                trip.origin_longitude = lon
                 if request.payload.get("label"):
                     trip.origin_text = request.payload.get("label")
+                elif request.payload.get("origin_text"):
+                    trip.origin_text = request.payload.get("origin_text")
+                elif not trip.origin_text and lat is not None and lon is not None:
+                    trip.origin_text = f"{lat}, {lon}"
+            elif action == "SET_ORIGIN" or request.payload.get("origin_text"):
+                val = request.payload.get("origin_text") or request.payload.get("origin") or request.payload.get("label")
+                if val:
+                    trip.origin_text = str(val).strip()
 
         # 5. Build state and understand user message
         user_name = identity.user_name if identity else None
@@ -230,6 +307,8 @@ class ConversationService:
             "destination": trip.destination,
             "duration_days": trip.duration_days,
             "origin": trip.origin_text,
+            "origin_latitude": trip.origin_latitude,
+            "origin_longitude": trip.origin_longitude,
             "onboarding_complete": trip.onboarding_status == OnboardingStatus.COMPLETE,
             "missing_fields": [],
             "assistant_response": "",
@@ -255,65 +334,96 @@ class ConversationService:
         is_complete = validation["onboarding_complete"]
 
         # 6. Emit metadata event immediately
-        yield f"data: {json.dumps({'type': 'metadata', 'destination': trip.destination, 'duration_days': trip.duration_days, 'origin': trip.origin_text, 'onboarding_complete': is_complete, 'user_name': current_state.get('user_name')})}\n\n"
+        yield f"data: {json.dumps({'type': 'metadata', 'destination': trip.destination, 'duration_days': trip.duration_days, 'origin': trip.origin_text, 'onboarding_complete': is_complete, 'missing_fields': validation.get('missing_fields', []), 'user_name': current_state.get('user_name')})}\n\n"
 
-        # 7. Choose system instruction and prompt for streaming
+        # 7. Execute node based on completion status
         user_name_display = current_state.get("user_name") or "Friend / Traveler"
+        accumulated_text = ""
+        ui_action = None
+
         if is_complete:
             trip.onboarding_status = OnboardingStatus.COMPLETE
             trip.status = TripStatus.PLANNING
             session.status = ConversationSessionStatus.COMPLETED
             session.current_stage = ConversationStage.COMPLETE
 
-            sys_instruction = PLANNING_TRIP_SYSTEM_INSTRUCTION
-            stream_prompt = f"""TRIP INFORMATION:
-Traveler Name: {user_name_display}
-Destination: {trip.destination}
-Duration: {trip.duration_days} days
-Origin: {trip.origin_text}
+            logger.info(
+                "🔥 STREAM planning started: destination=%s duration=%s origin=%s",
+                trip.destination,
+                trip.duration_days,
+                trip.origin_text,
+            )
 
-Acknowledge that enough information has been provided to begin planning.
-Address the traveler warmly by name if known.
-Keep the response short."""
+            # Execute shared planning subgraph (destination research & candidate curation)
+            from app.agents.trip_planner.nodes.planning_trip_node import (
+                PLAN_GENERATION_SYSTEM_INSTRUCTION,
+                build_plan_generation_prompt,
+                execute_planning_subgraph,
+            )
+
+            planning_result = await execute_planning_subgraph(
+                destination=trip.destination,
+                duration_days=trip.duration_days,
+                origin=trip.origin_text,
+            )
+
+            logger.info(
+                "🔥 PLANNING DATA READY: candidates=%d",
+                len(planning_result.get("candidates", [])),
+            )
+
+            # Build canonical plan prompt
+            plan_generation_prompt = build_plan_generation_prompt(
+                planning_result=planning_result,
+                destination=trip.destination,
+                duration_days=trip.duration_days,
+                origin=trip.origin_text,
+                user_name=current_state.get("user_name"),
+            )
+
+            # Stream the generated initial plan tokens
+            logger.info("🔥 STREAMING INITIAL PLAN")
+            try:
+                async for token in llm_service.generate_stream(
+                    prompt=plan_generation_prompt,
+                    system_instruction=PLAN_GENERATION_SYSTEM_INSTRUCTION,
+                    temperature=0.5,
+                ):
+                    accumulated_text += token
+                    yield f"data: {json.dumps({'type': 'token', 'delta': token})}\n\n"
+            except Exception as exc:
+                logger.warning("Error during plan stream generation: %s", exc)
+                if not accumulated_text:
+                    candidates = planning_result.get("candidates", [])
+                    c_names = [c["name"] for c in candidates if isinstance(c, dict) and "name" in c]
+                    c_clause = f" featuring {', '.join(c_names)}" if c_names else ""
+                    accumulated_text = (
+                        f"Here is a first-draft outline for your {trip.duration_days}-day trip to {trip.destination}{c_clause}. "
+                        f"Let's refine the sequence and activities together!"
+                    )
+                    yield f"data: {json.dumps({'type': 'token', 'delta': accumulated_text})}\n\n"
+
+            logger.info("🔥 STREAM INITIAL PLAN COMPLETED")
         else:
             trip.onboarding_status = OnboardingStatus.IN_PROGRESS
             session.status = ConversationSessionStatus.ACTIVE
-            session.current_stage = ConversationStage.TRIP_BASICS
+            if not trip.destination or not trip.duration_days:
+                session.current_stage = ConversationStage.TRIP_BASICS
+            else:
+                session.current_stage = ConversationStage.ORIGIN
 
-            sys_instruction = RESPOND_TO_USER_SYSTEM_INSTRUCTION
-            stream_prompt = f"""CURRENT TRIP STATE:
-Traveler Name: {user_name_display}
-Trip ID: {str(trip.id)}
-Destination: {trip.destination}
-Duration (days): {trip.duration_days}
-Origin: {trip.origin_text}
+            respond_result = await respond_to_user(current_state)
+            accumulated_text = respond_result.get("assistant_response", "")
+            ui_action = respond_result.get("ui_action")
 
-MISSING REQUIRED FIELDS:
-{validation.get('missing_fields', [])}
+            if ui_action:
+                yield f"data: {json.dumps({'type': 'action', 'action': ui_action.get('action'), 'payload': ui_action})}\n\n"
 
-USER'S LATEST MESSAGE:
-"{request.content or ''}"
-
-Write the best natural response to the user."""
-
-        accumulated_text = ""
-        try:
-            async for token in llm_service.generate_stream(
-                prompt=stream_prompt,
-                system_instruction=sys_instruction,
-                temperature=0.7,
-            ):
-                accumulated_text += token
-                yield f"data: {json.dumps({'type': 'token', 'delta': token})}\n\n"
-        except Exception as exc:
-            import logging
-            logging.getLogger(__name__).warning(f"Error during stream token generation: {exc}")
-            if not accumulated_text:
-                if is_complete:
-                    accumulated_text = f"Perfect! I have your trip to {trip.destination} for {trip.duration_days} days. Let's start planning."
-                else:
-                    accumulated_text = "Where would you like to travel?"
-                yield f"data: {json.dumps({'type': 'token', 'delta': accumulated_text})}\n\n"
+            if accumulated_text:
+                words = accumulated_text.split(" ")
+                for i, w in enumerate(words):
+                    chunk = w if i == len(words) - 1 else w + " "
+                    yield f"data: {json.dumps({'type': 'token', 'delta': chunk})}\n\n"
 
         if not accumulated_text.strip():
             accumulated_text = "I'm ready to help plan your trip! Where are you thinking of going?"
@@ -325,7 +435,7 @@ Write the best natural response to the user."""
             role=MessageRole.ASSISTANT,
             message_type=MessageType.TEXT,
             content=accumulated_text.strip(),
-            payload=None,
+            payload=ui_action,
         )
 
         await db.commit()

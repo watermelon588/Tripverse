@@ -181,8 +181,24 @@ async def test_single_field_onboarding_flow(client: AsyncClient):
     d2 = msg2_res.json()
     assert d2["trip"]["destination"] == "Japan"
     assert d2["trip"]["duration_days"] == 10
-    assert d2["trip"]["onboarding_status"] == "COMPLETE"
-    assert d2["trip"]["status"] == "PLANNING"
+    assert d2["trip"]["origin_text"] is None
+    assert d2["trip"]["onboarding_status"] == "IN_PROGRESS"
+    assert d2["conversation"]["current_stage"] == "ORIGIN"
+
+    # 4. Send Origin "Delhi"
+    msg3_res = await client.post(
+        f"/api/trips/{trip_id}/messages",
+        headers=headers,
+        json={"message_type": "TEXT", "content": "Delhi"},
+    )
+    assert msg3_res.status_code == 200
+    d3 = msg3_res.json()
+    assert d3["trip"]["destination"] == "Japan"
+    assert d3["trip"]["duration_days"] == 10
+    assert d3["trip"]["origin_text"] == "Delhi"
+    assert d3["trip"]["onboarding_status"] == "COMPLETE"
+    assert d3["trip"]["status"] == "PLANNING"
+    assert d3["conversation"]["current_stage"] == "COMPLETE"
 
 
 @pytest.mark.asyncio
@@ -253,6 +269,47 @@ async def test_location_action_payload(client: AsyncClient):
         },
     )
     assert invalid_res.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_geolocation_action_completes_onboarding(client: AsyncClient):
+    """Verify that submitting geolocation completes onboarding when destination and duration exist."""
+    guest_id = str(uuid.uuid4())
+    headers = {"X-Guest-ID": guest_id}
+
+    # 1. Create trip
+    create_res = await client.post("/api/trips", headers=headers)
+    trip_id = create_res.json()["trip_id"]
+
+    # 2. Set Destination and Duration
+    await client.post(
+        f"/api/trips/{trip_id}/messages",
+        headers=headers,
+        json={"message_type": "TEXT", "content": "Switzerland for 7 days"},
+    )
+
+    # 3. Submit Geolocation UI Action
+    geo_res = await client.post(
+        f"/api/trips/{trip_id}/messages",
+        headers=headers,
+        json={
+            "message_type": "UI_ACTION",
+            "payload": {
+                "action": "SET_LOCATION",
+                "latitude": 47.3769,
+                "longitude": 8.5417,
+            },
+        },
+    )
+    assert geo_res.status_code == 200
+    data = geo_res.json()
+    assert data["trip"]["destination"] == "Switzerland"
+    assert data["trip"]["duration_days"] == 7
+    assert data["trip"]["origin_latitude"] == 47.3769
+    assert data["trip"]["origin_longitude"] == 8.5417
+    assert data["trip"]["onboarding_status"] == "COMPLETE"
+    assert data["trip"]["status"] == "PLANNING"
+    assert data["conversation"]["current_stage"] == "COMPLETE"
 
 
 @pytest.mark.asyncio

@@ -1,12 +1,4 @@
-import { Trip } from '../types/trip';
-import { FALLBACK_DEMO_TRIP } from '../data/fallbackTrip';
 import { apiFetch, getAuthHeaders, API_BASE_URL } from './apiClient';
-
-export interface TripServiceResponse {
-  data: Trip;
-  isBackendConnected: boolean;
-  error?: string;
-}
 
 export interface TripCreateResponse {
   trip_id: string;
@@ -63,6 +55,8 @@ export interface StreamMetadataPayload {
   duration_days?: number | null;
   origin?: string | null;
   onboarding_complete?: boolean;
+  missing_fields?: string[];
+  user_name?: string | null;
 }
 
 export interface StreamDonePayload {
@@ -86,34 +80,18 @@ export interface StreamDonePayload {
   };
 }
 
+export interface StreamActionEventPayload {
+  type: 'action';
+  action: string;
+  payload?: any;
+}
+
 export interface SendTripMessageStreamCallbacks {
   onToken: (delta: string) => void;
   onMetadata?: (meta: StreamMetadataPayload) => void;
+  onAction?: (actionEvent: StreamActionEventPayload) => void;
   onDone?: (data: StreamDonePayload) => void;
   onError?: (err: Error) => void;
-}
-
-/**
- * Fetch the 3D demo trip graph (Japan 10 days).
- */
-export async function fetchDemoTrip(): Promise<TripServiceResponse> {
-  const res = await apiFetch<Trip>('/api/trips/demo', { method: 'GET', skipAuth: true });
-
-  if (res.ok && res.data) {
-    return {
-      data: res.data,
-      isBackendConnected: true,
-    };
-  }
-
-  console.warn(
-    `TripVerse API offline or demo request failed. Using fallback demo dataset. Error: ${res.error}`
-  );
-  return {
-    data: FALLBACK_DEMO_TRIP,
-    isBackendConnected: false,
-    error: res.error || 'Could not connect to FastAPI server',
-  };
 }
 
 /**
@@ -254,6 +232,8 @@ export async function sendTripMessageStream(
               const event = JSON.parse(dataStr);
               if (event.type === 'token' && event.delta) {
                 callbacks.onToken(event.delta);
+              } else if (event.type === 'action') {
+                callbacks.onAction?.(event);
               } else if (event.type === 'metadata') {
                 callbacks.onMetadata?.(event);
               } else if (event.type === 'done') {

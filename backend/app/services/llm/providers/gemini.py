@@ -4,7 +4,15 @@ from google import genai
 from google.genai import types
 
 from app.core.config import settings
-from app.services.llm.base import LLMProvider
+from app.services.llm.base import LLMProvider, LLMResult, ToolCall
+
+try:
+    from langsmith import traceable
+except ImportError:
+    def traceable(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +38,7 @@ class GeminiProvider(LLMProvider):
             raise ValueError("GEMINI_API_KEY is not configured.")
         return genai.Client(api_key=self._api_key)
 
+    @traceable(name="gemini_generate", run_type="llm")
     async def generate(
         self,
         prompt: str,
@@ -66,6 +75,55 @@ class GeminiProvider(LLMProvider):
             logger.error(f"Gemini API invocation error: {type(e).__name__} - {str(e)}")
             raise
 
+    @traceable(name="gemini_generate_with_tools", run_type="llm")
+    async def generate_with_tools(
+        self,
+        prompt: str,
+        system_instruction: Optional[str] = None,
+        tools: Optional[list[Any]] = None,
+        temperature: float = 0.7,
+        max_output_tokens: Optional[int] = None,
+        **kwargs: Any,
+    ) -> LLMResult:
+        """
+        Generate completion text and capture tool calls via Gemini API.
+        """
+        try:
+            client = self._get_client()
+
+            config_kwargs: dict[str, Any] = {
+                "system_instruction": system_instruction,
+                "temperature": temperature,
+                "max_output_tokens": max_output_tokens,
+                "automatic_function_calling": types.AutomaticFunctionCallingConfig(disable=True),
+            }
+            if tools:
+                config_kwargs["tools"] = tools
+
+            config = types.GenerateContentConfig(**config_kwargs)
+
+            response = await client.aio.models.generate_content(
+                model=self._model_name,
+                contents=prompt,
+                config=config,
+            )
+
+            tool_calls = []
+            if response and response.function_calls:
+                for fc in response.function_calls:
+                    tool_calls.append(ToolCall(name=fc.name, args=dict(fc.args or {})))
+
+            text = ""
+            if response and response.text:
+                text = response.text.strip()
+
+            return LLMResult(text=text, tool_calls=tool_calls)
+
+        except Exception as e:
+            logger.error(f"Gemini tool invocation error: {type(e).__name__} - {str(e)}")
+            raise
+
+    @traceable(name="gemini_generate_stream", run_type="llm")
     async def generate_stream(
         self,
         prompt: str,

@@ -90,12 +90,6 @@
   font-family: var(--font-body) !important;
 }
 
-/* Universe view helpers (legacy) */
-.universe-shell {
-  background-color: #030712;
-  color: #f8fafc;
-}
-
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

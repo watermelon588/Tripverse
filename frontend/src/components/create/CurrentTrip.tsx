@@ -4,6 +4,7 @@ import { MapPin, Calendar, DollarSign, Compass, Users } from 'lucide-react';
 export interface CurrentTripContext {
   title?: string;
   destination?: string;
+  origin?: string;
   days?: number;
   startDate?: string;
   endDate?: string;
@@ -62,6 +63,12 @@ export const CurrentTrip: React.FC<CurrentTripProps> = ({
           <p className="text-xs text-[#1F1E1E] dark:text-[#D4D4D4] font-medium flex items-center gap-1 mt-0.5">
             <MapPin className="w-3 h-3 text-[#1F1E1E] dark:text-[#D4D4D4]" />
             <span>{trip.destination}</span>
+          </p>
+        )}
+        {trip.origin && (
+          <p className="text-xs text-[#1F1E1E]/80 dark:text-[#A3A3A3] font-medium flex items-center gap-1 mt-0.5">
+            <span className="text-[11px]">🛫</span>
+            <span>From {trip.origin}</span>
           </p>
         )}
       </div>

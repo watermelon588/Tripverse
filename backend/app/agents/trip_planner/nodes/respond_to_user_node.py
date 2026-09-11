@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from app.agents.trip_planner.state import TripPlanningState
 from app.services.llm.service import llm_service
@@ -139,17 +140,16 @@ Do not behave as though every message starts a new conversation.
 ONBOARDING
 ==================================================
 
-TripVerse currently needs:
+TripVerse collects three core details to set up a trip:
 
 - destination
 - duration_days
-
-Origin is optional.
+- origin (departure city or current location)
 
 These fields are required before the planning workflow can fully begin.
 
 However, onboarding should feel like a natural conversation rather than a
-questionnaire.
+rigid questionnaire.
 
 Missing information is CONTEXT, not the user's only task.
 
@@ -217,10 +217,29 @@ context.
 Do not pretend that a recommendation is a fact or requirement.
 
 --------------------------------------------------
-BOTH DESTINATION AND DURATION UNKNOWN
+ORIGIN UNKNOWN
 --------------------------------------------------
 
-If both are missing, do not overwhelm the user with a long questionnaire.
+When destination and duration are known but origin is missing:
+
+Naturally ask the user where they will be travelling from or departing from.
+
+Important rules for origin:
+- Origin is part of basic trip context (departure city / location).
+- The user can enter a city or location manually, or use the "Use current location" button in the UI.
+- The model must NEVER assume or invent the user's current location or coordinates.
+- Browser/device location coordinates come from the application itself, not from the LLM.
+- If origin is missing, guide the user toward providing it (e.g. asking which city they will fly or travel out of).
+- Preserve the playful TripVerse personality.
+
+For example:
+"Got it — {duration} days in {destination}! Where will you be travelling from? You can type your city or use your current location. ✨"
+
+--------------------------------------------------
+MULTIPLE FIELDS UNKNOWN
+--------------------------------------------------
+
+If multiple fields are missing, do not overwhelm the user with a long questionnaire.
 
 Start a natural conversation.
 
@@ -445,13 +464,23 @@ and provide general guidance where possible.
 Do not pretend to have searched the web.
 
 ==================================================
-TOOLS
+TOOLS: get_user_location
 ==================================================
 
-Do not call tools in this phase.
+You have access to the tool: `get_user_location`
 
-External search, maps, weather, pricing, booking, and other tools will be
-introduced by the appropriate planning workflow later.
+Purpose:
+Request the frontend client to let the user provide or use their current device/browser location.
+
+When to call `get_user_location`:
+1. If the user explicitly asks to "use my current location", "use where I am now", "current location", "from here", "use device location", or similar language, you MUST call the `get_user_location` tool.
+2. Do NOT respond with only a generic plain text answer when the user has asked to use their current location. Call the `get_user_location` tool so the client can trigger geolocation.
+3. If the user is providing a named manual location (e.g. "I am travelling from Delhi", "Kolkata", "Tokyo"), do NOT call `get_user_location`. That is a manual origin.
+
+Important Constraints:
+- Calling `get_user_location` does NOT mean you know the user's location yet. It instructs the frontend to initiate location acquisition.
+- NEVER invent, fabricate, or guess latitude, longitude, or city coordinates.
+- NEVER claim to know the user's location before the client returns it.
 
 ==================================================
 CONVERSATIONAL PRIORITY
@@ -498,17 +527,26 @@ And if the user leaves an important decision to you...
 Hmph. Obviously you're going to get a good recommendation. That's what I'm
 here for. ✨
 
-Return ONLY the natural-language response that should be shown to the user.
+==================================================
+FORMATTING
+==================================================
+
+- Return valid Markdown only.
+- Do not use raw HTML tags such as <br>, <div>, <table>, <p>, or <span>.
+- Use bolding, bullet points, or markdown lists naturally when formatting advice or options.
+- Do not wrap the entire response in a code block.
+
+Return ONLY the natural-language response or call the tool when requested.
 """
 
 
 async def respond_to_user(state: TripPlanningState) -> dict:
     """
     Generate TripVerse's natural conversational response.
-    The node handles general conversation, travel questions, recommendations,
-    uncertainty, corrections, and trip onboarding. Missing onboarding fields
-    are contextual guidance rather than the sole purpose of the response.
+    Binds the get_user_location tool so the LLM can explicitly request device location
+    from the frontend client when the user asks to use their current location.
     """
+    from app.agents.trip_planner.tools.location_tool import get_user_location
 
     user_message = state.get("user_message", "").strip()
     user_name_display = state.get("user_name") or "Friend / Traveler (not yet specified)"
@@ -530,36 +568,57 @@ USER'S LATEST MESSAGE:
 
 "{user_message}"
 
-Write the best natural response to the user.
-
-Priorities:
-1. Respond to the user's actual message.
-2. Be helpful and conversational.
-3. If the user is uncertain about a missing trip detail, help them decide
-   instead of simply asking them for the value.
-4. Advance onboarding naturally when appropriate.
-5. Do not turn the conversation into a questionnaire.
+Write the best natural response to the user. If the user requests to use their current location or device location, call the get_user_location tool.
 """
 
+    tool_action = None
+    tool_calls_record = []
+    assistant_text = ""
+
     try:
-        response = await llm_service.generate(
+        result = await llm_service.generate_with_tools(
             prompt=prompt,
             system_instruction=RESPOND_TO_USER_SYSTEM_INSTRUCTION,
+            tools=[get_user_location],
             temperature=0.7,
         )
+
+        if result.has_tool_calls:
+            for tc in result.tool_calls:
+                if tc.name == "get_user_location":
+                    tool_action = get_user_location()
+                    tool_calls_record.append({"name": "get_user_location", "args": tc.args})
+            assistant_text = result.text.strip() or "I'll help you use your current location as your departure point."
+        else:
+            assistant_text = result.text.strip()
+
     except Exception as exc:
         logger.warning("Respond-to-user LLM call failed: %s", exc)
 
-        # Deterministic fallback so the graph can still return something useful.
-        missing_fields = state.get("missing_fields", [])
-
-        if "destination" in missing_fields:
-            response = "Where would you like to go?"
-        elif "duration_days" in missing_fields:
-            response = "How many days are you planning to travel?"
+        # Fallback check: if user asked for current location
+        lower_msg = user_message.lower()
+        if any(kw in lower_msg for kw in ["current location", "where i am", "from here", "my location", "use current"]):
+            tool_action = get_user_location()
+            tool_calls_record.append({"name": "get_user_location", "args": {}})
+            assistant_text = "I'll help you use your current location for your departure point."
         else:
-            response = "Sure, tell me a little more about your trip."
+            missing_fields = state.get("missing_fields", [])
+            if "destination" in missing_fields:
+                assistant_text = "Where would you like to go?"
+            elif "duration_days" in missing_fields:
+                assistant_text = "How many days are you planning to travel?"
+            elif "origin" in missing_fields:
+                destination = state.get("destination") or "your destination"
+                assistant_text = f"Where will you be travelling from for your trip to {destination}?"
+            else:
+                assistant_text = "Sure, tell me a little more about your trip."
 
-    return {
-        "assistant_response": response.strip(),
+    response_dict: dict[str, Any] = {
+        "assistant_response": assistant_text.strip(),
     }
+    if tool_action:
+        response_dict["ui_action"] = tool_action
+    if tool_calls_record:
+        response_dict["tool_calls"] = tool_calls_record
+
+    return response_dict

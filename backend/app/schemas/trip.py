@@ -15,46 +15,6 @@ from app.models.enums import (
 )
 
 
-# Legacy 3D Graph schemas (for /api/trips/demo)
-class NodeType(str, Enum):
-    COUNTRY = "COUNTRY"
-    CITY = "CITY"
-    NEIGHBORHOOD = "NEIGHBORHOOD"
-    ATTRACTION = "ATTRACTION"
-    RESTAURANT = "RESTAURANT"
-    ACTIVITY = "ACTIVITY"
-    HOTEL = "HOTEL"
-    TRANSPORT = "TRANSPORT"
-
-
-class GraphNode(BaseModel):
-    id: str
-    type: NodeType
-    name: str
-    description: Optional[str] = None
-    position: Optional[Tuple[float, float, float]] = Field(
-        default=None, description="3D coordinates [x, y, z]"
-    )
-
-
-class GraphEdge(BaseModel):
-    id: str
-    source: str
-    target: str
-    relationship: str
-    cost: Optional[float] = None
-    duration: Optional[float] = None
-
-
-class DemoTripResponse(BaseModel):
-    id: str
-    destination: str
-    days: int
-    budget: float
-    nodes: List[GraphNode]
-    edges: List[GraphEdge]
-
-
 # Session 2 API Schemas
 
 class ConversationMessageResponse(BaseModel):
@@ -127,12 +87,27 @@ class SendMessageRequest(BaseModel):
                 raise ValueError("UI_ACTION message must include a non-null payload.")
             action = self.payload.get("action")
             if action == "SET_LOCATION":
-                lat = self.payload.get("latitude")
-                lon = self.payload.get("longitude")
+                lat = self.payload.get("latitude") if self.payload.get("latitude") is not None else self.payload.get("origin_latitude")
+                lon = self.payload.get("longitude") if self.payload.get("longitude") is not None else self.payload.get("origin_longitude")
                 if lat is None or not isinstance(lat, (int, float)) or not (-90 <= lat <= 90):
                     raise ValueError("Latitude must be a float between -90 and 90.")
                 if lon is None or not isinstance(lon, (int, float)) or not (-180 <= lon <= 180):
                     raise ValueError("Longitude must be a float between -180 and 180.")
+            elif action == "SET_ORIGIN":
+                origin_val = self.payload.get("origin_text") or self.payload.get("origin") or self.payload.get("label")
+                if not origin_val or not str(origin_val).strip():
+                    raise ValueError("SET_ORIGIN action requires a non-empty origin_text.")
+            elif "origin_latitude" in self.payload and "origin_longitude" in self.payload:
+                lat = self.payload.get("origin_latitude")
+                lon = self.payload.get("origin_longitude")
+                if lat is None or not isinstance(lat, (int, float)) or not (-90 <= lat <= 90):
+                    raise ValueError("Latitude must be a float between -90 and 90.")
+                if lon is None or not isinstance(lon, (int, float)) or not (-180 <= lon <= 180):
+                    raise ValueError("Longitude must be a float between -180 and 180.")
+            elif "origin_text" in self.payload:
+                origin_val = self.payload.get("origin_text")
+                if not origin_val or not str(origin_val).strip():
+                    raise ValueError("origin_text must be non-empty.")
             else:
                 raise ValueError(f"Unsupported UI_ACTION action: '{action}'")
         return self
