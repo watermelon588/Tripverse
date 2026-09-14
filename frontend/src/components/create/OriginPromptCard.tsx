@@ -261,19 +261,19 @@ export const OriginPromptCard: React.FC<OriginPromptCardProps> = ({
 
   return (
     <div className="w-full my-4 flex flex-col font-body items-start animate-fade-in">
-      <div className="max-w-xl w-full bg-[#FBFBFB] dark:bg-[#1A1A1A] border-2 border-[#1F1E1E] dark:border-[#383838] p-4 sm:p-5 shadow-sm">
+      <div className="max-w-xl w-full bg-white dark:bg-[#1A1A1A] border-2 border-[#1F1E1E] dark:border-[#555555] p-4 sm:p-5 shadow-tactile rounded-none">
         {/* Header */}
-        <div className="flex items-center gap-2 mb-3 border-b border-[#E5E5E5] dark:border-[#2C2C2C] pb-2.5">
-          <MapPin className="w-4 h-4 text-[#1F1E1E] dark:text-[#E5E5E5] shrink-0" />
-          <h3 className="text-xs sm:text-sm font-extrabold uppercase tracking-tight text-[#1F1E1E] dark:text-white">
+        <div className="flex items-center gap-2 mb-3 border-b-2 border-[#1F1E1E]/15 dark:border-[#2C2C2C] pb-2.5">
+          <MapPin className="w-4 h-4 text-[#1F1E1E] dark:text-[#E5E5E5] shrink-0 stroke-[2.4]" />
+          <h3 className="text-xs sm:text-sm font-black uppercase tracking-tight text-[#1F1E1E] dark:text-white">
             Where are you travelling from?
           </h3>
-          <span className="ml-auto text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 bg-[#1F1E1E] dark:bg-white text-white dark:text-[#1F1E1E]">
+          <span className="ml-auto text-[9px] font-black uppercase tracking-wider px-2 py-0.5 bg-[#1F1E1E] dark:bg-white text-white dark:text-[#1F1E1E] shadow-tactile-sm">
             Origin Required
           </span>
         </div>
 
-        <p className="text-xs text-[#1F1E1E]/80 dark:text-[#CCCCCC] mb-4">
+        <p className="text-xs text-[#1F1E1E]/80 dark:text-[#CCCCCC] mb-4 font-medium leading-relaxed">
           Search your departure city or use your current location so TripVerse can calculate flight times, train connections, and route logistics.
         </p>
 
@@ -281,11 +281,11 @@ export const OriginPromptCard: React.FC<OriginPromptCardProps> = ({
         <form onSubmit={handleManualSubmit} className="space-y-2 mb-3 relative">
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#1F1E1E]/40 dark:text-[#777777]">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#1F1E1E]/60 dark:text-[#777777]">
                 {isSearching ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 ) : (
-                  <Search className="w-3.5 h-3.5" />
+                  <Search className="w-3.5 h-3.5 stroke-[2.4]" />
                 )}
               </div>
               <input
@@ -303,16 +303,16 @@ export const OriginPromptCard: React.FC<OriginPromptCardProps> = ({
                 }}
                 disabled={disabled || isLocating}
                 placeholder="Search departure city (e.g. London, Tokyo, Delhi, NYC)..."
-                className="w-full py-2.5 pl-9 pr-3 bg-white dark:bg-[#242424] border border-[#1F1E1E] dark:border-[#444444] text-[#1F1E1E] dark:text-[#F5F5F5] placeholder:text-[#1F1E1E]/40 dark:placeholder:text-[#777777] text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#1F1E1E] dark:focus:ring-white disabled:opacity-50"
+                className="w-full py-2.5 pl-9 pr-3 bg-[#F5F5F5] dark:bg-[#242424] border-2 border-[#1F1E1E] dark:border-[#555555] text-[#1F1E1E] dark:text-[#F5F5F5] placeholder:text-[#1F1E1E]/50 dark:placeholder:text-[#777777] text-xs font-semibold focus:outline-none focus:border-black dark:focus:border-white shadow-tactile-sm disabled:opacity-50 rounded-none"
               />
 
               {/* Autocomplete Dropdown */}
               {showDropdown && suggestions.length > 0 && (
                 <div
                   ref={dropdownRef}
-                  className="absolute z-50 left-0 right-0 top-full mt-1 bg-white dark:bg-[#222222] border-2 border-[#1F1E1E] dark:border-[#444444] shadow-lg max-h-56 overflow-y-auto"
+                  className="absolute z-50 left-0 right-0 top-full mt-1.5 bg-white dark:bg-[#222222] border-2 border-[#1F1E1E] dark:border-white shadow-tactile-lg max-h-56 overflow-y-auto rounded-none"
                 >
-                  <div className="px-3 py-1.5 bg-[#F0F0F0] dark:bg-[#1A1A1A] border-b border-[#E5E5E5] dark:border-[#333333] text-[10px] font-extrabold uppercase tracking-widest text-[#1F1E1E]/60 dark:text-[#888888] flex items-center justify-between">
+                  <div className="px-3 py-1.5 bg-[#F0F0F0] dark:bg-[#1A1A1A] border-b-2 border-[#1F1E1E]/20 dark:border-[#333333] text-[10px] font-black uppercase tracking-widest text-[#1F1E1E]/70 dark:text-[#888888] flex items-center justify-between">
                     <span>Suggested Cities</span>
                     <span>{suggestions.length} results</span>
                   </div>
@@ -351,15 +351,15 @@ export const OriginPromptCard: React.FC<OriginPromptCardProps> = ({
             <button
               type="submit"
               disabled={disabled || isLocating || !manualInput.trim()}
-              className="py-2.5 px-4 bg-[#1F1E1E] dark:bg-white text-white dark:text-[#1F1E1E] text-xs font-bold uppercase tracking-wider hover:bg-black dark:hover:bg-[#E5E5E5] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+              className="py-2.5 px-4 bg-[#1F1E1E] dark:bg-white text-white dark:text-[#1F1E1E] text-xs font-black uppercase tracking-wider hover:bg-black dark:hover:bg-[#E5E5E5] border-2 border-[#1F1E1E] dark:border-white shadow-tactile-sm btn-tactile transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 shrink-0 cursor-pointer rounded-none"
             >
               <span>Submit</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <ArrowRight className="w-3.5 h-3.5 stroke-[2.4]" />
             </button>
           </div>
 
           {validationError && (
-            <p className="text-[11px] text-red-600 dark:text-red-400 font-medium flex items-center gap-1">
+            <p className="text-[11px] text-red-600 dark:text-red-400 font-bold flex items-center gap-1">
               <AlertCircle className="w-3 h-3 shrink-0" />
               <span>{validationError}</span>
             </p>
@@ -367,9 +367,9 @@ export const OriginPromptCard: React.FC<OriginPromptCardProps> = ({
         </form>
 
         {/* Divider */}
-        <div className="relative my-3 flex items-center justify-center">
-          <div className="border-t border-[#E5E5E5] dark:border-[#2C2C2C] w-full" />
-          <span className="bg-[#FBFBFB] dark:bg-[#1A1A1A] px-2 text-[10px] font-bold uppercase tracking-widest text-[#1F1E1E]/50 dark:text-[#777777] absolute">
+        <div className="relative my-3.5 flex items-center justify-center">
+          <div className="border-t-2 border-[#1F1E1E]/15 dark:border-[#2C2C2C] w-full" />
+          <span className="bg-white dark:bg-[#1A1A1A] px-2 text-[10px] font-black uppercase tracking-widest text-[#1F1E1E]/60 dark:text-[#777777] absolute">
             or
           </span>
         </div>
@@ -379,7 +379,7 @@ export const OriginPromptCard: React.FC<OriginPromptCardProps> = ({
           type="button"
           onClick={handleUseCurrentLocation}
           disabled={disabled || isLocating}
-          className="w-full py-2.5 px-4 bg-white dark:bg-[#242424] border border-[#1F1E1E] dark:border-[#444444] text-[#1F1E1E] dark:text-[#F5F5F5] text-xs font-bold uppercase tracking-wider hover:bg-[#F0F0F0] dark:hover:bg-[#2E2E2E] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+          className="w-full py-2.5 px-4 bg-white dark:bg-[#252525] border-2 border-[#1F1E1E] dark:border-[#555555] shadow-tactile-sm btn-tactile text-[#1F1E1E] dark:text-[#F5F5F5] text-xs font-black uppercase tracking-wider hover:bg-[#F2F2F2] dark:hover:bg-[#303030] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer rounded-none"
         >
           {isLocating ? (
             <>
@@ -388,7 +388,7 @@ export const OriginPromptCard: React.FC<OriginPromptCardProps> = ({
             </>
           ) : (
             <>
-              <Navigation className="w-3.5 h-3.5 text-[#1F1E1E] dark:text-white" />
+              <Navigation className="w-3.5 h-3.5 text-[#1F1E1E] dark:text-white stroke-[2.4]" />
               <span>Use current location</span>
             </>
           )}
@@ -396,9 +396,9 @@ export const OriginPromptCard: React.FC<OriginPromptCardProps> = ({
 
         {/* Error Fallback Banner */}
         {errorMessage && (
-          <div className="mt-3 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-300 text-xs flex items-start gap-2">
+          <div className="mt-3 p-3 bg-red-50 dark:bg-red-950/40 border-2 border-red-600 text-red-700 dark:text-red-300 text-xs flex items-start gap-2 shadow-tactile-sm rounded-none">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            <p className="leading-relaxed">{errorMessage}</p>
+            <p className="leading-relaxed font-medium">{errorMessage}</p>
           </div>
         )}
       </div>

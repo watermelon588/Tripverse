@@ -61,12 +61,16 @@ export const AssistantAvatar: React.FC<AssistantAvatarProps> = ({
       : THINKING_FRAME_2
     : TRIPVERSE_AI_PFP;
 
+  const isWelcome = size === "welcome";
+
   return (
     <div
       className={`relative shrink-0 select-none transition-all duration-200 ${
         isThinking
-          ? "bg-transparent border-0 overflow-visible flex items-center justify-center"
-          : "overflow-hidden bg-[#1F1E1E] dark:bg-[#2A2A2A] border border-[#1F1E1E] dark:border-[#444444]"
+          ? "bg-[#1F1E1E] dark:bg-[#2A2A2A] border-2 border-[#1F1E1E] dark:border-white shadow-[2px_2px_0px_#1F1E1E] dark:shadow-[2px_2px_0px_#000000] overflow-hidden flex items-center justify-center"
+          : isWelcome
+          ? "overflow-hidden bg-[#1F1E1E] dark:bg-[#2A2A2A] border-2 border-[#1F1E1E] dark:border-white shadow-[4px_4px_0px_#1F1E1E] dark:shadow-[4px_4px_0px_#000000]"
+          : "overflow-hidden bg-[#1F1E1E] dark:bg-[#2A2A2A] border-2 border-[#1F1E1E] dark:border-white shadow-[2px_2px_0px_#1F1E1E] dark:shadow-[2px_2px_0px_#000000]"
       } ${className}`}
       style={{
         width: pixelSize,
@@ -78,7 +82,7 @@ export const AssistantAvatar: React.FC<AssistantAvatarProps> = ({
         alt={alt}
         className={`w-full h-full select-none pointer-events-none ${
           isThinking
-            ? "object-contain scale-125 drop-shadow-sm"
+            ? "object-contain scale-110"
             : "object-cover object-center"
         }`}
         loading="eager"

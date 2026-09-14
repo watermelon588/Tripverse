@@ -1,5 +1,5 @@
-import React from 'react';
-import { MessageSquare, Trash2, Clock } from 'lucide-react';
+import React from "react";
+import { MessageSquare, Trash2, Clock } from "lucide-react";
 
 export interface ChatSessionItem {
   id: string;
@@ -27,11 +27,13 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
   activeSessionId,
   onSelectSession,
   onDeleteSession,
-  className = '',
+  className = "",
 }) => {
   if (sessions.length === 0) {
     return (
-      <div className={`p-4 text-center text-xs text-[#1F1E1E]/50 dark:text-[#F5F5F5]/50 font-body ${className}`}>
+      <div
+        className={`p-4 text-center text-xs text-[#1F1E1E]/50 dark:text-[#F5F5F5]/50 font-body ${className}`}
+      >
         No previous voyages logged.
       </div>
     );
@@ -44,56 +46,70 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
           <Clock className="w-3 h-3 text-[#1F1E1E] dark:text-[#CCCCCC]" />
           <span>Past Voyages</span>
         </span>
-        <span className="font-mono text-[10px] font-bold">{sessions.length}</span>
+        <span className="font-mono text-[10px] font-bold">
+          {sessions.length}
+        </span>
       </div>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2">
         {sessions.map((session) => {
           const isActive = session.id === activeSessionId;
           return (
             <div
               key={session.id}
               onClick={() => onSelectSession(session.id)}
-              className={`group relative p-3 text-left transition-all duration-150 cursor-pointer border ${
+              className={`group relative p-3 text-left transition-all duration-150 cursor-pointer border-2 rounded-none ${
                 isActive
-                  ? 'bg-[#F2F2F2] dark:bg-[#1E1E1E] border-[#1F1E1E] dark:border-[#555555] border-l-4 border-l-[#1F1E1E] dark:border-l-4 dark:border-l-white'
-                  : 'bg-white dark:bg-[#151515] border-[#E5E5E5] dark:border-transparent hover:border-[#1F1E1E] dark:hover:border-[#444444] hover:bg-[#F9F9F9] dark:hover:bg-[#1C1C1C]'
+                  ? "bg-[#1F1E1E] dark:bg-white text-white dark:text-[#1F1E1E] border-[#1F1E1E] dark:border-white shadow-tactile"
+                  : "bg-white dark:bg-[#1A1A1A] border-[#1F1E1E]/30 dark:border-[#444444] hover:border-[#1F1E1E] dark:hover:border-white shadow-tactile-sm btn-tactile"
               }`}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
+                if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   onSelectSession(session.id);
                 }
               }}
-              aria-current={isActive ? 'true' : undefined}
+              aria-current={isActive ? "true" : undefined}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-start gap-2 min-w-0 flex-1">
                   <MessageSquare
                     className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${
                       isActive
-                        ? 'text-[#1F1E1E] dark:text-white'
-                        : 'text-[#1F1E1E]/60 dark:text-[#F5F5F5]/60 group-hover:text-[#1F1E1E] dark:group-hover:text-white'
+                        ? "text-white dark:text-[#1F1E1E]"
+                        : "text-[#1F1E1E]/70 dark:text-[#CCCCCC] group-hover:text-[#1F1E1E] dark:group-hover:text-white"
                     }`}
                   />
                   <div className="min-w-0 flex-1">
                     <p
-                      className={`text-xs font-bold uppercase truncate tracking-tight font-body ${
+                      className={`text-xs font-black uppercase truncate tracking-tight font-body ${
                         isActive
-                          ? 'text-[#1F1E1E] dark:text-white'
-                          : 'text-[#1F1E1E] dark:text-[#E5E5E5] group-hover:text-black dark:group-hover:text-white'
+                          ? "text-white dark:text-[#1F1E1E]"
+                          : "text-[#1F1E1E] dark:text-[#F5F5F5] group-hover:text-black dark:group-hover:text-white"
                       }`}
                     >
                       {session.title}
                     </p>
                     {session.preview && (
-                      <p className="text-[11px] text-[#1F1E1E]/90 dark:text-[#CCCCCC] truncate font-body font-normal mt-0.5">
+                      <p
+                        className={`text-[11px] truncate font-body font-normal mt-0.5 ${
+                          isActive
+                            ? "text-white/80 dark:text-[#1F1E1E]/80"
+                            : "text-[#1F1E1E]/80 dark:text-[#BBBBBB]"
+                        }`}
+                      >
                         {session.preview}
                       </p>
                     )}
-                    <div className="flex items-center gap-2 mt-1.5 text-[9px] font-bold tracking-wider text-[#1F1E1E]/80 dark:text-[#A3A3A3] uppercase font-mono">
+                    <div
+                      className={`flex items-center gap-2 mt-1.5 text-[9px] font-bold tracking-wider uppercase font-mono ${
+                        isActive
+                          ? "text-white/70 dark:text-[#1F1E1E]/70"
+                          : "text-[#1F1E1E]/70 dark:text-[#888888]"
+                      }`}
+                    >
                       <span>{session.timestamp}</span>
                       {session.messageCount !== undefined && (
                         <span>&bull; {session.messageCount} msgs</span>
@@ -110,7 +126,11 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                       e.preventDefault();
                       onDeleteSession(session.id, e);
                     }}
-                    className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1.5 text-[#1F1E1E]/40 dark:text-[#F5F5F5]/40 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all shrink-0 cursor-pointer z-10"
+                    className={`opacity-0 group-hover:opacity-100 focus:opacity-100 p-1.5 transition-all shrink-0 cursor-pointer z-10 ${
+                      isActive
+                        ? "text-white/70 hover:text-white hover:bg-white/10 dark:text-[#1F1E1E]/70 dark:hover:text-[#1F1E1E] dark:hover:bg-black/10"
+                        : "text-[#1F1E1E]/50 dark:text-[#F5F5F5]/50 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"
+                    }`}
                     aria-label={`Delete ${session.title}`}
                     title="Delete session"
                   >

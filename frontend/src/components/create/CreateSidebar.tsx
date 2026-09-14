@@ -1,10 +1,10 @@
-import React from 'react';
-import { LogoMarkIcon } from '../home/HomeIcons';
-import { NewChatButton } from './NewChatButton';
-import { CurrentTrip, CurrentTripContext } from './CurrentTrip';
-import { ChatHistory, ChatSessionItem } from './ChatHistory';
-import { X, ArrowLeft, User, Compass } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import React from "react";
+import { LogoMarkIcon } from "../home/HomeIcons";
+import { NewChatButton } from "./NewChatButton";
+import { CurrentTrip, CurrentTripContext } from "./CurrentTrip";
+import { ChatHistory, ChatSessionItem } from "./ChatHistory";
+import { X, ArrowLeft, User, Compass } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
 
 interface CreateSidebarProps {
   isOpen: boolean;
@@ -40,7 +40,9 @@ export const CreateSidebar: React.FC<CreateSidebarProps> = ({
   onWidthChange,
 }) => {
   const { user } = useAuth();
-  const avatarUrl = user?.user_metadata?.avatar_url || localStorage.getItem('tripverse-user-avatar');
+  const avatarUrl =
+    user?.user_metadata?.avatar_url ||
+    localStorage.getItem("tripverse-user-avatar");
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
@@ -55,16 +57,16 @@ export const CreateSidebar: React.FC<CreateSidebarProps> = ({
     };
 
     const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
     };
 
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
   };
 
   return (
@@ -72,7 +74,9 @@ export const CreateSidebar: React.FC<CreateSidebarProps> = ({
       {/* Mobile & Tablet Backdrop */}
       <div
         className={`fixed inset-0 bg-black/50 z-40 lg:hidden transition-opacity duration-200 ${
-          isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          isOpen
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
         }`}
         onClick={onClose}
         aria-hidden="true"
@@ -81,35 +85,35 @@ export const CreateSidebar: React.FC<CreateSidebarProps> = ({
       {/* Sidebar Container */}
       <aside
         style={isOpen ? { width: `${width}px` } : undefined}
-        className={`fixed lg:relative top-0 bottom-0 left-0 z-50 bg-white dark:bg-[#151515] border-r border-[#D9D9D9] dark:border-[#2E2E2E] flex flex-col justify-between h-full font-body shrink-0 transition-transform lg:transition-[width] duration-200 ease-out ${
+        className={`fixed lg:relative top-0 bottom-0 left-0 z-50 bg-white dark:bg-[#181818] border-r-2 border-[#1F1E1E] dark:border-[#333333] flex flex-col justify-between h-full font-body shrink-0 transition-transform lg:transition-[width] duration-200 ease-out shadow-tactile ${
           isOpen
-            ? 'translate-x-0 w-72 sm:w-80 lg:w-auto'
-            : '-translate-x-full lg:hidden w-0 pointer-events-none'
+            ? "translate-x-0 w-72 sm:w-80 lg:w-auto"
+            : "-translate-x-full lg:hidden w-0 pointer-events-none"
         }`}
         aria-label="Trip planning sidebar"
       >
         {/* Top Header & Brand */}
-        <div className="p-4 border-b border-[#D9D9D9] dark:border-[#2E2E2E] flex items-center justify-between shrink-0 bg-white dark:bg-[#151515]">
+        <div className="p-4 border-b-2 border-[#1F1E1E] dark:border-[#333333] flex items-center justify-between shrink-0 bg-white dark:bg-[#181818]">
           <div
             className="flex items-center gap-2.5 cursor-pointer group"
             onClick={onNavigateHome}
           >
             <LogoMarkIcon className="w-5 h-5 text-[#1F1E1E] dark:text-white transition-transform group-hover:scale-105" />
-            <span className="font-extrabold tracking-widest text-sm text-[#1F1E1E] dark:text-white uppercase font-body">
+            <span className="font-black tracking-widest text-sm text-[#1F1E1E] dark:text-white uppercase font-body">
               TRIPVERSE
             </span>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             {onNavigateHome && (
               <button
                 type="button"
                 onClick={onNavigateHome}
-                className="p-1.5 text-[#1F1E1E] dark:text-white hover:bg-[#D9D9D9]/50 dark:hover:bg-[#262626] transition-colors cursor-pointer"
+                className="p-1.5 text-[#1F1E1E] dark:text-white bg-white dark:bg-[#252525] border-2 border-[#1F1E1E] dark:border-[#555555] shadow-tactile-sm btn-tactile cursor-pointer"
                 title="Back to Home"
                 aria-label="Back to Home"
               >
-                <ArrowLeft className="w-4 h-4" />
+                <ArrowLeft className="w-4 h-4 stroke-[2.4]" />
               </button>
             )}
 
@@ -117,16 +121,16 @@ export const CreateSidebar: React.FC<CreateSidebarProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="lg:hidden p-1.5 text-[#1F1E1E] dark:text-white hover:bg-[#D9D9D9]/50 dark:hover:bg-[#262626] transition-colors cursor-pointer"
+              className="lg:hidden p-1.5 text-[#1F1E1E] dark:text-white bg-white dark:bg-[#252525] border-2 border-[#1F1E1E] dark:border-[#555555] shadow-tactile-sm btn-tactile cursor-pointer"
               aria-label="Close sidebar"
             >
-              <X className="w-4 h-4" />
+              <X className="w-4 h-4 stroke-[2.4]" />
             </button>
           </div>
         </div>
 
         {/* Action Button: New Voyage */}
-        <div className="p-4 border-b border-[#D9D9D9]/70 dark:border-[#2E2E2E] shrink-0 bg-[#F9F9F9] dark:bg-[#181818]">
+        <div className="p-4 border-b-2 border-[#1F1E1E] dark:border-[#333333] shrink-0 bg-[#F9F9F9] dark:bg-[#1E1E1E]">
           <NewChatButton
             onClick={() => {
               onNewChat();
@@ -157,19 +161,23 @@ export const CreateSidebar: React.FC<CreateSidebarProps> = ({
         </div>
 
         {/* Bottom Utility Footer */}
-        <div className="p-3 border-t border-[#D9D9D9] dark:border-[#2E2E2E] shrink-0 bg-[#F9F9F9] dark:bg-[#181818] flex flex-col gap-2">
+        <div className="p-3 border-t-2 border-[#1F1E1E] dark:border-[#333333] shrink-0 bg-[#F9F9F9] dark:bg-[#1E1E1E] flex flex-col gap-2">
           {onNavigateProfile && (
             <button
               type="button"
-              className="w-full py-3 px-4 bg-[#1F1E1E] dark:bg-white text-white dark:text-[#1F1E1E] font-extrabold text-xs uppercase tracking-widest rounded-none flex items-center justify-center gap-2 hover:bg-black dark:hover:bg-neutral-200 transition-colors cursor-pointer border border-[#1F1E1E] dark:border-white shadow-none"
+              className="w-full py-3 px-4 bg-[#1F1E1E] dark:bg-white text-white dark:text-[#1F1E1E] font-black text-xs uppercase tracking-widest rounded-none flex items-center justify-center gap-2 hover:bg-black dark:hover:bg-neutral-200 border-2 border-[#1F1E1E] dark:border-white shadow-tactile-sm btn-tactile cursor-pointer"
               onClick={onNavigateProfile}
             >
               {avatarUrl ? (
-                <div className="w-4 h-4 overflow-hidden rounded-none shrink-0">
-                  <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover rounded-none" />
+                <div className="w-4 h-4 overflow-hidden rounded-none shrink-0 border border-white dark:border-[#1F1E1E]">
+                  <img
+                    src={avatarUrl}
+                    alt="Avatar"
+                    className="w-full h-full object-cover rounded-none"
+                  />
                 </div>
               ) : (
-                <User className="w-4 h-4" />
+                <User className="w-4 h-4 stroke-[2.4]" />
               )}
               <span>My Profile</span>
             </button>
@@ -179,9 +187,9 @@ export const CreateSidebar: React.FC<CreateSidebarProps> = ({
             <button
               type="button"
               onClick={onNavigateExplore}
-              className="w-full py-2 px-3 bg-transparent text-[#1F1E1E] dark:text-[#F5F5F5] hover:bg-[#D9D9D9]/40 dark:hover:bg-[#262626] border border-[#D9D9D9] dark:border-[#333333] hover:border-[#1F1E1E] dark:hover:border-white transition-colors text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-2.5 px-3 bg-white dark:bg-[#252525] text-[#1F1E1E] dark:text-[#F5F5F5] hover:bg-[#F2F2F2] dark:hover:bg-[#303030] border-2 border-[#1F1E1E] dark:border-[#555555] shadow-tactile-sm btn-tactile text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
             >
-              <Compass className="w-3.5 h-3.5" />
+              <Compass className="w-3.5 h-3.5 stroke-[2.4]" />
               <span>Explore</span>
             </button>
           )}

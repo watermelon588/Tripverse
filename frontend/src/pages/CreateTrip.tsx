@@ -6,6 +6,7 @@ import { ChatSessionItem } from '../components/create/ChatHistory';
 import { ChatMessageItem } from '../components/create/ChatMessage';
 import { CurrentTripContext } from '../components/create/CurrentTrip';
 import { useTheme } from '../context/ThemeContext';
+import { GridBackground } from '../components/common/GridBackground';
 import {
   createTrip,
   listTrips,
@@ -1045,12 +1046,13 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
 
   return (
     <div
-      className={`h-screen w-full flex overflow-hidden font-body ${
+      className={`relative h-screen w-full flex overflow-hidden font-body ${
         isDark
-          ? 'dark bg-[#121212] text-[#F5F5F5] selection:bg-white selection:text-[#1F1E1E]'
+          ? 'dark bg-[#1F1E1E] text-[#F5F5F5] selection:bg-white selection:text-[#1F1E1E]'
           : 'bg-white text-[#1F1E1E] selection:bg-[#1F1E1E] selection:text-white'
       }`}
     >
+      <GridBackground />
       {/* 1. Left Sidebar Column */}
       <CreateSidebar
         isOpen={isSidebarOpen}
