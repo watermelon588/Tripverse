@@ -5,6 +5,7 @@
 /* v2 marketing redesign — scoped under .tv2, see tripverse-v2.css */
 @import "./styles/tripverse-v2.css";
 @import "./styles/tripverse-v2-components.css";
+@import "./styles/tripverse-v2-app.css";
 
 @layer base {
   :root {

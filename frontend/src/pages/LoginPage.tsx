@@ -1,8 +1,10 @@
-import React, { useState } from "react";
-import { AuthLayout } from "../components/auth/AuthLayout";
-import { AuthInput } from "../components/auth/AuthInput";
-import { useAuth } from "../context/AuthContext";
-import { LOGIN_AUTH_VISUAL } from "../constants/authVisuals";
+import React, { useState } from 'react';
+import { AuthLayout } from '../components/auth/AuthLayout';
+import { AuthInput } from '../components/auth/AuthInput';
+import { SocialAuth } from '../components/auth/SocialAuth';
+import { ArrowUpRightIcon } from '../components/home/v2/IconsV2';
+import { useAuth } from '../context/AuthContext';
+import { LOGIN_AUTH_VISUAL } from '../constants/authVisuals';
 
 interface LoginPageProps {
   onNavigateSignup: () => void;
@@ -16,8 +18,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   onSuccess,
 }) => {
   const { signInWithPassword } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -26,17 +28,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     setError(null);
     setLoading(true);
     try {
-      const { error: authError } = await signInWithPassword(
-        email.trim(),
-        password,
-      );
+      const { error: authError } = await signInWithPassword(email.trim(), password);
       if (authError) {
-        setError(authError.message || "Invalid email or password.");
+        setError(authError.message || 'That email and password did not match.');
       } else {
         onSuccess();
       }
     } catch (err: any) {
-      setError(err?.message || "An unexpected error occurred during login.");
+      setError(err?.message || 'Something went wrong signing you in.');
     } finally {
       setLoading(false);
     }
@@ -44,29 +43,27 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
   return (
     <AuthLayout
-      title="WELCOME BACK"
-      subtitle="Enter your credentials to access your saved journeys and live trip canvases."
+      eyebrow="Sign in"
+      title="Pick up"
+      titleAccent="where you left off."
+      subtitle="Your saved trips, transcripts and 3D graphs come back exactly as you left them."
       onNavigateHome={onNavigateHome}
       visual={LOGIN_AUTH_VISUAL}
     >
       {error && (
-        <div
-          className="mb-6 p-4 bg-red-50 border-l-4 border-red-600 text-red-700 text-xs font-semibold rounded-none"
-          role="alert"
-        >
+        <div className="tv-alert" role="alert">
           {error}
         </div>
       )}
 
-      {/* Login Form */}
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="tv-auth__form">
         <AuthInput
-          label="Email Address"
+          label="Email"
           type="email"
           name="email"
           autoComplete="email"
           required
-          placeholder="traveler@example.com"
+          placeholder="you@example.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
@@ -82,26 +79,24 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           onChange={(e) => setPassword(e.target.value)}
         />
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full mt-2 py-3.5 px-6 bg-[#1F1E1E] text-white hover:bg-black font-extrabold text-xs uppercase tracking-widest rounded-none transition-colors duration-150 disabled:opacity-60 cursor-pointer shadow-none"
-        >
-          {loading ? "AUTHENTICATING..." : "LOG IN TO TRIPVERSE"}
+        <button type="submit" className="tv-btn tv-btn--primary" disabled={loading} style={{ width: '100%' }}>
+          <span>{loading ? 'Signing in…' : 'Sign in'}</span>
+          {!loading && <ArrowUpRightIcon width={15} height={15} />}
         </button>
       </form>
 
-      {/* Switch to Signup */}
-      <div className="mt-8 text-center text-xs font-medium text-[#1F1E1E]">
-        Don't have an account?{" "}
-        <button
-          type="button"
-          onClick={onNavigateSignup}
-          className="font-extrabold uppercase tracking-wider hover:text-black ml-1 cursor-pointer"
-        >
-          Sign up now
-        </button>
+      <div className="tv-divider">
+        <span className="tv-label">or</span>
       </div>
+
+      <SocialAuth onError={setError} />
+
+      <p className="tv-auth__alt">
+        No account yet?{' '}
+        <button type="button" onClick={onNavigateSignup}>
+          Create one
+        </button>
+      </p>
     </AuthLayout>
   );
 };
