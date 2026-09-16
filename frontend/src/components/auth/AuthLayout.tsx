@@ -1,10 +1,25 @@
-import React from 'react';
-import { LogoMarkIcon } from '../home/HomeIcons';
+/*
+ * AuthLayout — split auth shell on the v2 design system.
+ *
+ * Form on the left over bone canvas, rotating photography on the right.
+ * Collapses to a single column below 900px, where the photographic pane is
+ * dropped rather than stacked (it would push the form below the fold).
+ */
+import React, { useRef } from 'react';
+import { useGSAP } from '@gsap/react';
+import gsap from 'gsap';
+
+import { LogoLockup } from '../common/Logo';
 import { AuthVisual } from './AuthVisual';
-import { AuthVisualItem } from '../../constants/authVisuals';
+import { ArrowRightIcon } from '../home/v2/IconsV2';
+import { EASE, prefersReducedMotion, splitLines } from '../home/v2/motion';
+import type { AuthVisualItem } from '../../constants/authVisuals';
 
 interface AuthLayoutProps {
   title: string;
+  /** Optional italic second clause, set in muted ink. */
+  titleAccent?: string;
+  eyebrow?: string;
   subtitle?: string;
   children: React.ReactNode;
   onNavigateHome?: () => void;
@@ -18,6 +33,8 @@ interface AuthLayoutProps {
 
 export const AuthLayout: React.FC<AuthLayoutProps> = ({
   title,
+  titleAccent,
+  eyebrow = 'TripVerse account',
   subtitle,
   children,
   onNavigateHome,
@@ -28,71 +45,86 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
   experienceName,
   objectPosition,
 }) => {
+  const root = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+
+  useGSAP(
+    () => {
+      if (prefersReducedMotion()) return;
+
+      const split = titleRef.current ? splitLines(titleRef.current) : null;
+      const tl = gsap.timeline({ defaults: { ease: EASE } });
+
+      tl.from('.tv-auth__top', { y: -14, opacity: 0, duration: 0.7 })
+        .from('.tv-auth__eyebrow', { y: 14, opacity: 0, duration: 0.7 }, '-=0.45');
+
+      if (split) tl.from(split.lines, { yPercent: 115, duration: 1.05, stagger: 0.08 }, '-=0.5');
+
+      tl.from('.tv-auth__sub', { y: 16, opacity: 0, duration: 0.8 }, '-=0.6')
+        .from('.tv-auth__body form > *, .tv-auth__body .tv-divider, .tv-auth__body .tv-social > *', {
+          y: 18,
+          opacity: 0,
+          duration: 0.7,
+          stagger: 0.06,
+        }, '-=0.55')
+        .from('.tv-auth__alt, .tv-auth__foot', { y: 12, opacity: 0, duration: 0.6, stagger: 0.06 }, '-=0.4');
+
+      return () => split?.revert();
+    },
+    { scope: root },
+  );
+
   return (
-    <div className="h-screen w-full bg-white text-[#1F1E1E] flex flex-col lg:flex-row font-body selection:bg-[#1F1E1E] selection:text-white overflow-hidden">
-      {/* Left Column: Form & Interaction (~42% on desktop) */}
-      <div className="w-full lg:w-[44%] xl:w-[40%] h-full flex flex-col justify-between p-6 sm:p-8 lg:px-12 lg:pt-6 lg:pb-5 bg-white z-10 overflow-y-auto">
-        {/* Header Branding */}
-        <div className="flex items-center justify-between mb-3 shrink-0">
-          <div
-            className="flex items-center gap-2 cursor-pointer group"
-            onClick={onNavigateHome}
-          >
-            <LogoMarkIcon className="w-6 h-6 text-[#1F1E1E] transition-transform group-hover:scale-105" />
-            <span className="font-extrabold tracking-widest text-base text-[#1F1E1E] uppercase font-body">
-              TRIPVERSE
-            </span>
-          </div>
+    <div className="tv2 tv2-app tv-auth" ref={root}>
+      <div className="tv-auth__pane">
+        <div className="tv-auth__top">
+          <button type="button" onClick={onNavigateHome} aria-label="TripVerse home">
+            <LogoLockup size={22} />
+          </button>
 
           {onNavigateHome && (
-            <button
-              type="button"
-              onClick={onNavigateHome}
-              className="text-[11px] font-bold uppercase tracking-wider text-[#1F1E1E]/70 hover:text-[#1F1E1E] flex items-center gap-1 py-1 px-2 hover:bg-[#D9D9D9]/40 rounded-none transition-colors cursor-pointer"
-            >
-              <span>&larr; Back to Home</span>
+            <button type="button" className="tv-auth__back" onClick={onNavigateHome}>
+              <ArrowRightIcon width={14} height={14} style={{ transform: 'rotate(180deg)' }} />
+              <span>Back to home</span>
             </button>
           )}
         </div>
 
-        {/* Core Auth Content Box - Centered in viewport */}
-        <div className="w-full max-w-md mx-auto my-auto py-4">
-          <div className="mb-5">
-            <h1 className="text-2xl sm:text-3xl lg:text-[34px] font-black text-[#1F1E1E] leading-[1.1] tracking-tight uppercase font-body">
-              {title}
-            </h1>
-            {subtitle && (
-              <p className="text-xs sm:text-sm text-[#1F1E1E]/70 font-medium mt-2 leading-relaxed font-body">
-                {subtitle}
-              </p>
+        <div className="tv-auth__body">
+          <span className="tv-eyebrow tv-auth__eyebrow">{eyebrow}</span>
+
+          <h1 className="tv-display tv-auth__title" ref={titleRef}>
+            {title}
+            {titleAccent && (
+              <>
+                {' '}
+                <em>{titleAccent}</em>
+              </>
             )}
-          </div>
+          </h1>
+
+          {subtitle && <p className="tv-lead tv-auth__sub">{subtitle}</p>}
 
           {children}
         </div>
 
-        {/* Footer info */}
-        <div className="mt-3 pt-3 border-t border-[#D9D9D9] flex flex-col sm:flex-row justify-between items-center text-[10px] font-semibold text-[#1F1E1E]/50 tracking-wider uppercase gap-2 shrink-0 font-body">
-          <span>&copy; {new Date().getFullYear()} TRIPVERSE AI INC.</span>
-          <div className="flex gap-4">
-            <span className="hover:text-[#1F1E1E] cursor-pointer">PRIVACY</span>
-            <span className="hover:text-[#1F1E1E] cursor-pointer">TERMS</span>
-            <span className="hover:text-[#1F1E1E] cursor-pointer">SYSTEM</span>
+        <div className="tv-auth__foot">
+          <span className="tv-meta">© {new Date().getFullYear()} TripVerse</span>
+          <div className="tv-auth__legal">
+            <a href="#privacy" className="tv-meta">Privacy</a>
+            <a href="#terms" className="tv-meta">Terms</a>
           </div>
         </div>
       </div>
 
-      {/* Right Column: Immersive Photography (~58% on desktop) */}
-      <div className="hidden lg:block lg:w-[56%] xl:w-[60%] h-full overflow-hidden">
-        <AuthVisual
-          visual={visual}
-          imageSrc={visualImage}
-          destination={destinationName}
-          location={locationName}
-          experience={experienceName}
-          objectPosition={objectPosition}
-        />
-      </div>
+      <AuthVisual
+        visual={visual}
+        imageSrc={visualImage}
+        destination={destinationName}
+        location={locationName}
+        experience={experienceName}
+        objectPosition={objectPosition}
+      />
     </div>
   );
 };
