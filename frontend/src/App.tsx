@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { RouteCurtain, type RouteCurtainHandle } from './components/common/RouteCurtain';
 import { HomeV2 } from './components/home/v2/HomeV2';
 import { Explore } from './pages/Explore';
 import { CreateTrip } from './pages/CreateTrip';
@@ -7,6 +9,15 @@ import { SignupPage } from './pages/SignupPage';
 import { ProfilePage } from './pages/ProfilePage';
 
 type ViewState = 'home' | 'explore' | 'create' | 'login' | 'signup' | 'profile';
+
+const VIEW_LABELS: Record<ViewState, string> = {
+  home: 'Home',
+  explore: 'Explore',
+  create: 'Planner',
+  login: 'Sign in',
+  signup: 'Create account',
+  profile: 'Account',
+};
 
 const getViewFromPath = (): ViewState => {
   if (typeof window === 'undefined') return 'home';
@@ -21,26 +32,37 @@ const getViewFromPath = (): ViewState => {
 
 export const App: React.FC = () => {
   const [view, setView] = useState<ViewState>(getViewFromPath);
+  const curtain = useRef<RouteCurtainHandle>(null);
 
-  // Sync view state with browser URL pathname
+  // Every route change runs through the shared curtain transition.
+  const transitionTo = useCallback((next: ViewState) => {
+    const swap = () => {
+      setView(next);
+      // The outgoing page's pins and triggers are gone; re-measure the new one.
+      requestAnimationFrame(() => ScrollTrigger.refresh());
+    };
+    if (!curtain.current) return swap();
+    curtain.current.play(VIEW_LABELS[next], swap);
+  }, []);
+
   const navigateTo = (newView: ViewState) => {
-    setView(newView);
+    if (newView === view) return;
     const targetPath = newView === 'home' ? '/' : `/${newView}`;
     if (window.location.pathname !== targetPath) {
       window.history.pushState({}, '', targetPath);
     }
+    transitionTo(newView);
   };
 
   useEffect(() => {
-    const handlePopState = () => {
-      setView(getViewFromPath());
-    };
+    const handlePopState = () => transitionTo(getViewFromPath());
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  }, [transitionTo]);
 
   return (
-    <div className="min-h-screen bg-white text-[#1F1E1E] font-sans antialiased">
+    <div className="min-h-screen antialiased">
+      <RouteCurtain ref={curtain} />
       {view === 'home' && (
         <HomeV2
           onStartPlanning={() => navigateTo('create')}
@@ -54,6 +76,7 @@ export const App: React.FC = () => {
         <Explore
           onStartPlanning={() => navigateTo('create')}
           onNavigateHome={() => navigateTo('home')}
+          onNavigateProfile={() => navigateTo('profile')}
         />
       )}
       {view === 'login' && (
