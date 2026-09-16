@@ -61,31 +61,17 @@ export const AssistantAvatar: React.FC<AssistantAvatarProps> = ({
       : THINKING_FRAME_2
     : TRIPVERSE_AI_PFP;
 
-  const isWelcome = size === "welcome";
-
   return (
     <div
-      className={`relative shrink-0 select-none transition-all duration-200 ${
-        isThinking
-          ? "bg-[#1F1E1E] dark:bg-[#2A2A2A] border-2 border-[#1F1E1E] dark:border-white shadow-[2px_2px_0px_#1F1E1E] dark:shadow-[2px_2px_0px_#000000] overflow-hidden flex items-center justify-center"
-          : isWelcome
-          ? "overflow-hidden bg-[#1F1E1E] dark:bg-[#2A2A2A] border-2 border-[#1F1E1E] dark:border-white shadow-[4px_4px_0px_#1F1E1E] dark:shadow-[4px_4px_0px_#000000]"
-          : "overflow-hidden bg-[#1F1E1E] dark:bg-[#2A2A2A] border-2 border-[#1F1E1E] dark:border-white shadow-[2px_2px_0px_#1F1E1E] dark:shadow-[2px_2px_0px_#000000]"
-      } ${className}`}
-      style={{
-        width: pixelSize,
-        height: pixelSize,
-      }}
+      className={`tv-ava ${isThinking ? 'is-thinking' : ''} ${className}`}
+      style={{ width: pixelSize, height: pixelSize }}
     >
       <img
         src={currentSrc}
         alt={alt}
-        className={`w-full h-full select-none pointer-events-none ${
-          isThinking
-            ? "object-contain scale-110"
-            : "object-cover object-center"
-        }`}
+        className={isThinking ? 'tv-ava__img tv-ava__img--frame' : 'tv-ava__img'}
         loading="eager"
+        draggable={false}
       />
     </div>
   );

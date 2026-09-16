@@ -6,7 +6,6 @@ import { ChatSessionItem } from '../components/create/ChatHistory';
 import { ChatMessageItem } from '../components/create/ChatMessage';
 import { CurrentTripContext } from '../components/create/CurrentTrip';
 import { useTheme } from '../context/ThemeContext';
-import { GridBackground } from '../components/common/GridBackground';
 import {
   createTrip,
   listTrips,
@@ -791,7 +790,7 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
     const userMessage: ChatMessageItem = {
       id: `msg-${Date.now()}`,
       sender: 'user',
-      content: `📍 Used current location: ${locationDisplay}`,
+      content: `Starting from my current location: ${locationDisplay}`,
       timestamp: timeStr,
     };
 
@@ -1045,14 +1044,7 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
   );
 
   return (
-    <div
-      className={`sharp-ui relative h-screen w-full flex overflow-hidden font-body ${
-        isDark
-          ? 'dark bg-[#1F1E1E] text-[#F5F5F5] selection:bg-white selection:text-[#1F1E1E]'
-          : 'bg-white text-[#1F1E1E] selection:bg-[#1F1E1E] selection:text-white'
-      }`}
-    >
-      <GridBackground />
+    <div className={`tv2 tv2-app tv-create ${isDark ? 'is-dark dark' : ''}`}>
       {/* 1. Left Sidebar Column */}
       <CreateSidebar
         isOpen={isSidebarOpen}

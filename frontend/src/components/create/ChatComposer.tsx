@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { ArrowUp, Plus, Mic, Paperclip } from "lucide-react";
+import { ArrowUpRightIcon, PlusIcon, CloseIcon } from "../home/v2/IconsV2";
 import { useSpeechRecognition } from "../../hooks/useSpeechRecognition";
 
 export interface ChatComposerProps {
@@ -96,132 +96,107 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     !disabled;
 
   return (
-    <div className="w-full max-w-4xl mx-auto font-body">
-      {/* ONE Unified Composer Container with crisp 2px border and hard physical shadow */}
-      <div className="relative border-2 border-[#1F1E1E] dark:border-[#555555] bg-white dark:bg-[#1A1A1A] p-2.5 sm:p-3 transition-all duration-200 shadow-tactile focus-within:border-black dark:focus-within:border-white focus-within:shadow-tactile-lg rounded-none">
-        {/* Hidden Native File Input */}
+    <div className="tv-comp">
+      <div className={`tv-comp__shell ${isListening ? 'is-listening' : ''}`}>
         <input
           ref={fileInputRef}
           type="file"
           multiple
-          className="hidden"
+          hidden
           onChange={handleFileChange}
-          tabIndex={-1}
-          aria-hidden="true"
         />
 
-        {/* Attached Files Pills */}
         {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2.5 pb-2.5 border-b-2 border-[#1F1E1E]/20 dark:border-[#333333]">
+          <div className="tv-comp__files">
             {attachments.map((file, idx) => (
-              <span
-                key={`${file.name}-${idx}`}
-                className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-[#F5F5F5] dark:bg-[#252525] border-2 border-[#1F1E1E] dark:border-[#555555] shadow-tactile-sm text-[11px] font-mono text-[#1F1E1E] dark:text-white rounded-none"
-              >
-                <Paperclip className="w-3 h-3 text-[#1F1E1E] dark:text-[#A3A3A3]" />
-                <span className="max-w-[140px] truncate font-bold">
-                  {file.name}
-                </span>
+              <span key={`${file.name}-${idx}`} className="tv-tag">
+                <span className="tv-comp__filename">{file.name}</span>
                 <button
                   type="button"
                   onClick={() => handleRemoveFile(idx)}
-                  className="text-[#1F1E1E] dark:text-white/80 hover:text-red-600 dark:hover:text-red-400 ml-1 cursor-pointer font-black"
-                  title={`Remove ${file.name}`}
                   aria-label={`Remove ${file.name}`}
+                  className="tv-comp__filex"
                 >
-                  ×
+                  <CloseIcon width={11} height={11} />
                 </button>
               </span>
             ))}
           </div>
         )}
 
-        {/* ALL FOUR CONTROLS ON ONE SINGLE HORIZONTAL LINE */}
-        <div className="flex items-center gap-2 sm:gap-3 w-full">
-          {/* 1. Attachment (+) Button → LEFT */}
+        {/* One unified row: [+] input [mic] [Plan] */}
+        <div className="tv-comp__row">
           <button
             type="button"
+            className="tv-iconbtn tv-comp__attach"
             onClick={() => fileInputRef.current?.click()}
-            disabled={disabled || isLoading}
-            className="flex-shrink-0 p-1.5 sm:p-2 text-[#1F1E1E] dark:text-[#F5F5F5] bg-[#F5F5F5] dark:bg-[#252525] hover:bg-[#EBEBEB] dark:hover:bg-[#303030] border-2 border-[#1F1E1E] dark:border-[#555555] shadow-tactile-sm btn-tactile cursor-pointer flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed rounded-none"
-            title="Attach files"
-            aria-label="Attach files"
+            disabled={isLoading || disabled}
+            aria-label="Attach a file"
+            title="Attach a file"
           >
-            <Plus className="w-4 h-4 sm:w-4.5 sm:h-4.5 stroke-[2.5]" />
+            <PlusIcon width={17} height={17} />
           </button>
 
-          {/* 2. Textarea → CENTER and takes all available space */}
           <textarea
             ref={textareaRef}
+            rows={1}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={disabled || isLoading}
             placeholder={placeholder}
-            rows={1}
-            className="flex-1 min-w-0 bg-transparent text-[#1F1E1E] dark:text-white placeholder-[#1F1E1E]/60 dark:placeholder-[#888888] font-body text-xs sm:text-sm font-semibold resize-none focus:outline-none leading-normal border-0 p-0 m-0 max-h-36 overflow-y-auto block rounded-none"
-            aria-label="Describe your voyage"
+            disabled={isLoading || disabled}
+            className="tv-comp__input"
           />
 
-          {/* 3. Microphone Button → RIGHT */}
-          <button
-            type="button"
-            onClick={toggleListening}
-            disabled={!isSupported || disabled || isLoading}
-            className={`flex-shrink-0 p-1.5 sm:p-2 flex items-center justify-center cursor-pointer border-2 rounded-none shadow-tactile-sm btn-tactile ${
-              isListening
-                ? "bg-red-600 text-white border-red-600"
-                : !isSupported
-                  ? "bg-transparent text-[#1F1E1E]/30 dark:text-white/20 border-dashed border-[#D9D9D9] dark:border-[#444444] cursor-not-allowed"
-                  : "bg-[#F5F5F5] dark:bg-[#252525] text-[#1F1E1E] dark:text-[#F5F5F5] hover:bg-[#EBEBEB] dark:hover:bg-[#303030] border-[#1F1E1E] dark:border-[#555555]"
-            }`}
-            title={
-              !isSupported
-                ? "Voice input not supported in this browser"
-                : isListening
-                  ? "Listening... Click to stop"
-                  : "Voice input (Click to speak)"
-            }
-            aria-label={
-              !isSupported
-                ? "Voice input not supported"
-                : isListening
-                  ? "Stop listening"
-                  : "Start voice input"
-            }
-          >
-            {isListening ? (
-              <span className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 bg-white animate-pulse" />
-                <Mic className="w-4 h-4 text-white stroke-[2.4]" />
-              </span>
-            ) : (
-              <Mic className="w-4 h-4 sm:w-4.5 sm:h-4.5 stroke-[2.2]" />
-            )}
-          </button>
+          {isSupported && (
+            <button
+              type="button"
+              className={`tv-iconbtn tv-comp__mic ${isListening ? 'is-active' : ''}`}
+              onClick={toggleListening}
+              disabled={isLoading || disabled}
+              aria-pressed={isListening}
+              aria-label={isListening ? 'Stop dictation' : 'Dictate'}
+              title={isListening ? 'Stop dictation' : 'Dictate'}
+            >
+              <MicIcon width={17} height={17} />
+            </button>
+          )}
 
-          {/* 4. PLAN Button → FAR RIGHT */}
           <button
             type="button"
+            className="tv-btn tv-btn--primary tv-btn--sm tv-comp__send"
             onClick={handleSend}
             disabled={!canSubmit}
-            className={`flex-shrink-0 py-1.5 px-3.5 sm:py-2 sm:px-4 text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1.5 border-2 rounded-none whitespace-nowrap ${
-              canSubmit
-                ? "bg-[#1F1E1E] dark:bg-white text-white dark:text-[#1F1E1E] hover:bg-black dark:hover:bg-neutral-200 border-[#1F1E1E] dark:border-white shadow-tactile-sm btn-tactile cursor-pointer"
-                : "bg-[#E5E5E5] dark:bg-[#252525] text-[#888888] dark:text-[#666666] border-[#D9D9D9] dark:border-[#383838] cursor-not-allowed"
-            }`}
-            aria-label="Send voyage prompt"
           >
-            <span>{isLoading ? "Processing" : "Plan"}</span>
-            <ArrowUp className="w-3.5 h-3.5 stroke-[2.6]" />
+            <span>{isLoading ? 'Planning' : 'Plan'}</span>
+            <ArrowUpRightIcon width={14} height={14} />
           </button>
         </div>
       </div>
 
-      <p className="text-[10px] text-center text-[#1F1E1E]/75 dark:text-[#A3A3A3] mt-2 font-mono font-bold tracking-wider uppercase">
-        TripVerse AI builds interactive itineraries, spatial maps, and dynamic
-        budgets.
+      <p className="tv-meta tv-comp__hint">
+        {isListening
+          ? 'Listening — speak your changes'
+          : 'Enter to send · Shift + Enter for a new line'}
       </p>
     </div>
   );
 };
+
+function MicIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <rect x="9" y="2.6" width="6" height="11" rx="3" />
+      <path d="M5.5 11.2a6.5 6.5 0 0 0 13 0M12 17.7v3.7" />
+    </svg>
+  );
+}
