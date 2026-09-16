@@ -1,5 +1,9 @@
-import React from "react";
-import { MapPin, Calendar, DollarSign, Compass, Users } from "lucide-react";
+/*
+ * CurrentTrip — the active trip as a compact ledger card.
+ * The previous emoji origin marker is replaced with the system's plane glyph.
+ */
+import React from 'react';
+import { ClockIcon, LayersIcon, PinIcon, PlaneIcon, WalletIcon } from '../home/v2/IconsV2';
 
 export interface CurrentTripContext {
   title?: string;
@@ -11,7 +15,7 @@ export interface CurrentTripContext {
   budget?: number;
   currency?: string;
   travelers?: number;
-  status?: "DISCOVERY" | "ONBOARDING" | "ROUTING" | "ITINERARY" | "CONFIRMED";
+  status?: 'DISCOVERY' | 'ONBOARDING' | 'ROUTING' | 'ITINERARY' | 'CONFIRMED';
   interests?: string[];
 }
 
@@ -21,108 +25,72 @@ interface CurrentTripProps {
   className?: string;
 }
 
-export const CurrentTrip: React.FC<CurrentTripProps> = ({
-  trip,
-  onExploreSpatial,
-  className = "",
-}) => {
-  // If no trip data is active or populated, do not clutter with empty placeholders
-  if (!trip || (!trip.destination && !trip.title)) {
-    return null;
-  }
+const STATUS_TONE: Record<NonNullable<CurrentTripContext['status']>, string> = {
+  DISCOVERY: '',
+  ONBOARDING: 'tv-tag--blue',
+  ROUTING: 'tv-tag--yellow',
+  ITINERARY: 'tv-tag--yellow',
+  CONFIRMED: 'tv-tag--green',
+};
 
-  const formatBudget = (val: number, cur = "USD") => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: cur,
-      maximumFractionDigits: 0,
-    }).format(val);
-  };
+export const CurrentTrip: React.FC<CurrentTripProps> = ({ trip, onExploreSpatial, className = '' }) => {
+  if (!trip || (!trip.destination && !trip.title)) return null;
+
+  const budget =
+    trip.budget && trip.budget > 0
+      ? new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: trip.currency || 'USD',
+          maximumFractionDigits: 0,
+        }).format(trip.budget)
+      : null;
+
+  const rows = [
+    trip.destination && trip.title !== trip.destination && { Icon: PinIcon, k: 'Destination', v: trip.destination },
+    trip.origin && { Icon: PlaneIcon, k: 'From', v: trip.origin },
+    trip.days && { Icon: ClockIcon, k: 'Length', v: `${trip.days} days` },
+    budget && { Icon: WalletIcon, k: 'Budget', v: budget },
+    trip.travelers && { Icon: PinIcon, k: 'Travellers', v: String(trip.travelers) },
+  ].filter(Boolean) as Array<{ Icon: typeof PinIcon; k: string; v: string }>;
 
   return (
-    <div
-      className={`border-2 border-[#1F1E1E] dark:border-[#555555] bg-white dark:bg-[#1A1A1A] p-4 text-[#1F1E1E] dark:text-[#F5F5F5] flex flex-col gap-3 font-body shadow-tactile rounded-none ${className}`}
-    >
-      <div className="flex items-center justify-between border-b-2 border-[#1F1E1E]/15 dark:border-[#333333] pb-2">
-        <div className="text-[10px] font-black uppercase tracking-widest text-[#1F1E1E] dark:text-[#E5E5E5] flex items-center gap-1.5">
-          <Compass className="w-3.5 h-3.5 text-[#1F1E1E] dark:text-[#E5E5E5] stroke-[2.4]" />
-          <span>Active Voyage</span>
-        </div>
-        {trip.status && (
-          <span className="text-[9px] font-black tracking-wider uppercase px-2 py-0.5 bg-[#1F1E1E] dark:bg-white text-white dark:text-[#1F1E1E] shadow-tactile-sm">
-            {trip.status}
-          </span>
-        )}
+    <section className={`tv-trip ${className}`}>
+      <div className="tv-trip__head">
+        <span className="tv-label">Active trip</span>
+        {trip.status && <span className={`tv-tag ${STATUS_TONE[trip.status]}`}>{trip.status.toLowerCase()}</span>}
       </div>
 
-      <div>
-        <h4 className="font-black text-sm uppercase tracking-tight text-[#1F1E1E] dark:text-white leading-snug">
-          {trip.title || trip.destination || "Uncharted Voyage"}
-        </h4>
-        {trip.destination && trip.title && trip.title !== trip.destination && (
-          <p className="text-xs text-[#1F1E1E] dark:text-[#D4D4D4] font-medium flex items-center gap-1 mt-0.5">
-            <MapPin className="w-3 h-3 text-[#1F1E1E] dark:text-[#D4D4D4]" />
-            <span>{trip.destination}</span>
-          </p>
-        )}
-        {trip.origin && (
-          <p className="text-xs text-[#1F1E1E]/80 dark:text-[#A3A3A3] font-medium flex items-center gap-1 mt-0.5">
-            <span className="text-[11px]">🛫</span>
-            <span>From {trip.origin}</span>
-          </p>
-        )}
-      </div>
+      <h3 className="tv-display tv-trip__title">{trip.title || trip.destination}</h3>
 
-      <div className="grid grid-cols-2 gap-2 text-xs pt-1.5 border-t-2 border-[#1F1E1E]/15 dark:border-[#333333]">
-        {trip.days && (
-          <div className="flex items-center gap-1.5 text-[#1F1E1E] dark:text-[#E5E5E5]">
-            <Calendar className="w-3.5 h-3.5 text-[#1F1E1E] dark:text-[#A3A3A3] shrink-0" />
-            <span className="font-bold">{trip.days} Days</span>
-          </div>
-        )}
-
-        {trip.budget !== undefined && trip.budget > 0 && (
-          <div className="flex items-center gap-1.5 text-[#1F1E1E] dark:text-[#E5E5E5] font-mono">
-            <DollarSign className="w-3.5 h-3.5 text-[#1F1E1E] dark:text-[#A3A3A3] shrink-0" />
-            <span className="font-bold">
-              {formatBudget(trip.budget, trip.currency || "USD")}
-            </span>
-          </div>
-        )}
-
-        {trip.travelers && (
-          <div className="flex items-center gap-1.5 text-[#1F1E1E] dark:text-[#E5E5E5]">
-            <Users className="w-3.5 h-3.5 text-[#1F1E1E] dark:text-[#A3A3A3] shrink-0" />
-            <span className="font-bold">
-              {trip.travelers} {trip.travelers === 1 ? "Traveler" : "Travelers"}
-            </span>
-          </div>
-        )}
-      </div>
+      {rows.length > 0 && (
+        <dl className="tv-trip__rows">
+          {rows.map(({ Icon, k, v }) => (
+            <div key={k} className="tv-trip__row">
+              <dt className="tv-meta">
+                <Icon width={12} height={12} /> {k}
+              </dt>
+              <dd>{v}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
 
       {trip.interests && trip.interests.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 pt-1">
-          {trip.interests.slice(0, 4).map((interest) => (
-            <span
-              key={interest}
-              className="text-[9px] uppercase font-black tracking-wider px-2 py-0.5 bg-[#F5F5F5] dark:bg-[#242424] border border-[#1F1E1E] dark:border-[#555555] shadow-tactile-sm text-[#1F1E1E] dark:text-[#F5F5F5]"
-            >
-              {interest}
+        <div className="tv-trip__tags">
+          {trip.interests.slice(0, 4).map((i) => (
+            <span key={i} className="tv-tag">
+              {i}
             </span>
           ))}
         </div>
       )}
 
       {onExploreSpatial && (
-        <button
-          type="button"
-          onClick={onExploreSpatial}
-          className="mt-1 w-full py-2.5 px-3 text-[10px] font-black uppercase tracking-widest bg-[#1F1E1E] dark:bg-white text-white dark:text-[#1F1E1E] border-2 border-[#1F1E1E] dark:border-white shadow-tactile-sm btn-tactile flex items-center justify-center gap-2 cursor-pointer rounded-none"
-        >
-          <span>Open Spatial Preview</span>
-          <span>&rarr;</span>
+        <button type="button" className="tv-btn tv-btn--primary tv-btn--sm" style={{ width: '100%' }} onClick={onExploreSpatial}>
+          <LayersIcon width={14} height={14} />
+          <span>Open spatial view</span>
         </button>
       )}
-    </div>
+    </section>
   );
 };

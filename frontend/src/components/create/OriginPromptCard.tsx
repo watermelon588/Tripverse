@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapPin, Navigation, ArrowRight, AlertCircle, Loader2, Search, Check } from 'lucide-react';
+import { useGSAP } from '@gsap/react';
+import gsap from 'gsap';
+import { ArrowUpRightIcon, CheckIcon, CompassIcon, PinIcon } from '../home/v2/IconsV2';
+import { EASE, prefersReducedMotion } from '../home/v2/motion';
 
 export interface CitySuggestion {
   id: number;
@@ -35,6 +38,15 @@ export const OriginPromptCard: React.FC<OriginPromptCardProps> = ({
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useGSAP(
+    () => {
+      if (prefersReducedMotion()) return;
+      gsap.from(rootRef.current, { y: 18, opacity: 0, clipPath: 'inset(0% 0% 100% 0%)', duration: 0.9, ease: EASE });
+    },
+    { scope: rootRef },
+  );
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -260,148 +272,89 @@ export const OriginPromptCard: React.FC<OriginPromptCardProps> = ({
   };
 
   return (
-    <div className="w-full my-4 flex flex-col font-body items-start animate-fade-in">
-      <div className="max-w-xl w-full bg-white dark:bg-[#1A1A1A] border-2 border-[#1F1E1E] dark:border-[#555555] p-4 sm:p-5 shadow-tactile rounded-none">
-        {/* Header */}
-        <div className="flex items-center gap-2 mb-3 border-b-2 border-[#1F1E1E]/15 dark:border-[#2C2C2C] pb-2.5">
-          <MapPin className="w-4 h-4 text-[#1F1E1E] dark:text-[#E5E5E5] shrink-0 stroke-[2.4]" />
-          <h3 className="text-xs sm:text-sm font-black uppercase tracking-tight text-[#1F1E1E] dark:text-white">
-            Where are you travelling from?
-          </h3>
-          <span className="ml-auto text-[9px] font-black uppercase tracking-wider px-2 py-0.5 bg-[#1F1E1E] dark:bg-white text-white dark:text-[#1F1E1E] shadow-tactile-sm">
-            Origin Required
-          </span>
-        </div>
-
-        <p className="text-xs text-[#1F1E1E]/80 dark:text-[#CCCCCC] mb-4 font-medium leading-relaxed">
-          Search your departure city or use your current location so TripVerse can calculate flight times, train connections, and route logistics.
-        </p>
-
-        {/* Option 1: City Search Input with Dropdown Autocomplete */}
-        <form onSubmit={handleManualSubmit} className="space-y-2 mb-3 relative">
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="relative flex-1">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#1F1E1E]/60 dark:text-[#777777]">
-                {isSearching ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Search className="w-3.5 h-3.5 stroke-[2.4]" />
-                )}
-              </div>
-              <input
-                ref={inputRef}
-                type="text"
-                value={manualInput}
-                onChange={(e) => {
-                  setManualInput(e.target.value);
-                  setSelectedIndex(-1);
-                  if (validationError) setValidationError(null);
-                }}
-                onKeyDown={handleKeyDown}
-                onFocus={() => {
-                  if (suggestions.length > 0) setShowDropdown(true);
-                }}
-                disabled={disabled || isLocating}
-                placeholder="Search departure city (e.g. London, Tokyo, Delhi, NYC)..."
-                className="w-full py-2.5 pl-9 pr-3 bg-[#F5F5F5] dark:bg-[#242424] border-2 border-[#1F1E1E] dark:border-[#555555] text-[#1F1E1E] dark:text-[#F5F5F5] placeholder:text-[#1F1E1E]/50 dark:placeholder:text-[#777777] text-xs font-semibold focus:outline-none focus:border-black dark:focus:border-white shadow-tactile-sm disabled:opacity-50 rounded-none"
-              />
-
-              {/* Autocomplete Dropdown */}
-              {showDropdown && suggestions.length > 0 && (
-                <div
-                  ref={dropdownRef}
-                  className="absolute z-50 left-0 right-0 top-full mt-1.5 bg-white dark:bg-[#222222] border-2 border-[#1F1E1E] dark:border-white shadow-tactile-lg max-h-56 overflow-y-auto rounded-none"
-                >
-                  <div className="px-3 py-1.5 bg-[#F0F0F0] dark:bg-[#1A1A1A] border-b-2 border-[#1F1E1E]/20 dark:border-[#333333] text-[10px] font-black uppercase tracking-widest text-[#1F1E1E]/70 dark:text-[#888888] flex items-center justify-between">
-                    <span>Suggested Cities</span>
-                    <span>{suggestions.length} results</span>
-                  </div>
-                  {suggestions.map((item, idx) => {
-                    const isSelected = idx === selectedIndex;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => handleSelectSuggestion(item)}
-                        className={`w-full text-left px-3 py-2 flex items-center justify-between text-xs border-b border-[#F0F0F0] dark:border-[#2C2C2C] last:border-b-0 cursor-pointer transition-colors ${
-                          isSelected
-                            ? 'bg-[#1F1E1E] text-white dark:bg-white dark:text-[#1F1E1E]'
-                            : 'hover:bg-[#F5F5F5] dark:hover:bg-[#2C2C2C] text-[#1F1E1E] dark:text-[#F5F5F5]'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 overflow-hidden">
-                          <MapPin className="w-3.5 h-3.5 shrink-0 opacity-70" />
-                          <div className="truncate">
-                            <span className="font-bold">{item.name}</span>
-                            {(item.admin1 || item.country) && (
-                              <span className={`text-[11px] ml-1.5 opacity-75 ${isSelected ? 'text-white/80 dark:text-[#1F1E1E]/80' : 'text-[#1F1E1E]/60 dark:text-[#AAAAAA]'}`}>
-                                {[item.admin1, item.country].filter(Boolean).join(', ')}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        {isSelected && <Check className="w-3.5 h-3.5 shrink-0 ml-2" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <button
-              type="submit"
-              disabled={disabled || isLocating || !manualInput.trim()}
-              className="py-2.5 px-4 bg-[#1F1E1E] dark:bg-white text-white dark:text-[#1F1E1E] text-xs font-black uppercase tracking-wider hover:bg-black dark:hover:bg-[#E5E5E5] border-2 border-[#1F1E1E] dark:border-white shadow-tactile-sm btn-tactile transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 shrink-0 cursor-pointer rounded-none"
-            >
-              <span>Submit</span>
-              <ArrowRight className="w-3.5 h-3.5 stroke-[2.4]" />
-            </button>
-          </div>
-
-          {validationError && (
-            <p className="text-[11px] text-red-600 dark:text-red-400 font-bold flex items-center gap-1">
-              <AlertCircle className="w-3 h-3 shrink-0" />
-              <span>{validationError}</span>
-            </p>
-          )}
-        </form>
-
-        {/* Divider */}
-        <div className="relative my-3.5 flex items-center justify-center">
-          <div className="border-t-2 border-[#1F1E1E]/15 dark:border-[#2C2C2C] w-full" />
-          <span className="bg-white dark:bg-[#1A1A1A] px-2 text-[10px] font-black uppercase tracking-widest text-[#1F1E1E]/60 dark:text-[#777777] absolute">
-            or
-          </span>
-        </div>
-
-        {/* Option 2: Geolocation Action with Automatic Reverse Geocoding */}
-        <button
-          type="button"
-          onClick={handleUseCurrentLocation}
-          disabled={disabled || isLocating}
-          className="w-full py-2.5 px-4 bg-white dark:bg-[#252525] border-2 border-[#1F1E1E] dark:border-[#555555] shadow-tactile-sm btn-tactile text-[#1F1E1E] dark:text-[#F5F5F5] text-xs font-black uppercase tracking-wider hover:bg-[#F2F2F2] dark:hover:bg-[#303030] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer rounded-none"
-        >
-          {isLocating ? (
-            <>
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span>Detecting city location...</span>
-            </>
-          ) : (
-            <>
-              <Navigation className="w-3.5 h-3.5 text-[#1F1E1E] dark:text-white stroke-[2.4]" />
-              <span>Use current location</span>
-            </>
-          )}
-        </button>
-
-        {/* Error Fallback Banner */}
-        {errorMessage && (
-          <div className="mt-3 p-3 bg-red-50 dark:bg-red-950/40 border-2 border-red-600 text-red-700 dark:text-red-300 text-xs flex items-start gap-2 shadow-tactile-sm rounded-none">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            <p className="leading-relaxed font-medium">{errorMessage}</p>
-          </div>
-        )}
+    <div className="tv-origin" ref={rootRef}>
+      <div className="tv-origin__head">
+        <PinIcon width={16} height={16} />
+        <h3 className="tv-origin__title">Where are you travelling from?</h3>
       </div>
+      <p className="tv-meta tv-origin__sub">
+        The agent prices flights and rail from your starting point.
+      </p>
+
+      <form onSubmit={handleManualSubmit} className="tv-origin__form">
+        <div className="tv-origin__search">
+          <input
+            ref={inputRef}
+            type="text"
+            className={`tv-input ${validationError ? 'has-error' : ''}`}
+            placeholder="Search a city — e.g. Mumbai, Lisbon, Osaka"
+            value={manualInput}
+            disabled={disabled}
+            autoComplete="off"
+            role="combobox"
+            aria-expanded={showDropdown}
+            aria-controls="origin-suggestions"
+            aria-autocomplete="list"
+            onChange={(e) => {
+              setManualInput(e.target.value);
+              setSelectedIndex(-1);
+              setValidationError(null);
+            }}
+            onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
+            onKeyDown={handleKeyDown}
+          />
+          {isSearching && <span className="tv-origin__spin tv-meta">Searching…</span>}
+
+          {showDropdown && suggestions.length > 0 && (
+            <div ref={dropdownRef} id="origin-suggestions" role="listbox" className="tv-origin__list">
+              {suggestions.map((sug, idx) => (
+                <button
+                  key={sug.id}
+                  type="button"
+                  role="option"
+                  aria-selected={idx === selectedIndex}
+                  className={`tv-origin__opt ${idx === selectedIndex ? 'is-on' : ''}`}
+                  onMouseEnter={() => setSelectedIndex(idx)}
+                  onClick={() => handleSelectSuggestion(sug)}
+                >
+                  <PinIcon width={13} height={13} />
+                  <span className="tv-origin__opt-name">{sug.name}</span>
+                  <span className="tv-meta">{[sug.admin1, sug.country].filter(Boolean).join(', ')}</span>
+                  {idx === selectedIndex && <CheckIcon width={13} height={13} />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button type="submit" className="tv-btn tv-btn--primary" disabled={disabled || !manualInput.trim()}>
+          <span>Set origin</span>
+          <ArrowUpRightIcon width={14} height={14} />
+        </button>
+      </form>
+
+      {validationError && <p className="tv-field__error" role="alert">{validationError}</p>}
+
+      <div className="tv-divider" style={{ marginBlock: '1rem' }}>
+        <span className="tv-label">or</span>
+      </div>
+
+      <button
+        type="button"
+        className="tv-btn tv-btn--ghost"
+        style={{ width: '100%' }}
+        onClick={handleUseCurrentLocation}
+        disabled={disabled || isLocating}
+      >
+        <CompassIcon width={15} height={15} />
+        <span>{isLocating ? 'Finding your location…' : 'Use my current location'}</span>
+      </button>
+
+      {errorMessage && (
+        <div className="tv-alert" role="alert" style={{ marginTop: '0.85rem', marginBottom: 0 }}>
+          {errorMessage}
+        </div>
+      )}
     </div>
   );
 };
