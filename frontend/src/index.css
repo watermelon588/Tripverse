@@ -6,6 +6,7 @@
 @import "./styles/tripverse-v2.css";
 @import "./styles/tripverse-v2-components.css";
 @import "./styles/tripverse-v2-app.css";
+@import "./styles/tripverse-v2-planner.css";
 
 @layer base {
   :root {

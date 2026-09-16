@@ -1,19 +1,29 @@
-import React, { useState, useRef } from 'react';
+/*
+ * ProfilePage — v2 design system.
+ *
+ * Editorial account page: identity block, an account record set as a mono
+ * key/value ledger, and a saved-trips rail. Same tokens, type and hairlines
+ * as the marketing surface at the app surface's tighter density.
+ */
+import React, { useRef, useState } from 'react';
+import { useGSAP } from '@gsap/react';
+import gsap from 'gsap';
+
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { LogoMarkIcon } from '../components/home/HomeIcons';
 import { uploadAvatar } from '../services/uploadService';
+import { AppBar } from '../components/common/AppBar';
+import { DESTINATIONS } from '../components/home/v2/content';
 import {
-  User,
-  Compass,
-  LogOut,
-  MapPin,
-  CheckCircle2,
-  Calendar,
-  Layers,
-  Plus,
-  Loader2,
-} from 'lucide-react';
+  ArrowUpRightIcon,
+  CheckIcon,
+  ClockIcon,
+  CompassIcon,
+  GraphIcon,
+  PinIcon,
+  PlusIcon,
+} from '../components/home/v2/IconsV2';
+import { EASE, parallaxImage, prefersReducedMotion, splitLines } from '../components/home/v2/motion';
 
 interface ProfilePageProps {
   onNavigateHome: () => void;
@@ -27,28 +37,69 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   onStartPlanning,
 }) => {
   const { user, signOut } = useAuth();
+  const root = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [displayName, setDisplayName] = useState(
-    user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Voyager'
+    user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Traveller',
   );
   const [avatarUrl, setAvatarUrl] = useState<string>(
-    user?.user_metadata?.avatar_url || localStorage.getItem('tripverse-user-avatar') || ''
+    user?.user_metadata?.avatar_url || localStorage.getItem('tripverse-user-avatar') || '',
   );
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const email = user?.email || 'voyager@tripverse.ai';
-  const initials = displayName.substring(0, 2).toUpperCase();
+  const email = user?.email || 'Not signed in';
+  const initials = displayName.trim().slice(0, 2).toUpperCase();
   const userId = user?.id || 'guest-session';
+  const isGuest = !user;
+
+  // Saved trips: the first three curated routes stand in until the trips API
+  // is wired to this page.
+  const savedTrips = DESTINATIONS.slice(0, 3);
+
+  useGSAP(
+    () => {
+      if (prefersReducedMotion()) return;
+
+      const split = titleRef.current ? splitLines(titleRef.current) : null;
+      const tl = gsap.timeline({ defaults: { ease: EASE } });
+
+      tl.from('.tv-profile__eyebrow', { y: 14, opacity: 0, duration: 0.7 });
+      if (split) tl.from(split.lines, { yPercent: 115, duration: 1.05, stagger: 0.08 }, '-=0.45');
+      tl.from('.tv-profile__identity', { y: 24, opacity: 0, duration: 0.9 }, '-=0.6')
+        .from('.tv-profile__card', {
+          clipPath: 'inset(0% 0% 100% 0%)',
+          y: 28,
+          opacity: 0,
+          duration: 1.1,
+          stagger: 0.09,
+        }, '-=0.6');
+
+      gsap.from('.tv-profile__trip', {
+        y: 30,
+        opacity: 0,
+        duration: 0.95,
+        ease: EASE,
+        stagger: 0.09,
+        scrollTrigger: { trigger: '.tv-profile__trips', start: 'top 85%' },
+      });
+
+      gsap.utils.toArray<HTMLElement>('.tv-profile__trip img').forEach((el) => {
+        parallaxImage(el, { trigger: el.closest('.tv-profile__trip') ?? el, amount: 7 });
+      });
+
+      return () => split?.revert();
+    },
+    { scope: root },
+  );
 
   const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    // Reset value so re-selecting same file triggers change
-    e.target.value = '';
+    e.target.value = ''; // let the same file be re-picked
 
     setIsUploading(true);
     setUploadError(null);
@@ -57,8 +108,8 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
     setIsUploading(false);
 
     if (error || !url) {
-      setUploadError(error || 'Failed to upload photo');
-      setTimeout(() => setUploadError(null), 4000);
+      setUploadError(error || 'That photo could not be uploaded.');
+      window.setTimeout(() => setUploadError(null), 4000);
       return;
     }
 
@@ -67,11 +118,9 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
     if (user) {
       try {
-        await supabase.auth.updateUser({
-          data: { avatar_url: url },
-        });
+        await supabase.auth.updateUser({ data: { avatar_url: url } });
       } catch (err) {
-        console.warn('Failed to update Supabase user avatar metadata:', err);
+        console.warn('Could not persist avatar to Supabase metadata:', err);
       }
     }
   };
@@ -79,7 +128,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+    window.setTimeout(() => setIsSaved(false), 3000);
   };
 
   const handleSignOut = async () => {
@@ -88,322 +137,193 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   };
 
   return (
-    <div className="sharp-ui min-h-screen w-full bg-white text-[#1F1E1E] font-body selection:bg-[#1F1E1E] selection:text-white">
-      {/* Top Navigation Bar */}
-      <header className="w-full border-b border-[#D9D9D9] bg-white sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-10 h-16 flex items-center justify-between gap-2">
-          <div
-            className="flex items-center gap-2 cursor-pointer group shrink-0"
-            onClick={onNavigateHome}
-          >
-            <LogoMarkIcon className="w-6 h-6 sm:w-7 sm:h-7 text-[#1F1E1E] transition-transform group-hover:scale-105" />
-            <span className="font-extrabold tracking-widest text-base sm:text-lg text-[#1F1E1E] uppercase font-body">
-              TRIPVERSE
-            </span>
-          </div>
+    <div className="tv2 tv2-app" ref={root}>
+      <AppBar
+        onNavigateHome={onNavigateHome}
+        onStartPlanning={onStartPlanning}
+        onNavigateExplore={onNavigateExplore}
+        current="profile"
+      />
 
-          <div className="flex items-center gap-2 sm:gap-4">
+      <main className="tv-container">
+        <header className="tv-page__head">
+          <span className="tv-eyebrow tv-profile__eyebrow">Account</span>
+          <h1 className="tv-display tv-page__title" ref={titleRef}>
+            {displayName}
+          </h1>
+
+          <div className="tv-profile__identity">
             <button
               type="button"
-              onClick={onNavigateHome}
-              className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-[#1F1E1E]/70 hover:text-[#1F1E1E] flex items-center gap-1 sm:gap-1.5 py-1 px-2 sm:py-1.5 sm:px-3 hover:bg-[#D9D9D9]/40 rounded-none transition-colors cursor-pointer"
+              className="tv-avatar"
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="Change profile photo"
+              disabled={isUploading}
             >
-              <span>&larr; Home</span>
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" className="tv-avatar__img" />
+              ) : (
+                <span className="tv-avatar__initials">{initials}</span>
+              )}
+              <span className="tv-avatar__edit">
+                {isUploading ? <ClockIcon width={15} height={15} /> : <PlusIcon width={15} height={15} />}
+              </span>
             </button>
-            {onStartPlanning && (
-              <button
-                type="button"
-                onClick={onStartPlanning}
-                className="py-1.5 px-3 sm:py-2 sm:px-4 bg-[#1F1E1E] text-white font-black text-[11px] sm:text-xs uppercase tracking-widest rounded-none hover:bg-black transition-colors cursor-pointer shrink-0"
-              >
-                Plan Voyage
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
 
-      {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-10 py-8 lg:py-14">
-        {/* Page Header */}
-        <div className="mb-8">
-          <div className="text-[11px] font-bold tracking-widest uppercase text-[#1F1E1E]/50 mb-1">
-            VOYAGER ACCOUNT &bull; SPATIAL PREFERENCES
-          </div>
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black uppercase tracking-tight text-[#1F1E1E] font-display">
-            TRAVELER PROFILE
-          </h1>
-        </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={handleAvatarFileChange}
+            />
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Left Column: Identity & Metadata (4 Cols) */}
-          <div className="lg:col-span-4 flex flex-col gap-6">
-            {/* Identity Card */}
-            <div className="p-6 bg-[#F9F9F9] border-2 border-[#1F1E1E] rounded-none">
-              <div className="flex items-start justify-between">
-                {/* Hidden Native File Input */}
+            <div className="tv-profile__identity-meta">
+              <p className="tv-meta">{email}</p>
+              <span className={`tv-tag ${isGuest ? '' : 'tv-tag--green'}`}>
+                {isGuest ? 'Guest session' : 'Signed in'}
+              </span>
+            </div>
+          </div>
+
+          {uploadError && (
+            <div className="tv-alert" role="alert" style={{ marginTop: '1.25rem' }}>
+              {uploadError}
+            </div>
+          )}
+        </header>
+
+        <div className="tv-profile__grid tv-collapse">
+          {/* Editable details */}
+          <section className="tv-card tv-profile__card">
+            <div className="tv-profile__card-head">
+              <GraphIcon width={18} height={18} />
+              <h2 className="tv-label">Your details</h2>
+            </div>
+
+            <form onSubmit={handleSaveProfile} className="tv-profile__form">
+              <div className="tv-field">
+                <label htmlFor="pf-name" className="tv-field__label">Display name</label>
                 <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleAvatarFileChange}
+                  id="pf-name"
+                  className="tv-input"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="How should we address you?"
                 />
-
-                {/* Interactive PFP Container (No extra button; clicking triggers file selection) */}
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => !isUploading && fileInputRef.current?.click()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      fileInputRef.current?.click();
-                    }
-                  }}
-                  title={avatarUrl ? 'Click to change profile picture' : 'Click to upload profile picture'}
-                  className="relative w-20 h-20 bg-[#1F1E1E] text-white flex items-center justify-center rounded-none border-2 border-[#1F1E1E] shrink-0 cursor-pointer overflow-hidden group select-none"
-                >
-                  {avatarUrl ? (
-                    <>
-                      <img
-                        src={avatarUrl}
-                        alt={displayName}
-                        className="w-full h-full object-cover rounded-none"
-                      />
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <Plus className="w-6 h-6 text-white" />
-                      </div>
-                    </>
-                  ) : (
-                    <Plus className="w-8 h-8 text-white group-hover:scale-110 transition-transform" />
-                  )}
-
-                  {isUploading && (
-                    <div className="absolute inset-0 bg-black/75 flex items-center justify-center">
-                      <Loader2 className="w-6 h-6 text-white animate-spin" />
-                    </div>
-                  )}
-                </div>
-
-                <div className="bg-[#1F1E1E] text-white px-2.5 py-1 text-[10px] font-bold tracking-widest uppercase rounded-none">
-                  TIER 01
-                </div>
               </div>
 
-              {uploadError && (
-                <div className="mt-2.5 p-2 bg-red-50 border-l-2 border-red-600 text-red-600 text-[11px] font-bold">
-                  {uploadError}
-                </div>
-              )}
-
-              <div className="mt-5">
-                <h2 className="text-xl font-black uppercase tracking-tight text-[#1F1E1E]">
-                  {displayName}
-                </h2>
-                <p className="text-xs font-medium text-[#1F1E1E]/70 mt-0.5 break-all">
-                  {email}
-                </p>
+              <div className="tv-field">
+                <label htmlFor="pf-email" className="tv-field__label">Email</label>
+                <input id="pf-email" className="tv-input" value={email} readOnly disabled />
+                <span className="tv-meta" style={{ fontSize: '0.72rem' }}>
+                  Change your email from your account provider.
+                </span>
               </div>
 
-              <div className="mt-6 pt-5 border-t border-[#D9D9D9] flex flex-col gap-2.5 text-xs font-semibold">
-                <div className="flex justify-between items-center text-[#1F1E1E]/80">
-                  <span className="uppercase text-[11px]">Account ID:</span>
-                  <span className="font-mono text-[10px] bg-[#D9D9D9]/50 px-2 py-0.5 rounded-none max-w-[140px] truncate">
-                    {userId}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center text-[#1F1E1E]/80">
-                  <span className="uppercase text-[11px]">Cloud Sync:</span>
-                  <span className="flex items-center gap-1 text-emerald-600 font-bold text-[10px] uppercase">
-                    <CheckCircle2 className="w-3 h-3" /> Live
-                  </span>
-                </div>
-                <div className="flex justify-between items-center text-[#1F1E1E]/80">
-                  <span className="uppercase text-[11px]">AI Model:</span>
-                  <span className="font-bold text-[10px] uppercase text-[#1F1E1E]">
-                    Gemini 3.1 Flash
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-6 pt-5 border-t border-[#D9D9D9]">
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  className="w-full py-3 px-4 bg-transparent border-2 border-red-600 text-red-600 hover:bg-red-600 hover:text-white font-extrabold text-xs uppercase tracking-widest rounded-none transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>Sign Out</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Quick Metrics */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 bg-[#F9F9F9] border-2 border-[#1F1E1E] rounded-none">
-                <div className="text-2xl font-black text-[#1F1E1E] font-display">
-                  03
-                </div>
-                <div className="text-[10px] font-bold uppercase tracking-widest text-[#1F1E1E]/60 mt-1">
-                  Active Canvases
-                </div>
-              </div>
-              <div className="p-4 bg-[#F9F9F9] border-2 border-[#1F1E1E] rounded-none">
-                <div className="text-2xl font-black text-[#1F1E1E] font-display">
-                  12
-                </div>
-                <div className="text-[10px] font-bold uppercase tracking-widest text-[#1F1E1E]/60 mt-1">
-                  Saved POIs
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column: Settings & Saved Journeys (8 Cols) */}
-          <div className="lg:col-span-8 flex flex-col gap-8">
-            {/* Account Settings Panel */}
-            <div className="p-6 sm:p-8 bg-[#F9F9F9] border-2 border-[#1F1E1E] rounded-none">
-              <div className="flex items-center gap-2.5 mb-6">
-                <User className="w-5 h-5 text-[#1F1E1E]" />
-                <h2 className="text-xl font-black uppercase tracking-tight text-[#1F1E1E] font-display">
-                  Profile Information
-                </h2>
-              </div>
-
-              {isSaved && (
-                <div className="mb-5 p-3.5 bg-emerald-50 border-l-4 border-emerald-600 text-emerald-700 text-xs font-semibold rounded-none">
-                  Profile preferences updated successfully.
-                </div>
-              )}
-
-              <form onSubmit={handleSaveProfile} className="flex flex-col gap-5">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-[#1F1E1E]">
-                      Display Name
-                    </label>
-                    <input
-                      type="text"
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      className="px-3.5 py-2.5 bg-[#D9D9D9] text-[#1F1E1E] font-medium text-sm rounded-none border border-transparent focus:border-[#1F1E1E] focus:bg-white focus:outline-none transition-colors"
-                      required
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-[#1F1E1E]">
-                      Email Address
-                    </label>
-                    <input
-                      type="email"
-                      value={email}
-                      disabled
-                      className="px-3.5 py-2.5 bg-[#D9D9D9]/60 text-[#1F1E1E]/60 font-medium text-sm rounded-none border border-transparent cursor-not-allowed"
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    className="py-3 px-6 bg-[#1F1E1E] text-white font-black text-xs uppercase tracking-widest rounded-none hover:bg-black transition-colors cursor-pointer"
-                  >
-                    Save Changes
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {/* Saved Expeditions Panel */}
-            <div className="p-6 sm:p-8 bg-[#F9F9F9] border-2 border-[#1F1E1E] rounded-none">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2.5">
-                  <Compass className="w-5 h-5 text-[#1F1E1E]" />
-                  <h2 className="text-xl font-black uppercase tracking-tight text-[#1F1E1E] font-display">
-                    Saved Canvases & Expeditions
-                  </h2>
-                </div>
-                {onNavigateExplore && (
-                  <button
-                    type="button"
-                    onClick={onNavigateExplore}
-                    className="text-xs font-bold uppercase tracking-wider underline hover:text-[#1F1E1E] cursor-pointer"
-                  >
-                    Explore Public Trips
-                  </button>
+              <button type="submit" className="tv-btn tv-btn--primary" style={{ width: '100%' }}>
+                {isSaved ? (
+                  <>
+                    <CheckIcon width={15} height={15} />
+                    <span>Saved</span>
+                  </>
+                ) : (
+                  <span>Save changes</span>
                 )}
-              </div>
+              </button>
+            </form>
+          </section>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Trip Card 1 */}
-                <div className="p-5 bg-white border-2 border-[#1F1E1E] flex flex-col justify-between rounded-none">
-                  <div>
-                    <div className="flex items-center justify-between text-[10px] font-bold uppercase text-[#1F1E1E]/60 mb-2">
-                      <span className="flex items-center gap-1">
-                        <MapPin className="w-3 h-3" /> Kyoto, Japan
-                      </span>
-                      <span>5 Days</span>
-                    </div>
-                    <h3 className="text-base font-black uppercase tracking-tight text-[#1F1E1E]">
-                      Autumn Shrines & Bamboo
-                    </h3>
-                    <p className="text-xs text-[#1F1E1E]/70 mt-1 line-clamp-2">
-                      Spatial route across Arashiyama, Fushimi Inari, and Gion historic tea districts.
-                    </p>
-                  </div>
-                  <div className="mt-4 pt-3 border-t border-[#D9D9D9] flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-emerald-600 uppercase">
-                      VOYAGE READY
-                    </span>
-                    {onStartPlanning && (
-                      <button
-                        type="button"
-                        onClick={onStartPlanning}
-                        className="text-[11px] font-extrabold uppercase tracking-wider bg-[#1F1E1E] text-white px-3 py-1.5 hover:bg-black transition-colors rounded-none"
-                      >
-                        Open Workspace &rarr;
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Trip Card 2 */}
-                <div className="p-5 bg-white border-2 border-[#1F1E1E] flex flex-col justify-between rounded-none">
-                  <div>
-                    <div className="flex items-center justify-between text-[10px] font-bold uppercase text-[#1F1E1E]/60 mb-2">
-                      <span className="flex items-center gap-1">
-                        <MapPin className="w-3 h-3" /> Porto, Portugal
-                      </span>
-                      <span>4 Days</span>
-                    </div>
-                    <h3 className="text-base font-black uppercase tracking-tight text-[#1F1E1E]">
-                      Douro Valley Wine Trail
-                    </h3>
-                    <p className="text-xs text-[#1F1E1E]/70 mt-1 line-clamp-2">
-                      River cruise routes, historic cellars, and Ribeira waterfront promenades.
-                    </p>
-                  </div>
-                  <div className="mt-4 pt-3 border-t border-[#D9D9D9] flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-emerald-600 uppercase">
-                      VOYAGE READY
-                    </span>
-                    {onStartPlanning && (
-                      <button
-                        type="button"
-                        onClick={onStartPlanning}
-                        className="text-[11px] font-extrabold uppercase tracking-wider bg-[#1F1E1E] text-white px-3 py-1.5 hover:bg-black transition-colors rounded-none"
-                      >
-                        Open Workspace &rarr;
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
+          {/* Account record */}
+          <section className="tv-card tv-profile__card">
+            <div className="tv-profile__card-head">
+              <CompassIcon width={18} height={18} />
+              <h2 className="tv-label">Account record</h2>
             </div>
-          </div>
+
+            <dl className="tv-ledger__list">
+              {[
+                { k: 'Session', v: isGuest ? 'Guest' : 'Authenticated' },
+                { k: 'User ID', v: `${userId.slice(0, 12)}${userId.length > 12 ? '…' : ''}` },
+                { k: 'Saved trips', v: String(savedTrips.length) },
+                { k: 'Graph nodes', v: '23' },
+                { k: 'Last plan', v: 'Japan · 14 nights' },
+              ].map((row) => (
+                <div key={row.k} className="tv-ledger__row">
+                  <dt className="tv-meta">{row.k}</dt>
+                  <dd className="tv-ledger__v">{row.v}</dd>
+                </div>
+              ))}
+            </dl>
+
+            <div className="tv-profile__actions">
+              <button type="button" className="tv-btn tv-btn--ghost" onClick={onStartPlanning} style={{ width: '100%' }}>
+                <span>Plan a new trip</span>
+                <ArrowUpRightIcon width={15} height={15} />
+              </button>
+              <button type="button" className="tv-link tv-profile__signout" onClick={handleSignOut}>
+                <span>{isGuest ? 'Sign in to save trips' : 'Sign out'}</span>
+              </button>
+            </div>
+          </section>
         </div>
+
+        {/* Saved trips */}
+        <section className="tv-profile__trips" aria-labelledby="saved-trips">
+          <div className="tv-sec__head tv-sec__head--row" style={{ marginBottom: '1.75rem' }}>
+            <div>
+              <span className="tv-label">Saved</span>
+              <h2 id="saved-trips" className="tv-display tv-profile__trips-title">
+                Trips you can reopen.
+              </h2>
+            </div>
+            <button type="button" className="tv-link tv-hide-mobile" onClick={onNavigateExplore}>
+              <span>Explore more</span>
+              <ArrowUpRightIcon width={15} height={15} />
+            </button>
+          </div>
+
+          {savedTrips.length === 0 ? (
+            <div className="tv-empty">
+              <div className="tv-empty__art" aria-hidden="true">
+                <span className="tv-empty__bar" />
+                <span className="tv-empty__bar" />
+                <span className="tv-empty__bar" />
+              </div>
+              <p className="tv-body">You have not saved a trip yet.</p>
+              <button type="button" className="tv-btn tv-btn--primary" onClick={onStartPlanning}>
+                <span>Plan your first trip</span>
+                <ArrowUpRightIcon width={15} height={15} />
+              </button>
+            </div>
+          ) : (
+            <div className="tv-profile__trip-grid tv-collapse">
+              {savedTrips.map((t) => (
+                <article key={t.code} className="tv-profile__trip" onClick={onStartPlanning}>
+                  <figure className="tv-figure tv-profile__trip-fig">
+                    <img src={t.image} alt={`${t.city}, ${t.country}`} className="tv-img tv-img--drift" loading="lazy" />
+                  </figure>
+                  <div className="tv-profile__trip-meta">
+                    <div className="tv-rail__line">
+                      <h3 className="tv-rail__city">{t.city}</h3>
+                      <span className="tv-meta">{t.code}</span>
+                    </div>
+                    <p className="tv-meta tv-rail__note">{t.note}</p>
+                    <div className="tv-rail__foot">
+                      <span className="tv-tag">
+                        <ClockIcon width={12} height={12} />
+                        {t.nights} nights
+                      </span>
+                      <span className="tv-meta">
+                        <PinIcon width={12} height={12} /> {t.country}
+                      </span>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );
