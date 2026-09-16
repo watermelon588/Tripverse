@@ -1,512 +1,355 @@
-import { useState, useEffect, useRef } from 'react';
+/*
+ * Explore — v2 design system.
+ *
+ * An editorial index of routes people have built: filter rail, asymmetric
+ * masonry of destination cards, and a closing CTA.
+ *
+ * The previous dataset was substantially mislabelled — an izakaya alley was
+ * captioned "Himalayan Ridge Passage, Annapurna", a Japanese side street was
+ * "Arashiyama Bamboo Coast", and Mount Fuji was "Lijiang, Yunnan". Every entry
+ * below now describes the photograph it actually shows.
+ */
+import { useMemo, useRef, useState } from 'react';
+import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { useLenis } from '../hooks/useLenis';
-import { useReducedMotion } from '../hooks/useReducedMotion';
-import { Navbar } from '../components/home/Navbar';
-import { MobileSidebar } from '../components/home/MobileSidebar';
-import { ScrollExpand } from '../components/common/ScrollExpand';
 
-// Unsplash Media Photography Assets from media/
-import heroBg from '@media/david-emrich-VCM99u6HltA-unsplash.jpg';
-import alpineImg from '@media/pema-g-lama-6cfK0SEtpbY-unsplash.jpg';
-import urbanImg from '@media/matthieu-buhler-PaFHv0Zi71E-unsplash.jpg';
-import coastalImg from '@media/shigeki-wakabayashi-6nuz52vsbWc-unsplash.jpg';
-import culturalImg from '@media/jj-ying-9Qwbfa_RM94-unsplash.jpg';
-import alexandruImg from '@media/alexandru-bogdan-ghita-UeYkqQh4PoI-unsplash.jpg';
-import benImg from '@media/ben-klewais-nLE3eLaQA6A-unsplash.jpg';
-import bilderbokenImg from '@media/bilderboken-rlwE8f8anOc-unsplash.jpg';
-import bradyImg from '@media/brady-bellini-t5dGNNQVwg8-unsplash.jpg';
-import calebImg from '@media/caleb-JmuyB_LibRo-unsplash.jpg';
-import christophImg from '@media/christoph-schulz-7tb-b37yHx4-unsplash.jpg';
-import fredyImg from '@media/fredy-martinez-frd7WNzipdU-unsplash.jpg';
-import jamesImg from '@media/james-wilkinson-FMuorhl0EHY-unsplash.jpg';
-import jayImg from '@media/jay-wennington-N_Y88TWmGwA-unsplash.jpg';
-import kateImg from '@media/kate-trysh-U3CntDq16yY-unsplash.jpg';
-import mountainGirlImg from '@media/mountain-girl-WfT3o1KhnwQ-unsplash.jpg';
-import pedroImg from '@media/pedro-lastra-5g8dJvtYRYA-unsplash.jpg';
-import philippImg from '@media/philipp-trubchenko-oOTo9nR7f9Q-unsplash.jpg';
-import pierreImg from '@media/pierre-blache-VMNG8BYFQfs-unsplash.jpg';
-import vojtechImg from '@media/vojtech-bruzek-Yrxr3bsPdS0-unsplash.jpg';
-import willImg from '@media/will-goodman-1EikowqH9fs-unsplash.jpg';
+import { useSmoothScroll } from '../hooks/useSmoothScroll';
+import { AppBar } from '../components/common/AppBar';
+import { img } from '../components/home/v2/content';
+import { ArrowUpRightIcon, ClockIcon, PinIcon } from '../components/home/v2/IconsV2';
+import { EASE, parallaxImage, prefersReducedMotion, revealHeadline } from '../components/home/v2/motion';
 
-import '../styles/explore.css';
+type Category = 'All' | 'Cities' | 'Nature' | 'Culture' | 'Stays & food';
 
-gsap.registerPlugin(ScrollTrigger);
-
-type Category = 'All' | 'Alpine & Peaks' | 'Urban Architecture' | 'Coastal & Seas' | 'Cultural Passages';
-
-interface DestinationItem {
+interface Place {
   id: string;
-  category: Category;
+  category: Exclude<Category, 'All'>;
   title: string;
   region: string;
-  coordinates: string;
+  coords: string;
+  nights: string;
   description: string;
   image: string;
-  spanClass: string;
-  elevation?: string;
-  duration?: string;
+  /** Column span in the 6-column masonry. */
+  span: 2 | 3 | 4;
 }
 
-const DESTINATIONS: DestinationItem[] = [
+const PLACES: Place[] = [
   {
-    id: 'dest-1',
-    category: 'Alpine & Peaks',
-    title: 'Himalayan Ridge Passage',
-    region: 'ANNAPURNA, NEPAL',
-    coordinates: '28.5300° N, 83.8780° E',
-    description: 'High-altitude trails weaving through ancient rhododendron forests, glacier valleys, and sacred peaks.',
-    image: alpineImg,
-    spanClass: 'explore-card--span-8',
-    elevation: '4,130m',
-    duration: '12 Days',
-  },
-  {
-    id: 'dest-2',
-    category: 'Urban Architecture',
-    title: 'Tokyo Neon & Shadows',
-    region: 'SHINJUKU, JAPAN',
-    coordinates: '35.6938° N, 139.7034° E',
-    description: 'Futuristic urban geometry, quiet alleyway shrines, and night-scape architecture of metropolitan Tokyo.',
-    image: urbanImg,
-    spanClass: 'explore-card--span-4',
-    elevation: '45m',
-    duration: '5 Days',
-  },
-  {
-    id: 'dest-3',
-    category: 'Coastal & Seas',
-    title: 'Arashiyama Bamboo Coast',
+    id: 'kyoto-garden',
+    category: 'Culture',
+    title: 'Temple gardens and red bridges',
     region: 'KYOTO, JAPAN',
-    coordinates: '35.0116° N, 135.6777° E',
-    description: 'Serene bamboo groves running parallel to mist-covered riverbanks and traditional wooden teahouses.',
-    image: coastalImg,
-    spanClass: 'explore-card--span-4',
-    elevation: '110m',
-    duration: '4 Days',
+    coords: '35.0116° N, 135.7681° E',
+    nights: '4 nights',
+    description: 'Moss gardens, still water, and a vermilion bridge under maples turning at the edge of the season.',
+    image: img.kyotoGarden,
+    span: 4,
   },
   {
-    id: 'dest-4',
-    category: 'Cultural Passages',
-    title: 'Lijiang Naxi Odyssey',
-    region: 'YUNNAN, CHINA',
-    coordinates: '26.8721° N, 100.2297° E',
-    description: 'Cobblestone waterways, Naxi traditional music heritage, and snow-capped Jade Dragon mountain backdrop.',
-    image: culturalImg,
-    spanClass: 'explore-card--span-8',
-    elevation: '2,400m',
-    duration: '7 Days',
+    id: 'porto-douro',
+    category: 'Cities',
+    title: 'The Douro from Ribeira',
+    region: 'PORTO, PORTUGAL',
+    coords: '41.1408° N, 8.6116° W',
+    nights: '3 nights',
+    description: 'Terracotta roofs stacked down to the waterfront, rabelo boats tied along the quay.',
+    image: img.porto,
+    span: 2,
   },
   {
-    id: 'dest-5',
-    category: 'Alpine & Peaks',
-    title: 'Andean Highland Ridge',
-    region: 'PERUVIAN ANDES',
-    coordinates: '13.1631° S, 72.5450° W',
-    description: 'Ancient mountain passages winding through cloud forests, granite citadel ruins, and jagged peaks.',
-    image: fredyImg,
-    spanClass: 'explore-card--span-6',
-    elevation: '3,800m',
-    duration: '9 Days',
+    id: 'tokyo-alley',
+    category: 'Cities',
+    title: 'Back streets after the rain',
+    region: 'TOKYO, JAPAN',
+    coords: '35.6938° N, 139.7034° E',
+    nights: '5 nights',
+    description: 'Narrow lanes lit by signage, the quiet grid behind the crossings everyone photographs.',
+    image: img.tokyoAlley,
+    span: 2,
   },
   {
-    id: 'dest-6',
-    category: 'Urban Architecture',
-    title: 'Metropolitan Tower Skyline',
-    region: 'FINANCIAL DISTRICT',
-    coordinates: '51.5074° N, 0.1278° W',
-    description: 'Striking modern glass facades juxtaposed against historic stone arches and urban geometry.',
-    image: jamesImg,
-    spanClass: 'explore-card--span-6',
-    elevation: '60m',
-    duration: '4 Days',
+    id: 'alpine-lake',
+    category: 'Nature',
+    title: 'A lake village under the ridge',
+    region: 'ALPINE LAKE COUNTRY',
+    coords: '47.4800° N, 11.7600° E',
+    nights: '4 nights',
+    description: 'Pasture running to the shoreline, a single jetty, and the ferry that connects the far bank.',
+    image: img.alpineLake,
+    span: 4,
   },
   {
-    id: 'dest-7',
-    category: 'Coastal & Seas',
-    title: 'Amalfi Cliffside Passage',
-    region: 'CAMPANIA, ITALY',
-    coordinates: '40.6340° N, 14.6027° E',
-    description: 'Pastel villages clinging to dramatic sea cliffs above crystal-clear Tyrrhenian waters.',
-    image: jayImg,
-    spanClass: 'explore-card--span-4',
-    elevation: '250m',
-    duration: '6 Days',
+    id: 'prague-rooftops',
+    category: 'Cities',
+    title: 'Spires over the Old Town',
+    region: 'PRAGUE, CZECHIA',
+    coords: '50.0875° N, 14.4213° E',
+    nights: '3 nights',
+    description: 'Gothic towers catching first light above a roofscape of copper and clay.',
+    image: img.prague,
+    span: 3,
   },
   {
-    id: 'dest-8',
-    category: 'Cultural Passages',
-    title: 'Bavarian Citadel Valley',
-    region: 'BAVARIA, GERMANY',
-    coordinates: '47.5576° N, 10.7498° E',
-    description: 'Alpine fairytales, medieval stone towers, and dense pine forests steeped in history.',
-    image: kateImg,
-    spanClass: 'explore-card--span-8',
-    elevation: '800m',
-    duration: '7 Days',
+    id: 'seoul-palace',
+    category: 'Culture',
+    title: 'Palace eaves and painted beams',
+    region: 'SEOUL, SOUTH KOREA',
+    coords: '37.5796° N, 126.9770° E',
+    nights: '5 nights',
+    description: 'Dancheong paintwork under deep eaves, the grounds quiet before the gates open.',
+    image: img.seoulPalace,
+    span: 3,
   },
   {
-    id: 'dest-9',
-    category: 'Alpine & Peaks',
-    title: 'Patagonian Glacial Basin',
-    region: 'TORRES DEL PAINE',
-    coordinates: '51.2532° S, 72.9862° W',
-    description: 'Sheer granite needles rising out of turquoise ice lakes and wind-swept southern plains.',
-    image: mountainGirlImg,
-    spanClass: 'explore-card--span-8',
-    elevation: '2,800m',
-    duration: '10 Days',
+    id: 'fuji-blossom',
+    category: 'Nature',
+    title: 'Fuji through the blossom',
+    region: 'FUJIYOSHIDA, JAPAN',
+    coords: '35.3606° N, 138.7274° E',
+    nights: '2 nights',
+    description: 'The cone framed by branches for the ten days a year the timing actually works.',
+    image: img.blossomFuji,
+    span: 2,
   },
   {
-    id: 'dest-10',
-    category: 'Urban Architecture',
-    title: 'Gothic Modernity',
-    region: 'BARCELONA, SPAIN',
-    coordinates: '41.3879° N, 2.1699° E',
-    description: 'Intricate stone masonry, organic Modernisme facades, and sunlit Mediterranean avenues.',
-    image: pedroImg,
-    spanClass: 'explore-card--span-4',
-    elevation: '12m',
-    duration: '5 Days',
+    id: 'budapest-aerial',
+    category: 'Cities',
+    title: 'Above the Buda rooftops',
+    region: 'BUDAPEST, HUNGARY',
+    coords: '47.5020° N, 19.0348° E',
+    nights: '3 nights',
+    description: 'Tiled church roofs and the river beyond, best walked in the hour before dusk.',
+    image: img.budapest,
+    span: 4,
   },
   {
-    id: 'dest-11',
-    category: 'Cultural Passages',
-    title: 'Kyoto Temple Sanctuaries',
-    region: 'HIGASHIYAMA, JAPAN',
-    coordinates: '34.9948° N, 135.7850° E',
-    description: 'Edo-period wooden architecture, mossy zen gardens, and vermilion shrine gates.',
-    image: philippImg,
-    spanClass: 'explore-card--span-6',
-    elevation: '140m',
-    duration: '5 Days',
+    id: 'sydney-harbour',
+    category: 'Cities',
+    title: 'The harbour from the air',
+    region: 'SYDNEY, AUSTRALIA',
+    coords: '33.8568° S, 151.2153° E',
+    nights: '6 nights',
+    description: 'Ferries crossing between the bridge and the shells, the coastal track heading south.',
+    image: img.sydney,
+    span: 3,
   },
   {
-    id: 'dest-12',
-    category: 'Coastal & Seas',
-    title: 'Breton Sea Watch',
-    region: 'BRITTANY, FRANCE',
-    coordinates: '48.3904° N, 4.4861° W',
-    description: 'Granite lighthouses withstanding roaring Atlantic tides along rugged coastal headlands.',
-    image: pierreImg,
-    spanClass: 'explore-card--span-6',
-    elevation: '35m',
-    duration: '4 Days',
+    id: 'izakaya-lane',
+    category: 'Stays & food',
+    title: 'Lanterns along the izakaya lane',
+    region: 'JAPAN',
+    coords: '34.6687° N, 135.5031° E',
+    nights: '2 nights',
+    description: 'Paper lanterns, hand-written menus, and counters that seat eight people at most.',
+    image: img.izakaya,
+    span: 3,
   },
   {
-    id: 'dest-13',
-    category: 'Cultural Passages',
-    title: 'Prague Spire Network',
-    region: 'BOHEMIA, CZECHIA',
-    coordinates: '50.0755° N, 14.4378° E',
-    description: 'Cobblestone bridges over mist-filled rivers, gothic watchtowers, and centuries of artisan craft.',
-    image: vojtechImg,
-    spanClass: 'explore-card--span-4',
-    elevation: '190m',
-    duration: '4 Days',
+    id: 'pagoda-fuji',
+    category: 'Culture',
+    title: 'Five storeys and a volcano',
+    region: 'FUJIYOSHIDA, JAPAN',
+    coords: '35.4003° N, 138.8000° E',
+    nights: '2 nights',
+    description: 'The pagoda above the town, with the mountain doing the rest of the work behind it.',
+    image: img.pagoda,
+    span: 2,
   },
   {
-    id: 'dest-14',
-    category: 'Alpine & Peaks',
-    title: 'Highland Glen Passage',
-    region: 'SCOTTISH HIGHLANDS',
-    coordinates: '56.6826° N, 5.1023° W',
-    description: 'Moody lochs, heather-covered mountain slopes, and ancient clan strongholds.',
-    image: willImg,
-    spanClass: 'explore-card--span-8',
-    elevation: '1,100m',
-    duration: '8 Days',
+    id: 'luxembourg-dusk',
+    category: 'Cities',
+    title: 'River town at blue hour',
+    region: 'LUXEMBOURG',
+    coords: '49.6116° N, 6.1319° E',
+    nights: '2 nights',
+    description: 'Bridges lit along the valley floor, the old quarter stacked on the bluff above.',
+    image: img.luxembourg,
+    span: 4,
+  },
+  {
+    id: 'dubai-marina',
+    category: 'Cities',
+    title: 'Towers on the marina',
+    region: 'DUBAI, UAE',
+    coords: '25.0805° N, 55.1403° E',
+    nights: '3 nights',
+    description: 'A skyline built in twenty years, best read from the water at the end of the day.',
+    image: img.dubaiMarina,
+    span: 3,
+  },
+  {
+    id: 'hotel-quiet',
+    category: 'Stays & food',
+    title: 'A room that earns the night',
+    region: 'STAYS',
+    coords: '—',
+    nights: '1 night',
+    description: 'Where the agent puts you when the day ends late and the next train leaves early.',
+    image: img.hotelRoom,
+    span: 3,
   },
 ];
 
-const HORIZONTAL_SHOWCASE = [
-  {
-    title: 'Transylvanian Pines',
-    region: 'ROMANIA',
-    image: alexandruImg,
-    description: 'Mist-shrouded Carpathian ridges & ancient forests.',
-  },
-  {
-    title: 'Pacific Northwest',
-    region: 'OREGON, USA',
-    image: benImg,
-    description: 'Towering evergreen canopies & alpine rivers.',
-  },
-  {
-    title: 'Scandinavian Fjord',
-    region: 'NORWAY',
-    image: bilderbokenImg,
-    description: 'Mirror glacial waters & dramatic sea cliffs.',
-  },
-  {
-    title: 'Yosemite Monoliths',
-    region: 'CALIFORNIA',
-    image: bradyImg,
-    description: 'Sheer granite walls & ancient sequoia groves.',
-  },
-  {
-    title: 'Obsidian Coast',
-    region: 'ICELAND',
-    image: calebImg,
-    description: 'Black sand headlands & volcanic ocean spray.',
-  },
-  {
-    title: 'Brandenburg Node',
-    region: 'BERLIN',
-    image: christophImg,
-    description: 'Historic stone colonnades & modern culture.',
-  },
-];
+const CATEGORIES: Category[] = ['All', 'Cities', 'Nature', 'Culture', 'Stays & food'];
 
 interface ExploreProps {
   onStartPlanning: () => void;
-  onNavigateHome?: () => void;
+  onNavigateHome: () => void;
+  onNavigateProfile?: () => void;
 }
 
-export function Explore({ onStartPlanning, onNavigateHome }: ExploreProps) {
-  const [selectedCategory, setSelectedCategory] = useState<Category>('All');
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const reducedMotion = useReducedMotion();
+export function Explore({ onStartPlanning, onNavigateHome, onNavigateProfile }: ExploreProps) {
+  const root = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const [category, setCategory] = useState<Category>('All');
 
-  // Enable smooth Lenis scrolling
-  useLenis(true);
+  useSmoothScroll(true);
 
-  const filteredDestinations =
-    selectedCategory === 'All'
-      ? DESTINATIONS
-      : DESTINATIONS.filter((item) => item.category === selectedCategory);
+  const visible = useMemo(
+    () => (category === 'All' ? PLACES : PLACES.filter((p) => p.category === category)),
+    [category],
+  );
 
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 40);
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
-
-  useEffect(() => {
-    if (reducedMotion || !containerRef.current) return;
-
-    const ctx = gsap.context(() => {
-      gsap.from('.explore-reveal', {
+  // Headline + filter rail: runs once on mount.
+  useGSAP(
+    () => {
+      if (prefersReducedMotion()) return;
+      const split = titleRef.current ? revealHeadline(titleRef.current) : null;
+      gsap.from('.tv-xp__eyebrow, .tv-xp__lead, .tv-seg', {
+        y: 18,
         opacity: 0,
-        y: 35,
-        duration: 0.9,
-        stagger: 0.08,
-        ease: 'power3.out',
-        scrollTrigger: {
-          trigger: containerRef.current,
-          start: 'top 85%',
-        },
+        duration: 0.85,
+        ease: EASE,
+        stagger: 0.07,
+        delay: 0.15,
       });
-    }, containerRef);
+      return () => split?.revert();
+    },
+    { scope: root },
+  );
 
-    return () => ctx.revert();
-  }, [selectedCategory, reducedMotion]);
+  // Card reveals + parallax: re-runs whenever the filter changes the set.
+  useGSAP(
+    () => {
+      if (prefersReducedMotion()) return;
+
+      gsap.fromTo(
+        '.tv-xp__card',
+        { y: 34, opacity: 0, clipPath: 'inset(0% 0% 100% 0%)' },
+        {
+          y: 0,
+          opacity: 1,
+          clipPath: 'inset(0% 0% 0% 0%)',
+          duration: 1,
+          ease: EASE,
+          stagger: 0.06,
+          overwrite: true,
+        },
+      );
+
+      gsap.utils.toArray<HTMLElement>('.tv-xp__card img').forEach((el) => {
+        parallaxImage(el, { trigger: el.closest('.tv-xp__card') ?? el, amount: 7 });
+      });
+    },
+    { scope: root, dependencies: [category], revertOnUpdate: true },
+  );
 
   return (
-    <div ref={containerRef} className="sharp-ui explore-page">
-      {/* Persistent Fixed Navigation Bar */}
-      <Navbar
-        scrolled={scrolled}
-        onMenuOpen={() => setMobileMenuOpen(true)}
-        onGetStarted={onStartPlanning}
-        onNavigateExplore={() => setSelectedCategory('All')}
+    <div className="tv2 tv2-app" ref={root}>
+      <AppBar
         onNavigateHome={onNavigateHome}
+        onNavigateProfile={onNavigateProfile}
+        onStartPlanning={onStartPlanning}
+        current="explore"
       />
 
-      {/* Mobile Drawer */}
-      <MobileSidebar
-        open={mobileMenuOpen}
-        onClose={() => setMobileMenuOpen(false)}
-        onGetStarted={() => {
-          setMobileMenuOpen(false);
-          onStartPlanning();
-        }}
-        onLogin={() => setMobileMenuOpen(false)}
-        onNavigateHome={() => {
-          setMobileMenuOpen(false);
-          onNavigateHome?.();
-        }}
-      />
-
-      {/* ScrollExpand Hero Component */}
-      <div style={{ minHeight: '100vh' }}>
-        <ScrollExpand
-          src={heroBg}
-          alt="Explore the Universe"
-          title="EXPLORE THE UNIVERSE"
-          scrollHint="Scroll to expand"
-          useWindowScroll={true}
-          startWidth={50}
-          startHeight={65}
-          startRadius={0}
-          endRadius={0}
-          mediaZoom={1.3}
-        >
-          <p className="explore-hero__kicker" style={{ color: '#fff', opacity: 0.9 }}>
-            Editorial Curation
+      <main className="tv-container">
+        <header className="tv-page__head">
+          <span className="tv-eyebrow tv-xp__eyebrow">Explore</span>
+          <h1 className="tv-display tv-page__title" ref={titleRef}>
+            Places worth <em>the journey.</em>
+          </h1>
+          <p className="tv-lead tv-xp__lead">
+            Routes people have built in TripVerse. Open any one of them and the agent will rebuild
+            it around your dates, your budget and how you like to move.
           </p>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(2.5rem, 6vw, 6rem)', textTransform: 'uppercase', margin: '0.5rem 0 1rem 0' }}>
-            UNBOUND JOURNEYS
+
+          <div className="tv-seg" role="tablist" aria-label="Filter destinations">
+            {CATEGORIES.map((c) => (
+              <button
+                key={c}
+                type="button"
+                role="tab"
+                aria-selected={c === category}
+                className={`tv-seg__btn ${c === category ? 'is-on' : ''}`}
+                onClick={() => setCategory(c)}
+              >
+                {c}
+                {c !== 'All' && (
+                  <span style={{ opacity: 0.55, marginLeft: 6 }}>
+                    {PLACES.filter((p) => p.category === c).length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </header>
+
+        <section className="tv-xp__grid" aria-live="polite">
+          {visible.map((p) => (
+            <article key={p.id} className={`tv-xp__card tv-xp__card--${p.span}`} onClick={onStartPlanning}>
+              <figure className="tv-figure tv-xp__fig">
+                <img src={p.image} alt={p.title} className="tv-img tv-img--drift" loading="lazy" />
+                <figcaption className="tv-xp__badge">
+                  <span className="tv-tag">
+                    <ClockIcon width={12} height={12} />
+                    {p.nights}
+                  </span>
+                </figcaption>
+              </figure>
+
+              <div className="tv-xp__meta">
+                <div className="tv-xp__line">
+                  <h2 className="tv-xp__title">{p.title}</h2>
+                  <ArrowUpRightIcon className="tv-xp__go" width={16} height={16} />
+                </div>
+                <p className="tv-body tv-xp__desc">{p.description}</p>
+                <div className="tv-xp__foot">
+                  <span className="tv-meta">
+                    <PinIcon width={12} height={12} /> {p.region}
+                  </span>
+                  <span className="tv-meta">{p.coords}</span>
+                </div>
+              </div>
+            </article>
+          ))}
+        </section>
+
+        {visible.length === 0 && (
+          <div className="tv-empty">
+            <div className="tv-empty__art" aria-hidden="true">
+              <span className="tv-empty__bar" />
+              <span className="tv-empty__bar" />
+              <span className="tv-empty__bar" />
+            </div>
+            <p className="tv-body">Nothing in that category yet.</p>
+            <button type="button" className="tv-btn tv-btn--ghost" onClick={() => setCategory('All')}>
+              Show everything
+            </button>
+          </div>
+        )}
+
+        <section className="tv-xp__cta">
+          <h2 className="tv-display tv-xp__cta-title">
+            Somewhere else in mind? <em>Describe it instead.</em>
           </h2>
-          <p style={{ fontFamily: 'var(--font-body)', fontSize: 'clamp(1rem, 1.3vw, 1.35rem)', maxWidth: '55ch', color: 'rgba(255, 255, 255, 0.9)', marginBottom: '2rem' }}>
-            Uncovering extraordinary landscapes, architecture, and spatial travel experiences across the globe.
-          </p>
-          <button
-            type="button"
-            className="explore-card__action"
-            onClick={onStartPlanning}
-            style={{ cursor: 'pointer' }}
-          >
-            Start Planning →
+          <button type="button" className="tv-btn tv-btn--primary" onClick={onStartPlanning}>
+            <span>Start planning</span>
+            <ArrowUpRightIcon width={15} height={15} />
           </button>
-        </ScrollExpand>
-      </div>
-
-      {/* Persistent Side-Bordered Frame Wrapper */}
-      <div className="explore-frame">
-        {/* Horizontal Scroll Showcase Section */}
-        <section className="explore-horizontal-section">
-          <div className="home-container">
-            <div className="explore-horizontal-header">
-              <h2 className="explore-horizontal-title">CURATED HORIZONS</h2>
-              <span className="explore-horizontal-hint">Drag or scroll horizontally →</span>
-            </div>
-            <div className="explore-horizontal-track">
-              {HORIZONTAL_SHOWCASE.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="explore-horizontal-card"
-                  onClick={onStartPlanning}
-                >
-                  <img
-                    src={item.image}
-                    alt={item.title}
-                    className="explore-horizontal-card__img"
-                    loading="lazy"
-                  />
-                  <div className="explore-horizontal-card__overlay" />
-                  <div className="explore-horizontal-card__content">
-                    <div className="explore-horizontal-card__tag">{item.region}</div>
-                    <h3 className="explore-horizontal-card__name">{item.title}</h3>
-                    <p className="explore-horizontal-card__desc">{item.description}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </section>
-
-        {/* Category Filter Bar */}
-        <section className="explore-filter">
-          <div className="home-container explore-filter__inner">
-            <div className="explore-filter__tabs" role="tablist" aria-label="Explore categories">
-              {(['All', 'Alpine & Peaks', 'Urban Architecture', 'Coastal & Seas', 'Cultural Passages'] as Category[]).map(
-                (cat) => (
-                  <button
-                    key={cat}
-                    role="tab"
-                    aria-selected={selectedCategory === cat}
-                    type="button"
-                    className={`explore-filter__btn ${selectedCategory === cat ? 'explore-filter__btn--active' : ''}`}
-                    onClick={() => setSelectedCategory(cat)}
-                  >
-                    {cat}
-                  </button>
-                )
-              )}
-            </div>
-            <span className="explore-filter__count">
-              {filteredDestinations.length} {filteredDestinations.length === 1 ? 'Destination' : 'Destinations'}
-            </span>
-          </div>
-        </section>
-
-        {/* Asymmetric Editorial Gallery Grid */}
-        <section className="explore-grid-section">
-          <div className="home-container">
-            <div className="explore-grid">
-              {filteredDestinations.map((item) => (
-                <article
-                  key={item.id}
-                  className={`explore-card ${item.spanClass} explore-reveal`}
-                  onClick={onStartPlanning}
-                >
-                  <div className="explore-card__image-wrap">
-                    <img
-                      src={item.image}
-                      alt={item.title}
-                      className="explore-card__image"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                    <div className="explore-card__overlay" />
-                  </div>
-                  <div className="explore-card__content">
-                    <div className="explore-card__meta">
-                      <span>{item.region}</span>
-                      <span>•</span>
-                      <span>{item.coordinates}</span>
-                    </div>
-                    <h2 className="explore-card__title">{item.title}</h2>
-                    <p className="explore-card__description">{item.description}</p>
-                    <button type="button" className="explore-card__action">
-                      Plan This Journey →
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Featured Spotlight Section */}
-        <section className="explore-spotlight">
-          <div className="home-container">
-            <div className="explore-spotlight__grid explore-reveal">
-              <div className="explore-spotlight__media">
-                <img
-                  src={culturalImg}
-                  alt="Featured Lijiang Odyssey"
-                  className="explore-spotlight__image"
-                  loading="lazy"
-                />
-              </div>
-              <div className="explore-spotlight__info">
-                <p className="explore-spotlight__tag">Featured Expedition</p>
-                <h2 className="explore-spotlight__title">THE ANCIENT NAXI CORRIDOR</h2>
-                <p className="explore-spotlight__text">
-                  Journey beyond standard itineraries. Traverse high alpine ridges, ancient stone tea routes, and interactive spatial nodes mapped by TripVerse AI agents.
-                </p>
-                <div className="explore-spotlight__stats">
-                  <div>
-                    <div className="explore-spotlight__stat-val">14 Days</div>
-                    <div className="explore-spotlight__stat-lbl">Duration</div>
-                  </div>
-                  <div>
-                    <div className="explore-spotlight__stat-val">3,200m</div>
-                    <div className="explore-spotlight__stat-lbl">Peak Elevation</div>
-                  </div>
-                  <div>
-                    <div className="explore-spotlight__stat-val">Graph Ready</div>
-                    <div className="explore-spotlight__stat-lbl">3D Spatial Map</div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="explore-spotlight__cta"
-                  onClick={onStartPlanning}
-                >
-                  Start Planning Expedition
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
+      </main>
     </div>
   );
 }
