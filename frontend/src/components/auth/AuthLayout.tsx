@@ -29,7 +29,7 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
   objectPosition,
 }) => {
   return (
-    <div className="h-screen w-full bg-white text-[#1F1E1E] flex flex-col lg:flex-row font-body selection:bg-[#1F1E1E] selection:text-white overflow-hidden">
+    <div className="sharp-ui h-screen w-full bg-white text-[#1F1E1E] flex flex-col lg:flex-row font-body selection:bg-[#1F1E1E] selection:text-white overflow-hidden">
       {/* Left Column: Form & Interaction (~42% on desktop) */}
       <div className="w-full lg:w-[44%] xl:w-[40%] h-full flex flex-col justify-between p-6 sm:p-8 lg:px-12 lg:pt-6 lg:pb-5 bg-white z-10 overflow-y-auto">
         {/* Header Branding */}

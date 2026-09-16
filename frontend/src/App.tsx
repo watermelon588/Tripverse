@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home } from './pages/Home';
+import { HomeV2 } from './components/home/v2/HomeV2';
 import { Explore } from './pages/Explore';
 import { CreateTrip } from './pages/CreateTrip';
 import { LoginPage } from './pages/LoginPage';
@@ -42,7 +42,7 @@ export const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-white text-[#1F1E1E] font-sans antialiased">
       {view === 'home' && (
-        <Home
+        <HomeV2
           onStartPlanning={() => navigateTo('create')}
           onNavigateExplore={() => navigateTo('explore')}
           onNavigateLogin={() => navigateTo('login')}

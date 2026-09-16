@@ -88,7 +88,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   };
 
   return (
-    <div className="min-h-screen w-full bg-white text-[#1F1E1E] font-body selection:bg-[#1F1E1E] selection:text-white">
+    <div className="sharp-ui min-h-screen w-full bg-white text-[#1F1E1E] font-body selection:bg-[#1F1E1E] selection:text-white">
       {/* Top Navigation Bar */}
       <header className="w-full border-b border-[#D9D9D9] bg-white sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-10 h-16 flex items-center justify-between gap-2">
