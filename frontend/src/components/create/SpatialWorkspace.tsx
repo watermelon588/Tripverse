@@ -1,6 +1,17 @@
-import React from 'react';
-import { X, Layers, Compass, MapPin } from 'lucide-react';
-import { CurrentTripContext } from './CurrentTrip';
+/*
+ * SpatialWorkspace — right-hand column that will host the 3D route graph.
+ *
+ * Until the React Three Fiber scene lands here, it shows a live-drawn node
+ * graph of the active trip: nodes pop in and the edges draw themselves, so
+ * the panel previews what the spatial view is for instead of sitting empty.
+ */
+import React, { useRef } from 'react';
+import { useGSAP } from '@gsap/react';
+import gsap from 'gsap';
+
+import type { CurrentTripContext } from './CurrentTrip';
+import { CloseIcon, LayersIcon, PinIcon, RouteIcon } from '../home/v2/IconsV2';
+import { EASE, prefersReducedMotion } from '../home/v2/motion';
 
 interface SpatialWorkspaceProps {
   isOpen: boolean;
@@ -9,80 +20,140 @@ interface SpatialWorkspaceProps {
   className?: string;
 }
 
-/**
- * Dedicated 3rd-column workspace container for Map and Spatial Graph routing.
- */
-export const SpatialWorkspace: React.FC<SpatialWorkspaceProps> = ({
-  isOpen,
-  onClose,
-  trip,
-  className = '',
-}) => {
-  if (!isOpen) {
-    return null;
-  }
+// A small, legible preview graph laid out on a 320×220 canvas.
+const NODES = [
+  { id: 'a', x: 46, y: 150, label: 'Origin' },
+  { id: 'b', x: 128, y: 70, label: 'Stay' },
+  { id: 'c', x: 206, y: 142, label: 'Day trip' },
+  { id: 'd', x: 276, y: 58, label: 'Anchor' },
+];
+const EDGES: Array<[string, string]> = [
+  ['a', 'b'],
+  ['b', 'c'],
+  ['b', 'd'],
+  ['c', 'd'],
+];
+
+export const SpatialWorkspace: React.FC<SpatialWorkspaceProps> = ({ isOpen, onClose, trip, className = '' }) => {
+  const root = useRef<HTMLElement>(null);
+
+  useGSAP(
+    () => {
+      if (!isOpen || prefersReducedMotion()) return;
+
+      const tl = gsap.timeline({ defaults: { ease: EASE } });
+      tl.from(root.current, { x: 40, opacity: 0, duration: 0.7 })
+        .from('.tv-graph2__node', {
+          scale: 0,
+          transformOrigin: '50% 50%',
+          duration: 0.6,
+          stagger: 0.1,
+          ease: 'back.out(1.8)',
+        }, '-=0.3');
+
+      // Draw each edge along its own length.
+      gsap.utils.toArray<SVGLineElement>('.tv-graph2__edge').forEach((line, i) => {
+        const len = line.getTotalLength();
+        gsap.fromTo(
+          line,
+          { strokeDasharray: len, strokeDashoffset: len },
+          { strokeDashoffset: 0, duration: 0.9, ease: 'power2.inOut', delay: 0.55 + i * 0.12 },
+        );
+      });
+
+      tl.from('.tv-spatial__row', { y: 14, opacity: 0, duration: 0.6, stagger: 0.07 }, '-=0.2');
+
+      // Slow ambient pulse on the anchor node.
+      gsap.to('.tv-graph2__halo', {
+        scale: 1.6,
+        opacity: 0,
+        transformOrigin: '50% 50%',
+        duration: 2.2,
+        repeat: -1,
+        ease: 'power1.out',
+      });
+    },
+    { scope: root, dependencies: [isOpen] },
+  );
+
+  if (!isOpen) return null;
+
+  const pos = Object.fromEntries(NODES.map((n) => [n.id, n]));
 
   return (
-    <div
-      className={`w-full lg:w-[420px] xl:w-[480px] h-full bg-white dark:bg-[#151515] border-l border-[#D9D9D9] dark:border-[#2E2E2E] text-[#1F1E1E] dark:text-[#F5F5F5] flex flex-col justify-between shrink-0 font-body z-20 ${className}`}
-      aria-label="Spatial trip workspace"
-    >
-      {/* Header */}
-      <div className="p-4 border-b border-[#D9D9D9] dark:border-[#2E2E2E] flex items-center justify-between bg-[#F9F9F9] dark:bg-[#1A1A1A] shrink-0">
-        <div className="flex items-center gap-2">
-          <Layers className="w-4 h-4 text-[#1F1E1E] dark:text-[#F5F5F5]" />
-          <span className="font-extrabold uppercase tracking-wider text-xs text-[#1F1E1E] dark:text-white">
-            Spatial Route Preview
-          </span>
-        </div>
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-1 text-[#1F1E1E]/60 dark:text-[#F5F5F5]/60 hover:text-[#1F1E1E] dark:hover:text-white hover:bg-[#D9D9D9]/40 dark:hover:bg-[#262626] transition-colors cursor-pointer"
-          aria-label="Close spatial workspace"
-        >
-          <X className="w-4 h-4" />
+    <aside className={`tv-spatial ${className}`} ref={root} aria-label="Spatial trip workspace">
+      <div className="tv-spatial__bar">
+        <LayersIcon width={16} height={16} />
+        <span className="tv-label">Spatial view</span>
+        <span className="tv-app__bar-spacer" />
+        <button type="button" className="tv-iconbtn" onClick={onClose} aria-label="Close spatial view">
+          <CloseIcon width={16} height={16} />
         </button>
       </div>
 
-      {/* Spatial Visualization Canvas Placeholder */}
-      <div className="flex-1 p-6 flex flex-col items-center justify-center text-center bg-[#F9F9F9]/50 dark:bg-[#121212]/50 overflow-y-auto">
-        <div className="w-16 h-16 bg-[#1F1E1E] dark:bg-[#2A2A2A] text-white flex items-center justify-center mb-4 border border-[#1F1E1E] dark:border-[#444444]">
-          <Compass className="w-8 h-8" />
+      <div className="tv-spatial__body">
+        <div className="tv-spatial__canvas">
+          <svg viewBox="0 0 320 220" className="tv-graph2" role="img" aria-label="Preview of the trip route graph">
+            {EDGES.map(([from, to]) => (
+              <line
+                key={`${from}-${to}`}
+                className="tv-graph2__edge"
+                x1={pos[from].x}
+                y1={pos[from].y}
+                x2={pos[to].x}
+                y2={pos[to].y}
+              />
+            ))}
+            {NODES.map((n) => (
+              <g key={n.id}>
+                {n.id === 'd' && <circle className="tv-graph2__halo" cx={n.x} cy={n.y} r={11} />}
+                <circle className={`tv-graph2__node ${n.id === 'd' ? 'is-anchor' : ''}`} cx={n.x} cy={n.y} r={n.id === 'd' ? 8 : 6} />
+                <text className="tv-graph2__label" x={n.x} y={n.y + 22} textAnchor="middle">
+                  {n.label}
+                </text>
+              </g>
+            ))}
+          </svg>
         </div>
 
-        <h3 className="text-base font-black uppercase tracking-tight text-[#1F1E1E] dark:text-white mb-2">
-          {trip?.destination ? `${trip.destination} Route Map` : 'Interactive Spatial Topology'}
+        <h3 className="tv-display tv-spatial__title">
+          {trip?.destination ? (
+            <>
+              {trip.destination} <em>as a graph.</em>
+            </>
+          ) : (
+            <>
+              Your route, <em>as a graph.</em>
+            </>
+          )}
         </h3>
 
-        <p className="text-xs text-[#1F1E1E]/70 dark:text-[#F5F5F5]/70 max-w-xs leading-relaxed mb-6 font-medium">
-          Itinerary candidate destinations, route tracks, transit durations, and dynamic budget layers will render here as planning unfolds.
+        <p className="tv-body tv-spatial__copy">
+          Cities, stays, transit and costs become connected nodes as the plan takes shape. The full 3D
+          universe opens here once the itinerary is ready.
         </p>
 
-        {/* Mock Node Topology Preview Cards */}
-        <div className="w-full max-w-xs space-y-2 text-left">
-          <div className="p-3 bg-white dark:bg-[#1C1C1C] border border-[#D9D9D9] dark:border-[#2E2E2E] text-xs flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <MapPin className="w-3.5 h-3.5 text-[#1F1E1E] dark:text-[#F5F5F5]" />
-              <span className="font-bold text-[#1F1E1E] dark:text-white uppercase">Destination Anchor</span>
-            </div>
-            <span className="text-[10px] font-mono font-bold text-[#1F1E1E]/60 dark:text-[#F5F5F5]/60">
-              {trip?.destination || 'Global'}
-            </span>
+        <dl className="tv-spatial__rows">
+          <div className="tv-spatial__row">
+            <dt className="tv-meta">
+              <PinIcon width={12} height={12} /> Anchor
+            </dt>
+            <dd>{trip?.destination || 'Not set'}</dd>
           </div>
-
-          <div className="p-3 bg-white dark:bg-[#1C1C1C] border border-[#D9D9D9] dark:border-[#2E2E2E] text-xs flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Layers className="w-3.5 h-3.5 text-[#1F1E1E] dark:text-[#F5F5F5]" />
-              <span className="font-bold text-[#1F1E1E] dark:text-white uppercase">Route Tracks</span>
-            </div>
-            <span className="text-[10px] font-mono font-bold text-[#1F1E1E]/60 dark:text-[#F5F5F5]/60">
-              Multi-Hub Transit
-            </span>
+          <div className="tv-spatial__row">
+            <dt className="tv-meta">
+              <RouteIcon width={12} height={12} /> Stage
+            </dt>
+            <dd>{trip?.status ? trip.status.toLowerCase() : 'discovery'}</dd>
           </div>
-        </div>
+          <div className="tv-spatial__row">
+            <dt className="tv-meta">
+              <LayersIcon width={12} height={12} /> Length
+            </dt>
+            <dd>{trip?.days ? `${trip.days} days` : '—'}</dd>
+          </div>
+        </dl>
       </div>
-    </div>
+    </aside>
   );
 };

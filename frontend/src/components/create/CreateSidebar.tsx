@@ -1,10 +1,20 @@
-import React from "react";
-import { LogoMarkIcon } from "../home/HomeIcons";
-import { NewChatButton } from "./NewChatButton";
-import { CurrentTrip, CurrentTripContext } from "./CurrentTrip";
-import { ChatHistory, ChatSessionItem } from "./ChatHistory";
-import { X, ArrowLeft, User, Compass } from "lucide-react";
-import { useAuth } from "../../context/AuthContext";
+/*
+ * CreateSidebar — the planner's left rail, on the v2 system.
+ *
+ * Brand, a new-trip action, the active trip, past sessions, and account
+ * links. Resizable by drag on desktop; an overlay drawer below 1024px.
+ */
+import React, { useRef } from 'react';
+import { useGSAP } from '@gsap/react';
+import gsap from 'gsap';
+
+import { NewChatButton } from './NewChatButton';
+import { CurrentTrip, type CurrentTripContext } from './CurrentTrip';
+import { ChatHistory, type ChatSessionItem } from './ChatHistory';
+import { LogoLockup } from '../common/Logo';
+import { useAuth } from '../../context/AuthContext';
+import { ArrowRightIcon, CloseIcon, CompassIcon } from '../home/v2/IconsV2';
+import { EASE, prefersReducedMotion } from '../home/v2/motion';
 
 interface CreateSidebarProps {
   isOpen: boolean;
@@ -23,6 +33,8 @@ interface CreateSidebarProps {
   onWidthChange?: (newWidth: number) => void;
 }
 
+const isNarrow = () => window.innerWidth < 1024;
+
 export const CreateSidebar: React.FC<CreateSidebarProps> = ({
   isOpen,
   onClose,
@@ -36,176 +48,131 @@ export const CreateSidebar: React.FC<CreateSidebarProps> = ({
   onNavigateProfile,
   onNavigateExplore,
   onExploreSpatial,
-  width = 320,
+  width = 300,
   onWidthChange,
 }) => {
   const { user } = useAuth();
+  const root = useRef<HTMLElement>(null);
   const avatarUrl =
-    user?.user_metadata?.avatar_url ||
-    localStorage.getItem("tripverse-user-avatar");
-  const handleMouseDown = (e: React.MouseEvent) => {
+    user?.user_metadata?.avatar_url || localStorage.getItem('tripverse-user-avatar');
+
+  // Stagger the rail's contents in whenever it opens.
+  useGSAP(
+    () => {
+      if (!isOpen || prefersReducedMotion()) return;
+      gsap.from('.tv-side__stagger', {
+        x: -16,
+        opacity: 0,
+        duration: 0.7,
+        ease: EASE,
+        stagger: 0.05,
+      });
+    },
+    { scope: root, dependencies: [isOpen] },
+  );
+
+  const handleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
     const startWidth = width;
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const delta = moveEvent.clientX - startX;
-      const newWidth = Math.min(Math.max(startWidth + delta, 240), 520);
-      if (onWidthChange) {
-        onWidthChange(newWidth);
-      }
+    const onMove = (ev: MouseEvent) => {
+      onWidthChange?.(Math.min(Math.max(startWidth + ev.clientX - startX, 240), 520));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
 
-    const handleMouseUp = () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
   };
 
   return (
     <>
-      {/* Mobile & Tablet Backdrop */}
       <div
-        className={`fixed inset-0 bg-black/50 z-40 lg:hidden transition-opacity duration-200 ${
-          isOpen
-            ? "opacity-100 pointer-events-auto"
-            : "opacity-0 pointer-events-none"
-        }`}
+        className={`tv-side__scrim ${isOpen ? 'is-open' : ''}`}
         onClick={onClose}
         aria-hidden="true"
       />
 
-      {/* Sidebar Container */}
       <aside
-        style={isOpen ? { width: `${width}px` } : undefined}
-        className={`fixed lg:relative top-0 bottom-0 left-0 z-50 bg-white dark:bg-[#181818] border-r-2 border-[#1F1E1E] dark:border-[#333333] flex flex-col justify-between h-full font-body shrink-0 transition-transform lg:transition-[width] duration-200 ease-out shadow-tactile ${
-          isOpen
-            ? "translate-x-0 w-72 sm:w-80 lg:w-auto"
-            : "-translate-x-full lg:hidden w-0 pointer-events-none"
-        }`}
+        ref={root}
+        style={isOpen ? { width } : undefined}
+        className={`tv-side ${isOpen ? 'is-open' : ''}`}
         aria-label="Trip planning sidebar"
+        aria-hidden={!isOpen}
       >
-        {/* Top Header & Brand */}
-        <div className="p-4 border-b-2 border-[#1F1E1E] dark:border-[#333333] flex items-center justify-between shrink-0 bg-white dark:bg-[#181818]">
-          <div
-            className="flex items-center gap-2.5 cursor-pointer group"
-            onClick={onNavigateHome}
-          >
-            <LogoMarkIcon className="w-5 h-5 text-[#1F1E1E] dark:text-white transition-transform group-hover:scale-105" />
-            <span className="font-black tracking-widest text-sm text-[#1F1E1E] dark:text-white uppercase font-body">
-              TRIPVERSE
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            {onNavigateHome && (
-              <button
-                type="button"
-                onClick={onNavigateHome}
-                className="p-1.5 text-[#1F1E1E] dark:text-white bg-white dark:bg-[#252525] border-2 border-[#1F1E1E] dark:border-[#555555] shadow-tactile-sm btn-tactile cursor-pointer"
-                title="Back to Home"
-                aria-label="Back to Home"
-              >
-                <ArrowLeft className="w-4 h-4 stroke-[2.4]" />
-              </button>
-            )}
-
-            {/* Mobile Close Button */}
-            <button
-              type="button"
-              onClick={onClose}
-              className="lg:hidden p-1.5 text-[#1F1E1E] dark:text-white bg-white dark:bg-[#252525] border-2 border-[#1F1E1E] dark:border-[#555555] shadow-tactile-sm btn-tactile cursor-pointer"
-              aria-label="Close sidebar"
-            >
-              <X className="w-4 h-4 stroke-[2.4]" />
-            </button>
-          </div>
+        <div className="tv-side__head tv-side__stagger">
+          <button type="button" onClick={onNavigateHome} aria-label="TripVerse home">
+            <LogoLockup size={20} />
+          </button>
+          <button type="button" className="tv-iconbtn tv-side__close" onClick={onClose} aria-label="Close sidebar">
+            <CloseIcon width={17} height={17} />
+          </button>
         </div>
 
-        {/* Action Button: New Voyage */}
-        <div className="p-4 border-b-2 border-[#1F1E1E] dark:border-[#333333] shrink-0 bg-[#F9F9F9] dark:bg-[#1E1E1E]">
+        <div className="tv-side__new tv-side__stagger">
           <NewChatButton
             onClick={() => {
               onNewChat();
-              if (window.innerWidth < 1024) {
-                onClose();
-              }
+              if (isNarrow()) onClose();
             }}
           />
         </div>
 
-        {/* Scrollable Center: Current Trip Context & Chat History */}
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-          {/* Active Trip Context (rendered only if present) */}
-          <CurrentTrip trip={currentTrip} onExploreSpatial={onExploreSpatial} />
+        <div className="tv-side__body">
+          <div className="tv-side__stagger">
+            <CurrentTrip trip={currentTrip} onExploreSpatial={onExploreSpatial} />
+          </div>
 
-          {/* Past Sessions List */}
-          <ChatHistory
-            sessions={sessions}
-            activeSessionId={activeSessionId}
-            onSelectSession={(id) => {
-              onSelectSession(id);
-              if (window.innerWidth < 1024) {
-                onClose();
-              }
-            }}
-            onDeleteSession={onDeleteSession}
-          />
+          <div className="tv-side__stagger">
+            <ChatHistory
+              sessions={sessions}
+              activeSessionId={activeSessionId}
+              onSelectSession={(id) => {
+                onSelectSession(id);
+                if (isNarrow()) onClose();
+              }}
+              onDeleteSession={onDeleteSession}
+            />
+          </div>
         </div>
 
-        {/* Bottom Utility Footer */}
-        <div className="p-3 border-t-2 border-[#1F1E1E] dark:border-[#333333] shrink-0 bg-[#F9F9F9] dark:bg-[#1E1E1E] flex flex-col gap-2">
+        <div className="tv-side__foot tv-side__stagger">
           {onNavigateProfile && (
-            <button
-              type="button"
-              className="w-full py-3 px-4 bg-[#1F1E1E] dark:bg-white text-white dark:text-[#1F1E1E] font-black text-xs uppercase tracking-widest rounded-none flex items-center justify-center gap-2 hover:bg-black dark:hover:bg-neutral-200 border-2 border-[#1F1E1E] dark:border-white shadow-tactile-sm btn-tactile cursor-pointer"
-              onClick={onNavigateProfile}
-            >
-              {avatarUrl ? (
-                <div className="w-4 h-4 overflow-hidden rounded-none shrink-0 border border-white dark:border-[#1F1E1E]">
-                  <img
-                    src={avatarUrl}
-                    alt="Avatar"
-                    className="w-full h-full object-cover rounded-none"
-                  />
-                </div>
-              ) : (
-                <User className="w-4 h-4 stroke-[2.4]" />
-              )}
-              <span>My Profile</span>
+            <button type="button" className="tv-side__account" onClick={onNavigateProfile}>
+              <span className="tv-msg2__you">
+                {avatarUrl ? <img src={avatarUrl} alt="" /> : (user?.email ?? 'G').slice(0, 1).toUpperCase()}
+              </span>
+              <span className="tv-side__account-text">
+                <span className="tv-side__account-name">{user ? 'Account' : 'Guest'}</span>
+                <span className="tv-meta">{user?.email ?? 'Sign in to save trips'}</span>
+              </span>
+              <ArrowRightIcon width={14} height={14} />
             </button>
           )}
 
           {onNavigateExplore && (
-            <button
-              type="button"
-              onClick={onNavigateExplore}
-              className="w-full py-2.5 px-3 bg-white dark:bg-[#252525] text-[#1F1E1E] dark:text-[#F5F5F5] hover:bg-[#F2F2F2] dark:hover:bg-[#303030] border-2 border-[#1F1E1E] dark:border-[#555555] shadow-tactile-sm btn-tactile text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <Compass className="w-3.5 h-3.5 stroke-[2.4]" />
-              <span>Explore</span>
+            <button type="button" className="tv-btn tv-btn--ghost tv-btn--sm" style={{ width: '100%' }} onClick={onNavigateExplore}>
+              <CompassIcon width={14} height={14} />
+              <span>Explore routes</span>
             </button>
           )}
         </div>
 
-        {/* Draggable Resizer Handle (Desktop only) */}
         {isOpen && (
           <div
-            onMouseDown={handleMouseDown}
-            className="hidden lg:block absolute top-0 bottom-0 -right-1 w-2 cursor-col-resize z-30 select-none group"
-            title="Drag to resize sidebar"
+            className="tv-side__resize"
+            onMouseDown={handleResizeStart}
             role="separator"
             aria-orientation="vertical"
-          >
-            <div className="w-[3px] h-full mx-auto transition-colors group-hover:bg-[#1F1E1E] dark:group-hover:bg-white group-active:bg-[#1F1E1E] dark:group-active:bg-white" />
-          </div>
+            title="Drag to resize"
+          />
         )}
       </aside>
     </>
