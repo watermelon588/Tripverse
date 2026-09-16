@@ -538,3 +538,93 @@
 @media (max-width: 640px) {
   .tv-profile__trip-grid { grid-template-columns: 1fr; }
 }
+
+/* ==========================================================================
+ * Explore
+ * ========================================================================== */
+
+.tv-xp__lead { margin-bottom: 2rem; }
+
+.tv-xp__grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1rem;
+  padding-bottom: clamp(3rem, 6vw, 5rem);
+}
+
+.tv-xp__card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  cursor: pointer;
+}
+
+.tv-xp__card--2 { grid-column: span 2; }
+.tv-xp__card--3 { grid-column: span 3; }
+.tv-xp__card--4 { grid-column: span 4; }
+
+.tv-xp__fig { aspect-ratio: 4 / 3; }
+.tv-xp__card--2 .tv-xp__fig { aspect-ratio: 4 / 4.4; }
+.tv-xp__card--4 .tv-xp__fig { aspect-ratio: 16 / 9; }
+
+.tv-xp__badge { position: absolute; left: 0.85rem; bottom: 0.85rem; z-index: 2; }
+
+.tv-xp__meta { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.tv-xp__line { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+
+.tv-xp__title {
+  font-size: clamp(1.02rem, 1.4vw, 1.2rem);
+  font-weight: 500;
+  letter-spacing: -0.022em;
+  line-height: 1.26;
+}
+
+.tv-xp__go {
+  flex: none;
+  margin-top: 2px;
+  color: var(--tv-faint);
+  transition: color 0.2s var(--tv-ease), transform 0.25s var(--tv-ease);
+}
+
+.tv-xp__card:hover .tv-xp__go { color: var(--tv-ink); transform: translate(2px, -2px); }
+
+.tv-xp__desc { font-size: 0.88rem; color: var(--tv-muted); }
+
+.tv-xp__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--tv-line);
+}
+
+.tv-xp__foot .tv-meta { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.7rem; }
+
+.tv-xp__cta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1.35rem;
+  padding-block: clamp(3rem, 7vw, 5.5rem);
+  border-top: 1px solid var(--tv-line);
+}
+
+.tv-xp__cta-title { font-size: clamp(1.8rem, 3.4vw, 2.9rem); max-width: 20ch; }
+.tv-xp__cta-title em { color: var(--tv-muted); }
+
+@media (max-width: 1023px) {
+  .tv-xp__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .tv-xp__card--2 { grid-column: span 2; }
+  .tv-xp__card--3,
+  .tv-xp__card--4 { grid-column: span 4; }
+}
+
+@media (max-width: 640px) {
+  .tv-xp__grid { grid-template-columns: 1fr; }
+  .tv-xp__card--2,
+  .tv-xp__card--3,
+  .tv-xp__card--4 { grid-column: span 1; }
+  .tv-xp__card .tv-xp__fig { aspect-ratio: 4 / 3; }
+}
