@@ -11,105 +11,108 @@ export interface AuthVisualItem {
 }
 
 /**
- * Curated Collection of High-Resolution Travel Photography Assets
- * for TripVerse Authentication, Onboarding, and Spatial Canvases.
+ * Photography for the authentication panes.
+ *
+ * Captions were previously mislabelled — four frames claimed Kyoto, Porto,
+ * the Amalfi Coast and the Dolomites while showing Lisbon trams and an
+ * unidentified mountain range. They now describe what is actually in each
+ * photograph. Six of the eight are Lisbon's Carris tram network, which the
+ * livery and architecture make unmistakable; the remaining two are described
+ * by subject rather than assigned a location that cannot be verified.
  */
 export const AUTH_VISUALS: AuthVisualItem[] = [
   {
-    id: 'lisbon-bica-funicular',
-    name: 'Lisbon Bica Funicular',
+    id: 'lisbon-tram-cobbles',
+    name: 'Carris tram on cobbles',
     destination: 'LISBON',
-    location: 'BAIRRO ALTO, PORTUGAL',
-    experience: 'HISTORIC BICA FUNICULAR & STEEP COBBLESTONE TRAILS',
+    location: 'PORTUGAL',
+    experience: 'Remodelado trams working the cobbled hill routes',
     imageSrc: '/assets/auth/pexels-ugurcan-ozmen-61083217-28553917.jpg',
-    objectPosition: 'center 40%',
-    expeditionTag: 'EXPEDITION 01',
-    voyageTag: 'TRIPVERSE SPATIAL VOYAGE',
+    objectPosition: 'center 45%',
+    expeditionTag: 'Frame 01',
+    voyageTag: 'TripVerse',
   },
   {
-    id: 'lisbon-tram-24',
-    name: 'Lisbon Tram 24 (L. Camoes)',
+    id: 'lisbon-camoes',
+    name: 'Tram at Luís de Camões',
     destination: 'LISBON',
     location: 'PRAÇA LUÍS DE CAMÕES, PORTUGAL',
-    experience: 'SUNLIT TRAMWAYS & CLASSIC PORTUGUESE ARCHITECTURE',
+    experience: 'The Chiado terminus in full afternoon light',
     imageSrc: '/assets/auth/pexels-marceloverfe-16338751.jpg',
-    objectPosition: 'center 20%',
-    expeditionTag: 'EXPEDITION 02',
-    voyageTag: 'TRIPVERSE SPATIAL VOYAGE',
-  },
-  {
-    id: 'lisbon-tram-reflection',
-    name: 'Lisbon Tram 28 Water Reflection',
-    destination: 'LISBON',
-    location: 'ALFAMA DISTRICT, PORTUGAL',
-    experience: 'VINTAGE TRAM REFLECTIONS & HISTORIC STREETWAYS',
-    imageSrc: '/assets/auth/pexels-hikaique-1563234.jpg',
     objectPosition: 'center 35%',
-    expeditionTag: 'EXPEDITION 03',
-    voyageTag: 'TRIPVERSE SPATIAL VOYAGE',
+    expeditionTag: 'Frame 02',
+    voyageTag: 'TripVerse',
   },
   {
-    id: 'lisbon-tram-cobblestone',
-    name: 'Lisbon Tram 28 Cobblestone Descent',
+    id: 'lisbon-reflection',
+    name: 'Tram mirrored in rainwater',
+    destination: 'LISBON',
+    location: 'BAIXA, PORTUGAL',
+    experience: 'A yellow tram doubled in standing rainwater',
+    imageSrc: '/assets/auth/pexels-hikaique-1563234.jpg',
+    objectPosition: 'center 50%',
+    expeditionTag: 'Frame 03',
+    voyageTag: 'TripVerse',
+  },
+  {
+    id: 'lisbon-santa-catarina',
+    name: 'Tram descending Santa Catarina',
     destination: 'LISBON',
     location: 'SANTA CATARINA, PORTUGAL',
-    experience: 'COBBLESTONE BOULEVARDS & TERRACOTTA ROOFTOPS',
+    experience: 'Pastel facades along the descent to the river',
     imageSrc: '/assets/auth/pexels-popovkin-27401407.jpg',
-    objectPosition: 'center 50%',
-    expeditionTag: 'EXPEDITION 04',
-    voyageTag: 'TRIPVERSE SPATIAL VOYAGE',
+    objectPosition: 'center 40%',
+    expeditionTag: 'Frame 04',
+    voyageTag: 'TripVerse',
   },
   {
-    id: 'kyoto-pagoda',
-    name: 'Kyoto Yasaka Pagoda',
-    destination: 'KYOTO',
-    location: 'HIGASHIYAMA, JAPAN',
-    experience: 'SACRED SHRINES, WOODEN PAGODAS & BAMBOO TRAILS',
+    id: 'lisbon-carreira-28',
+    name: 'Carreira 28',
+    destination: 'LISBON',
+    location: 'ROUTE 28, PORTUGAL',
+    experience: 'The 28 working its way through the old town',
     imageSrc: '/assets/auth/pexels-815774834-19259314.jpg',
-    objectPosition: 'center center',
-    expeditionTag: 'EXPEDITION 05',
-    voyageTag: 'TRIPVERSE SPATIAL VOYAGE',
+    objectPosition: 'center 45%',
+    expeditionTag: 'Frame 05',
+    voyageTag: 'TripVerse',
   },
   {
-    id: 'porto-vintage-tram',
-    name: 'Porto Vintage Streetcar',
-    destination: 'PORTO',
-    location: 'DOURO VALLEY, PORTUGAL',
-    experience: 'HISTORIC TRAMWAYS & DOURO RIVER PANORAMAS',
+    id: 'lisbon-plaza',
+    name: 'Tram crossing the plaza',
+    destination: 'LISBON',
+    location: 'PORTUGAL',
+    experience: 'Overhead lines and tiled facades above the tracks',
     imageSrc: '/assets/auth/pexels-cruz-in-portugal-22037151.jpg',
-    objectPosition: 'center 15%',
-    expeditionTag: 'EXPEDITION 06',
-    voyageTag: 'TRIPVERSE SPATIAL VOYAGE',
+    objectPosition: 'center 40%',
+    expeditionTag: 'Frame 06',
+    voyageTag: 'TripVerse',
   },
   {
-    id: 'amalfi-coastal-cliffs',
-    name: 'Amalfi Coastal Cliffs',
-    destination: 'AMALFI COAST',
-    location: 'CAMPANIA, ITALY',
-    experience: 'MEDITERRANEAN CLIFFS & TURQUOISE LAGOONS',
+    id: 'mountain-range',
+    name: 'Snow-capped range',
+    destination: 'HIGH COUNTRY',
+    location: 'ALPINE RANGE',
+    experience: 'Cloud breaking over a snow-dusted ridgeline',
     imageSrc: '/assets/auth/pexels-lorenzomessinaph-34666834.jpg',
-    objectPosition: 'center center',
-    expeditionTag: 'EXPEDITION 07',
-    voyageTag: 'TRIPVERSE SPATIAL VOYAGE',
+    objectPosition: 'center 50%',
+    expeditionTag: 'Frame 07',
+    voyageTag: 'TripVerse',
   },
   {
-    id: 'dolomites-alpine-peaks',
-    name: 'Dolomites Alpine Peaks',
-    destination: 'DOLOMITES',
-    location: 'SOUTH TYROL, ITALY',
-    experience: 'ALPINE RIDGELINES & EMERALD VALLEYS',
+    id: 'domed-facade',
+    name: 'Domed civic facade',
+    destination: 'OLD QUARTER',
+    location: 'HISTORIC CENTRE',
+    experience: 'A copper dome and turret against hard blue sky',
     imageSrc: '/assets/auth/pexels-zeynep-yilmaz-327514331-31922059.jpg',
-    objectPosition: 'center center',
-    expeditionTag: 'EXPEDITION 08',
-    voyageTag: 'TRIPVERSE SPATIAL VOYAGE',
+    objectPosition: 'center 40%',
+    expeditionTag: 'Frame 08',
+    voyageTag: 'TripVerse',
   },
 ];
 
-/** Dedicated Visual for Signup Page: Lisbon Bica Funicular */
-export const SIGNUP_AUTH_VISUAL: AuthVisualItem = AUTH_VISUALS[5];
+export const SIGNUP_AUTH_VISUAL: AuthVisualItem = AUTH_VISUALS[1];
 
-/** Dedicated Visual for Login Page: Lisbon Tram 24 */
 export const LOGIN_AUTH_VISUAL: AuthVisualItem = AUTH_VISUALS[4];
 
-/** Default active visual for Auth pages */
 export const DEFAULT_AUTH_VISUAL: AuthVisualItem = SIGNUP_AUTH_VISUAL;
