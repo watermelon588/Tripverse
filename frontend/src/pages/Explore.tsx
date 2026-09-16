@@ -307,7 +307,7 @@ export function Explore({ onStartPlanning, onNavigateHome }: ExploreProps) {
   }, [selectedCategory, reducedMotion]);
 
   return (
-    <div ref={containerRef} className="explore-page">
+    <div ref={containerRef} className="sharp-ui explore-page">
       {/* Persistent Fixed Navigation Bar */}
       <Navbar
         scrolled={scrolled}

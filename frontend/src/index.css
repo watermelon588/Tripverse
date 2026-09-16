@@ -2,8 +2,9 @@
 @custom-variant dark (&:where(.dark, .dark *));
 @import "./styles/home.css";
 
-/* v2 redesign — scoped under .tv2, see tripverse-v2.css */
+/* v2 marketing redesign — scoped under .tv2, see tripverse-v2.css */
 @import "./styles/tripverse-v2.css";
+@import "./styles/tripverse-v2-components.css";
 
 @layer base {
   :root {
@@ -48,19 +49,26 @@
     --app-shadow: #000000;
   }
 
-  /* Universal Sharp Edges Constraint (border-radius = 0 for entire app) */
-  *,
-  *::before,
-  *::after,
-  button,
-  input,
-  select,
-  textarea,
-  dialog,
-  [role="dialog"],
-  [role="button"],
-  [role="menu"],
-  [role="tab"] {
+  /*
+   * Sharp Edges Constraint (border-radius = 0).
+   *
+   * Scoped to `.sharp-ui` rather than applied globally: the v2 home redesign
+   * (`.tv2`) uses a soft-radius minimal system and cannot live under an
+   * `!important` zero-radius reset. Legacy surfaces opt in via `.sharp-ui`.
+   */
+  .sharp-ui,
+  .sharp-ui *,
+  .sharp-ui *::before,
+  .sharp-ui *::after,
+  .sharp-ui button,
+  .sharp-ui input,
+  .sharp-ui select,
+  .sharp-ui textarea,
+  .sharp-ui dialog,
+  .sharp-ui [role="dialog"],
+  .sharp-ui [role="button"],
+  .sharp-ui [role="menu"],
+  .sharp-ui [role="tab"] {
     border-radius: 0 !important;
   }
 
@@ -89,17 +97,18 @@
     transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease !important;
   }
 
-  button:hover:not(:disabled),
-  [role="button"]:hover:not(:disabled),
-  .btn:hover:not(:disabled),
-  .button:hover:not(:disabled) {
+  /* Legacy tactile lift — scoped so the v2 redesign controls its own feedback. */
+  .sharp-ui button:hover:not(:disabled),
+  .sharp-ui [role="button"]:hover:not(:disabled),
+  .sharp-ui .btn:hover:not(:disabled),
+  .sharp-ui .button:hover:not(:disabled) {
     transform: translateY(-2px);
   }
 
-  button:active:not(:disabled),
-  [role="button"]:active:not(:disabled),
-  .btn:active:not(:disabled),
-  .button:active:not(:disabled) {
+  .sharp-ui button:active:not(:disabled),
+  .sharp-ui [role="button"]:active:not(:disabled),
+  .sharp-ui .btn:active:not(:disabled),
+  .sharp-ui .button:active:not(:disabled) {
     transform: translateY(0);
   }
 }

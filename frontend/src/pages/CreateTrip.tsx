@@ -1046,7 +1046,7 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
 
   return (
     <div
-      className={`relative h-screen w-full flex overflow-hidden font-body ${
+      className={`sharp-ui relative h-screen w-full flex overflow-hidden font-body ${
         isDark
           ? 'dark bg-[#1F1E1E] text-[#F5F5F5] selection:bg-white selection:text-[#1F1E1E]'
           : 'bg-white text-[#1F1E1E] selection:bg-[#1F1E1E] selection:text-white'
