@@ -1,5 +1,16 @@
-import React from 'react';
-import { AuthVisualItem, DEFAULT_AUTH_VISUAL } from '../../constants/authVisuals';
+/*
+ * AuthVisual — the photographic pane beside the auth form.
+ *
+ * Rotates slowly through the curated collection with a cross-fade, so the
+ * page has a heartbeat without anything moving under the reader's eye. The
+ * caption is set in the marketing system's display serif.
+ */
+import { useEffect, useRef, useState } from 'react';
+import { useGSAP } from '@gsap/react';
+import gsap from 'gsap';
+
+import { AUTH_VISUALS, type AuthVisualItem } from '../../constants/authVisuals';
+import { prefersReducedMotion, EASE } from '../home/v2/motion';
 
 interface AuthVisualProps {
   visual?: AuthVisualItem;
@@ -8,65 +19,98 @@ interface AuthVisualProps {
   location?: string;
   experience?: string;
   objectPosition?: string;
-  expeditionTag?: string;
-  voyageTag?: string;
+  /** Rotate through the whole collection instead of holding one frame. */
+  rotate?: boolean;
 }
 
-export const AuthVisual: React.FC<AuthVisualProps> = ({
-  visual = DEFAULT_AUTH_VISUAL,
+const ROTATE_MS = 6500;
+
+export function AuthVisual({
+  visual,
   imageSrc,
   destination,
   location,
   experience,
   objectPosition,
-  expeditionTag,
-  voyageTag,
-}) => {
-  const activeImage = imageSrc || visual.imageSrc;
-  const activeDestination = destination || visual.destination;
-  const activeLocation = location || visual.location;
-  const activeExperience = experience || visual.experience;
-  const activePosition = objectPosition || visual.objectPosition;
-  const activeExpedition = expeditionTag || visual.expeditionTag;
-  const activeVoyage = voyageTag || visual.voyageTag;
+  rotate = true,
+}: AuthVisualProps) {
+  // Start the rotation on whichever frame the caller pinned, so the first
+  // paint matches what the page asked for.
+  const startIndex = Math.max(
+    0,
+    AUTH_VISUALS.findIndex((v) => v.id === visual?.id),
+  );
+
+  const [index, setIndex] = useState(startIndex);
+  const root = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const metaRef = useRef<HTMLDivElement>(null);
+
+  const frames = rotate ? AUTH_VISUALS : [visual ?? AUTH_VISUALS[startIndex]];
+  const current = frames[index % frames.length] ?? AUTH_VISUALS[0];
+
+  const src = imageSrc ?? current.imageSrc;
+  const pos = objectPosition ?? current.objectPosition;
+  const dest = destination ?? current.destination;
+  const loc = location ?? current.location;
+  const exp = experience ?? current.experience;
+
+  useEffect(() => {
+    if (!rotate || frames.length < 2 || prefersReducedMotion()) return;
+    const t = window.setInterval(() => setIndex((i) => (i + 1) % frames.length), ROTATE_MS);
+    return () => window.clearInterval(t);
+  }, [rotate, frames.length]);
+
+  // Cross-fade the photograph and lift the caption on every change.
+  useGSAP(
+    () => {
+      if (prefersReducedMotion()) return;
+      gsap.fromTo(imgRef.current, { opacity: 0, scale: 1.06 }, { opacity: 1, scale: 1, duration: 1.5, ease: EASE });
+      gsap.fromTo(
+        metaRef.current?.children ?? [],
+        { y: 18, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.9, ease: EASE, stagger: 0.07 },
+      );
+    },
+    { scope: root, dependencies: [index] },
+  );
 
   return (
-    <div className="relative w-full h-full min-h-[360px] lg:min-h-full overflow-hidden bg-[#1F1E1E] select-none">
-      {/* Background Photography Asset */}
+    <div className="tv-auth__visual" ref={root}>
       <img
-        src={activeImage}
-        alt={`${activeDestination} - ${activeExperience}`}
-        className="w-full h-full object-cover"
-        style={{ objectPosition: activePosition }}
-        loading="eager"
+        ref={imgRef}
+        key={src}
+        src={src}
+        alt={`${dest} — ${loc}`}
+        style={{ objectPosition: pos }}
+        className="tv-img"
       />
+      <span className="tv-auth__visual-wash" aria-hidden="true" />
 
-      {/* Solid High-Contrast Editorial Overlay Badges */}
-      <div className="absolute top-6 left-6 right-6 flex justify-between items-start pointer-events-none">
-        <div className="bg-[#1F1E1E] text-white px-3 py-1.5 text-[11px] font-bold tracking-widest uppercase rounded-none">
-          {activeVoyage}
-        </div>
-        <div className="bg-white text-[#1F1E1E] px-3 py-1.5 text-[11px] font-bold tracking-widest uppercase rounded-none hidden sm:block">
-          {activeExpedition}
-        </div>
-      </div>
+      <div className="tv-auth__visual-meta tv-invert" ref={metaRef}>
+        <span className="tv-label">{current.expeditionTag}</span>
+        <h2 className="tv-display tv-auth__visual-title">{dest}</h2>
+        <p className="tv-meta">{loc}</p>
+        <p className="tv-meta" style={{ maxWidth: '38ch' }}>
+          {exp}
+        </p>
 
-      <div className="absolute bottom-8 left-8 right-8 flex flex-col gap-3 pointer-events-none">
-        <div className="bg-[#1F1E1E] text-white p-5 rounded-none max-w-md border-l-4 border-white">
-          <div className="text-[10px] font-bold tracking-widest uppercase text-[#D9D9D9] mb-1">
-            DESTINATION SNAPSHOT
+        {rotate && frames.length > 1 && (
+          <div className="tv-auth__dots" role="tablist" aria-label="Featured destinations">
+            {frames.map((f, i) => (
+              <button
+                key={f.id}
+                type="button"
+                role="tab"
+                aria-selected={i === index}
+                aria-label={f.destination}
+                className={`tv-auth__dot ${i === index ? 'is-on' : ''}`}
+                onClick={() => setIndex(i)}
+              />
+            ))}
           </div>
-          <div className="text-2xl font-black tracking-tight text-white uppercase font-body">
-            {activeDestination}
-          </div>
-          <div className="text-xs font-semibold tracking-wider text-[#D9D9D9] mt-0.5 uppercase font-body">
-            {activeLocation}
-          </div>
-          <div className="text-xs text-white/80 mt-2 font-medium font-body">
-            {activeExperience}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
-};
+}

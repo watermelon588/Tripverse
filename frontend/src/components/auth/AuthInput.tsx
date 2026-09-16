@@ -1,66 +1,76 @@
-import React, { useState } from "react";
+/*
+ * AuthInput — v2 form field.
+ *
+ * Label above, helper/error below, focus resolves the hairline to full ink
+ * with a soft ring. Password fields carry a mono SHOW/HIDE toggle.
+ */
+import React, { useId, useState } from 'react';
 
 interface AuthInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
   error?: string;
+  hint?: string;
 }
 
 export const AuthInput: React.FC<AuthInputProps> = ({
   label,
-  type = "text",
+  type = 'text',
   id,
   error,
+  hint,
   required,
+  className = '',
   ...props
 }) => {
-  const [showPassword, setShowPassword] = useState(false);
-  const isPasswordType = type === "password";
-  const inputType = isPasswordType
-    ? showPassword
-      ? "text"
-      : "password"
-    : type;
-  const inputId =
-    id || `auth-input-${label.toLowerCase().replace(/\s+/g, "-")}`;
+  const [reveal, setReveal] = useState(false);
+  const reactId = useId();
+
+  const isPassword = type === 'password';
+  const inputType = isPassword && reveal ? 'text' : type;
+  const inputId = id ?? `field-${reactId}`;
+  const describedBy = error ? `${inputId}-err` : hint ? `${inputId}-hint` : undefined;
 
   return (
-    <div className="flex flex-col gap-1.5 w-full">
-      <div className="flex justify-between items-center">
-        <label
-          htmlFor={inputId}
-          className="text-xs font-semibold uppercase tracking-wider text-[#1F1E1E]"
-        >
-          {label} {required && <span className="text-red-500">*</span>}
-        </label>
-      </div>
+    <div className="tv-field">
+      <label htmlFor={inputId} className="tv-field__label">
+        {label}
+        {required && <span className="tv-field__req"> *</span>}
+      </label>
 
-      <div className="relative w-full">
+      <div className="tv-field__wrap">
         <input
           id={inputId}
           type={inputType}
           required={required}
-          className={`w-full px-4 py-3 bg-[#D9D9D9] text-[#1F1E1E] placeholder:text-[#1F1E1E]/50 rounded-none border border-transparent focus:border-[#1F1E1E] focus:bg-white focus:outline-none transition-colors duration-150 text-sm font-medium ${
-            error ? "border-red-500 bg-red-50" : ""
-          }`}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy}
+          className={`tv-input ${error ? 'has-error' : ''} ${className}`}
+          style={isPassword ? { paddingRight: '4.25rem' } : undefined}
           {...props}
         />
 
-        {isPasswordType && (
+        {isPassword && (
           <button
             type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold uppercase tracking-wider text-[#1F1E1E]/60 hover:text-[#1F1E1E] px-1 py-0.5 rounded-none"
-            aria-label={showPassword ? "Hide password" : "Show password"}
+            className="tv-field__reveal"
+            onClick={() => setReveal((v) => !v)}
+            aria-label={reveal ? 'Hide password' : 'Show password'}
           >
-            {showPassword ? "Hide" : "Show"}
+            {reveal ? 'Hide' : 'Show'}
           </button>
         )}
       </div>
 
-      {error && (
-        <span className="text-xs font-medium text-red-600 mt-0.5" role="alert">
+      {error ? (
+        <span id={`${inputId}-err`} className="tv-field__error" role="alert">
           {error}
         </span>
+      ) : (
+        hint && (
+          <span id={`${inputId}-hint`} className="tv-meta" style={{ fontSize: '0.72rem' }}>
+            {hint}
+          </span>
+        )
       )}
     </div>
   );
