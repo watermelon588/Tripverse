@@ -2,6 +2,9 @@
 @custom-variant dark (&:where(.dark, .dark *));
 @import "./styles/home.css";
 
+/* v2 redesign — scoped under .tv2, see tripverse-v2.css */
+@import "./styles/tripverse-v2.css";
+
 @layer base {
   :root {
     --font-grand-hero: 'Jockey One', system-ui, sans-serif;
