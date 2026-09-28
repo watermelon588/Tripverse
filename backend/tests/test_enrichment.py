@@ -157,6 +157,16 @@ async def test_no_dates_means_only_the_exchange_rate_and_same_currency_means_non
     assert rupees.exchange is not None  # INR trip in Japan still gets the yen rate
     assert "met.no" not in calls and "nager" not in calls
 
+    requested = []
+    async def spy(self, url, params=None, **kwargs):
+        if "frankfurter" in str(url):
+            requested.append(params["symbols"])
+        return await get(self, url, params=params, **kwargs)
+    with patch("httpx.AsyncClient.get", spy):
+        async with httpx.AsyncClient() as client:
+            await enrichment.enrich(client, "Kyoto", None, [(1, "Kyoto", [])], "JPY", home="USD")
+    assert requested == ["USD"]  # the traveler's home currency replaces the INR default; JPY is the trip's own
+
 
 @pytest.mark.asyncio
 async def test_get_enrichment_is_off_switchable_and_swallows_everything(monkeypatch):
@@ -199,6 +209,22 @@ async def test_agent_turn_facts_include_the_current_days_conditions():
     assert facts["current_day"]["weather"]["label"] == "Forecast"
     assert await _conditions({"planning_preferences": {}}, copilot) is None  # no dates: nothing to say
     assert await _conditions({**state, "nav_only": True}, copilot) is None
+
+
+@pytest.mark.asyncio
+async def test_one_shot_drafts_get_forecast_days_and_holidays_only():
+    from app.agents.trip_planner.nodes.planning_trip_node import CONDITIONS_TASK, build_plan_generation_prompt
+    get, _ = router(holiday_on=TODAY + timedelta(days=1), rain_per_hour=0.5)
+    with patch("httpx.AsyncClient.get", get):
+        conditions = await enrichment.draft_conditions("Kyoto", TODAY, 12, "JPY")
+    days = [f["day"] for f in conditions["forecast"]]
+    assert days and max(days) <= 5 and conditions["forecast"][0]["note"].startswith("Rain forecast")  # no typical days
+    assert conditions["public_holidays"] == [{"day": 2, "date": (TODAY + timedelta(days=1)).strftime("%a %d %b"), "name": "Sports Day"}]
+    assert await enrichment.draft_conditions("Kyoto", None, 3, "JPY") is None
+
+    prompt = build_plan_generation_prompt({"conditions": conditions}, "Kyoto", 12)
+    assert '"public_holidays"' in prompt and CONDITIONS_TASK.strip() in prompt
+    assert CONDITIONS_TASK.strip() not in build_plan_generation_prompt({}, "Kyoto", 12)
 
 
 @pytest.mark.asyncio

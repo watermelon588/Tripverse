@@ -21,6 +21,7 @@ export interface OnboardingValues {
     comfort?: Comfort;
     travel_mode?: TravelMode;
     guide?: string | null;
+    home_currency?: (typeof CURRENCIES)[number] | null;
   };
   budget_amount?: number | null;
   currency?: (typeof CURRENCIES)[number] | null;
@@ -52,6 +53,7 @@ export const TripOnboardingForm: React.FC<Props> = ({ initial, disabled, onSubmi
   const [children, setChildren] = useState(String(prefs?.children ?? 0));
   const [budget, setBudget] = useState(initial?.budget_amount ? String(initial.budget_amount) : '');
   const [currency, setCurrency] = useState<(typeof CURRENCIES)[number]>(initial?.currency || 'INR');
+  const [homeCurrency, setHomeCurrency] = useState<(typeof CURRENCIES)[number]>(prefs?.home_currency || 'INR');
   const [comfort, setComfort] = useState<Comfort>(prefs?.comfort || 'mid_range');
   const [travelMode, setTravelMode] = useState<TravelMode>(prefs?.travel_mode || 'transit');
   const [pace, setPace] = useState<Pace>(prefs?.pace || 'balanced');
@@ -98,7 +100,7 @@ export const TripOnboardingForm: React.FC<Props> = ({ initial, disabled, onSubmi
       planning_preferences: {
         pace, interests: selectedInterests, avoid: selectedAvoid,
         start_date: startDate || null, adults: adultCount, children: childCount,
-        comfort, travel_mode: travelMode, guide,
+        comfort, travel_mode: travelMode, guide, home_currency: homeCurrency,
       },
       budget_amount: budgetAmount,
       currency,
@@ -147,6 +149,12 @@ export const TripOnboardingForm: React.FC<Props> = ({ initial, disabled, onSubmi
             <select className="tv-input" value={currency} onChange={(e) => setCurrency(e.target.value as (typeof CURRENCIES)[number])} disabled={disabled}>
               {CURRENCIES.map((code) => <option key={code} value={code}>{code}</option>)}
             </select>
+          </label>
+          <label>Your home currency
+            <select className="tv-input" value={homeCurrency} onChange={(e) => setHomeCurrency(e.target.value as (typeof CURRENCIES)[number])} disabled={disabled}>
+              {CURRENCIES.map((code) => <option key={code} value={code}>{code}</option>)}
+            </select>
+            <small>For “≈” conversions of local prices.</small>
           </label>
         </div>
       </fieldset>

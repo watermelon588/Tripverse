@@ -114,6 +114,15 @@ month(s). Follow its how_to_use guidance when choosing and ordering places, and 
 "Season notes" line with the packing tip. Say "typical for <month>", never "forecast".
 """
 
+CONDITIONS_TASK = """
+Plan around the context's "conditions" block (real data for the trip's dates):
+- forecast: on a rainy or stormy day, put the indoor highlights there and move outdoor sights to a
+  drier day; on a hot day, do outdoor sights early or late. Call it the forecast for that day.
+- public_holidays: expect closures and crowds. Put popular sights early, suggest booking ahead, and
+  mention the holiday by name on its day.
+Only mention the days listed; don't guess at the weather for other days.
+"""
+
 
 def build_plan_generation_prompt(
     planning_result: dict[str, Any],
@@ -138,6 +147,8 @@ def build_plan_generation_prompt(
         # Typical weather for the travel months (seasonality.trip_season); kept ahead of the research
         # so truncation below never drops it. Absent when there's no start date or the lookup failed.
         **({"season": planning_result["season"]} if planning_result.get("season") else {}),
+        # Forecast days and public holidays in the trip's dates (enrichment.draft_conditions), same rules.
+        **({"conditions": planning_result["conditions"]} if planning_result.get("conditions") else {}),
         "trip_type": planning_result.get("trip_type"),
         "planning_notes": planning_result.get("planning_notes"),
         "research_queries": planning_result.get("research_queries", []),
@@ -177,7 +188,7 @@ The traveler has not asked for an exact booking plan. Give them a practical,
 high-level itinerary they can react to and modify.
 
 Use the researched candidates and findings instead of generic filler.
-{SEASON_TASK if planning_result.get('season') else ''}
+{SEASON_TASK if planning_result.get('season') else ''}{CONDITIONS_TASK if planning_result.get('conditions') else ''}
 Formatting:
 - Return valid Markdown only.
 - Do not use raw HTML tags such as <br>, <div>, <table>, <p>, or <span>.

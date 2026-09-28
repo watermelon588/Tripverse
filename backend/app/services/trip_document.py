@@ -67,7 +67,8 @@ async def build_trip_document(db: AsyncSession, trip: Trip) -> TripDocument:
     conditions_days = [(day.day, day.base, [(item.name, " ".join(filter(None, (item.name, item.category, item.area))))
                                             for item in day.items]) for day in days] \
         or [(number, trip.destination, []) for number in range(1, duration + 1) if trip.destination]
-    enrichment = await get_enrichment(trip.destination, start, conditions_days, budget.currency)
+    enrichment = await get_enrichment(trip.destination, start, conditions_days, budget.currency,
+                                      home=prefs.get("home_currency"))
 
     names = {node.get("id"): node.get("name") for node in (graph or {}).get("nodes", [])}
     legs = [DocLeg(source=names[edge["source"]], target=names[edge["target"]],

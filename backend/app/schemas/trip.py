@@ -154,6 +154,8 @@ class PlanningPreferences(BaseModel):
     comfort: Literal["budget", "mid_range", "comfortable"] = "mid_range"
     travel_mode: Literal["transit", "walk", "taxi", "drive"] = "transit"
     guide: Optional[str] = Field(default=None, pattern=r"^[a-z0-9-]{1,32}$")
+    # The traveler's own currency, for "≈" conversions next to trip amounts (enrichment's exchange rates).
+    home_currency: Optional[Literal["INR", "JPY", "USD", "EUR", "GBP", "AUD", "CAD"]] = None
 
     @field_validator("interests", "avoid")
     @classmethod
