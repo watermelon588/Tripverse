@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 # Ensure test suite runs 100% offline with LangSmith tracing disabled
 os.environ["LANGSMITH_TRACING"] = "false"
 os.environ["LANGCHAIN_TRACING_V2"] = "false"
+os.environ["ENRICHMENT_ENABLED"] = "false"  # weather/holiday/currency APIs; test_enrichment.py turns it on with mocks
 
 from app.core.database import Base, get_db
 from app.main import app

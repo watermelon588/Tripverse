@@ -112,6 +112,32 @@ export interface TripDocumentItem {
   option: boolean;
 }
 
+export interface TripNote { tone: 'good' | 'warn' | 'info'; text: string }
+
+/** Weather, holidays and exchange rates around the trip's dates (backend `services/enrichment.py`). */
+export interface TripEnrichment {
+  weather: {
+    day: number;
+    date: string;
+    base: string;
+    /** A real forecast, or the month's climate average: always show `label` with the numbers. */
+    kind: 'forecast' | 'typical';
+    label: string;
+    condition: 'sun' | 'partly' | 'cloud' | 'fog' | 'rain' | 'snow' | 'storm' | null;
+    temp_min: number | null;
+    temp_max: number | null;
+    temp_mean: number | null;
+    /** Forecast: that day's total. Typical: the average per day. */
+    rain_mm: number | null;
+    badge: TripNote | null;
+    notes: TripNote[];
+  }[];
+  holidays: { day: number; date: string; name: string; local_name: string | null; country: string; regional: boolean }[];
+  /** 1 `base` = rate × currency, ECB reference rates. */
+  exchange: { base: string; rates: Record<string, number>; date: string } | null;
+  sources: { name: string; url: string; covers: string }[];
+}
+
 export interface TripDocument {
   trip_id: string;
   mode: 'agent' | 'one_shot' | 'none';
@@ -133,6 +159,8 @@ export interface TripDocument {
   legs: { source: string; target: string; mode: string | null; duration: string | null; distance: string | null; cost: string | null }[];
   budget: { currency: string; target: number | null; planned: number | null; entered: number; projected: number };
   graph: ItineraryGraph | null;
+  /** Null when every source failed, enrichment is off, or the trip has nothing to look up yet. */
+  enrichment: TripEnrichment | null;
 }
 
 export async function getTripDocument(tripId: string): Promise<TripDocument> {
