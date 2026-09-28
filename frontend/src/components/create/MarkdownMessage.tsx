@@ -45,6 +45,7 @@ interface MarkdownMessageProps {
 export const MarkdownMessage: React.FC<MarkdownMessageProps> = React.memo(
   ({ content, className = '' }) => {
     if (!content) return null;
+    const readableContent = content.replace(/<br\s*\/?\s*>/gi, '; ');
 
     return (
       <MarkdownErrorBoundary fallbackContent={content}>
@@ -73,7 +74,7 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = React.memo(
               },
             }}
           >
-            {content}
+            {readableContent}
           </ReactMarkdown>
         </div>
       </MarkdownErrorBoundary>

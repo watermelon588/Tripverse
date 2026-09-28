@@ -15,6 +15,8 @@ import { MarkdownMessage } from './MarkdownMessage';
 import { useAuth } from '../../context/AuthContext';
 import { CheckIcon, ClockIcon, PinIcon, PlaneIcon, WalletIcon } from '../home/v2/IconsV2';
 import { EASE, prefersReducedMotion } from '../home/v2/motion';
+import type { ItineraryGraph } from './itineraryGraph';
+import type { CopilotState } from './CopilotPanel';
 
 export interface ChatMessageItem {
   id: string;
@@ -22,6 +24,10 @@ export interface ChatMessageItem {
   content: string;
   timestamp: string;
   stage?: string;
+  payload?: {
+    action?: string; values?: Record<string, unknown>; kind?: string; graph?: ItineraryGraph;
+    copilot?: CopilotState;
+  } | null;
   metadata?: {
     destination?: string;
     duration?: string;
@@ -39,8 +45,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
   const { user } = useAuth();
   const root = useRef<HTMLDivElement>(null);
 
-  const avatarUrl =
-    user?.user_metadata?.avatar_url || localStorage.getItem('tripverse-user-avatar');
+  const avatarUrl = user?.user_metadata?.avatar_url;
   const isUser = message.sender === 'user';
   const isSystem = message.sender === 'system';
 
