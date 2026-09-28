@@ -413,117 +413,26 @@
 .tv-msg2--user .tv-md strong { color: var(--tv-canvas); }
 
 /* ==========================================================================
- * Spatial panel
+ * Route views: loading and empty states (SpatialWorkspace) and the MapLibre fallback map (TripRouteMap).
+ * The old side panel's rules went with it; the current panel lives in spatial-workspace.css.
  * ========================================================================== */
 
-.tv-spatial {
-  position: fixed;
-  z-index: 60;
-  inset: 0 0 0 auto;
-  width: min(920px, 78vw);
-  display: flex;
-  flex-direction: column;
-  background: var(--tv-canvas-warm);
-  border-left: 1px solid var(--tv-line);
-  box-shadow: -18px 0 60px rgba(0, 0, 0, 0.13);
-}
-
-.tv-spatial__bar {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  height: 58px;
-  padding-inline: 1rem 0.6rem;
-  border-bottom: 1px solid var(--tv-line);
-  color: var(--tv-ink);
-  flex: none;
-}
-
-.tv-spatial__body {
-  flex: 1;
-  overflow-y: auto;
-  padding: clamp(1rem, 2.5vw, 2rem);
-  display: flex;
-  flex-direction: column;
-  gap: 1.1rem;
-}
-
-.tv-spatial__intro { display: flex; align-items: end; justify-content: space-between; gap: 1rem; }
-.tv-spatial__intro h2 { font-size: clamp(1.7rem, 3vw, 2.6rem); line-height: 1.05; margin-top: 0.35rem; }
-.tv-spatial__intro em { color: var(--tv-muted); }
-.tv-spatial__count { flex: none; font: 0.68rem var(--tv-mono); color: var(--tv-muted); letter-spacing: 0.08em; }
-
-.tv-spatial__switch { display: inline-flex; align-self: flex-start; padding: 3px; border: 1px solid var(--tv-line); background: var(--tv-surface); }
-.tv-spatial__switch button { padding: 0.52rem 0.9rem; font: 0.72rem var(--tv-mono); color: var(--tv-muted); transition: background-color 0.2s, color 0.2s; }
-.tv-spatial__switch button.is-active { background: var(--tv-ink); color: var(--tv-canvas); }
-.tv-spatial__switch button:focus-visible,
-.tv-spatial__index button:focus-visible,
-.tv-routegraph__label:focus-visible,
-.tv-routemap__marker:focus-visible { outline: 2px solid var(--tv-blue-fg); outline-offset: 2px; }
-
-.tv-spatial__visual {
-  position: relative;
-  height: clamp(360px, 48vh, 560px);
-  min-height: 360px;
-  border: 1px solid var(--tv-line);
-  border-radius: var(--tv-r-lg);
-  background-color: var(--tv-surface);
-  background-image:
-    linear-gradient(to right, var(--tv-line-soft) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--tv-line-soft) 1px, transparent 1px);
-  background-size: 32px 32px;
-  overflow: hidden;
-}
-
-.tv-routegraph__scene, .tv-routemap, .tv-routemap-wrap { width: 100%; height: 100%; }
-.tv-routemap-wrap { position: relative; }
-.tv-routemap__fit { position: absolute; z-index: 2; top: 0.6rem; left: 0.6rem; display: flex; padding: 2px; background: var(--tv-surface); box-shadow: 0 1px 8px #0003; }
-.tv-routemap__fit button { padding: 0.35rem 0.55rem; font: 0.62rem var(--tv-mono); color: var(--tv-muted); }
-.tv-routemap__fit button.is-active { background: var(--tv-ink); color: var(--tv-surface); }
 .tv-spatial__loading { height: 100%; display: grid; place-items: center; font: 0.72rem var(--tv-mono); color: var(--tv-muted); }
-.tv-routegraph__scene { position: relative; }
-.tv-routegraph__hint { position: absolute; left: 1rem; bottom: 0.85rem; padding: 0.35rem 0.5rem; font: 0.64rem var(--tv-mono); color: var(--tv-muted); background: var(--tv-surface); pointer-events: none; }
-
-.tv-routemap__marker { width: 28px; height: 28px; border: 2px solid #fff; border-radius: 50%; background: #1f1e1e; color: #fff; font: 0.67rem var(--tv-mono); box-shadow: 0 1px 8px #0007; cursor: pointer; }
-.tv-routemap__marker.is-origin { background: #708998; }
-.tv-routemap__marker.is-selected { background: #b57731; transform: scale(1.2); }
-.tv-routemap__marker.is-nearby { width: 17px; height: 17px; background: #b78758; font-size: .9rem; line-height: 10px; }
-.tv-spatial__source { margin: 0; font: 0.68rem/1.5 var(--tv-mono); color: var(--tv-muted); }
-
-.tv-spatial__detail { padding: 1rem 1.15rem; background: var(--tv-surface); border: 1px solid var(--tv-line); min-height: 96px; }
-.tv-spatial__detail .tv-label { display: flex; align-items: center; gap: 0.4rem; }
-.tv-spatial__detail h3 { font-size: 1.1rem; font-weight: 600; margin: 0.4rem 0; }
-.tv-spatial__detail p { margin: 0.25rem 0; font-size: 0.82rem; color: var(--tv-muted); }
-.tv-spatial__detail blockquote { margin: 0.75rem 0; padding-left: 0.75rem; border-left: 2px solid var(--tv-line-strong); font-size: 0.82rem; color: var(--tv-ink-soft); }
-.tv-spatial__detail small { font-size: 0.72rem; color: var(--tv-muted); }
-.tv-spatial__nearby { margin-top: .8rem; border-top: 1px solid var(--tv-line); padding-top: .7rem; }
-.tv-spatial__nearby summary { width: fit-content; cursor: pointer; color: var(--tv-ink); font-size: .78rem; font-weight: 600; }
-.tv-spatial__nearby summary:focus-visible { outline: 2px solid var(--tv-blue-fg); outline-offset: 2px; }
-.tv-spatial__nearby ul { list-style: none; margin: .75rem 0 0; padding: 0; display: grid; gap: .45rem; }
-.tv-spatial__nearby li { display: grid; grid-template-columns: 7rem 1fr; gap: .15rem .6rem; padding: .55rem 0; border-top: 1px solid var(--tv-line-soft); }
-.tv-spatial__nearby li strong { font-size: .82rem; font-weight: 600; }
-.tv-spatial__nearby li small { grid-column: 2; line-height: 1.4; }
-.tv-spatial__detail dl { margin: 0.65rem 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem 1rem; }
-.tv-spatial__detail dl div { display: flex; flex-direction: column; border-top: 1px solid var(--tv-line); padding-top: 0.45rem; }
-.tv-spatial__detail dt { font: 0.65rem var(--tv-mono); color: var(--tv-muted); text-transform: uppercase; }
-.tv-spatial__detail dd { margin: 0.2rem 0 0; font-size: 0.82rem; color: var(--tv-ink); }
-
-.tv-spatial__index { display: flex; flex-direction: column; }
-.tv-spatial__index h3 { margin-bottom: 0.5rem; }
-.tv-spatial__index button { display: grid; grid-template-columns: 2rem 1fr auto; align-items: center; gap: 0.75rem; width: 100%; padding: 0.7rem 0.3rem; border-top: 1px solid var(--tv-line); text-align: left; color: var(--tv-ink); }
-.tv-spatial__index button.is-active { background: var(--tv-line-soft); }
-.tv-spatial__index button > span, .tv-spatial__index button > small { font: 0.68rem var(--tv-mono); color: var(--tv-muted); }
-.tv-spatial__index button strong { font-size: 0.84rem; font-weight: 500; }
 .tv-spatial__empty { margin: auto; max-width: 27rem; padding: 2rem; border: 1px solid var(--tv-line); background: var(--tv-surface); text-align: center; }
 .tv-spatial__empty svg { margin-inline: auto; color: var(--tv-muted); }
 .tv-spatial__empty h3 { margin-top: 0.8rem; font-size: 1.1rem; }
 .tv-spatial__empty p { margin-top: 0.5rem; font-size: 0.85rem; color: var(--tv-muted); }
 
-@media (max-width: 1023px) {
-  .tv-spatial { width: 100vw; }
-  .tv-spatial__intro { align-items: start; flex-direction: column; }
-  .tv-spatial__visual { min-height: 310px; height: 44vh; }
-}
+.tv-routemap, .tv-routemap-wrap { width: 100%; height: 100%; }
+.tv-routemap-wrap { position: relative; }
+.tv-routemap__fit { position: absolute; z-index: 2; top: 0.6rem; left: 0.6rem; display: flex; padding: 2px; background: var(--tv-surface); box-shadow: 0 1px 8px #0003; }
+.tv-routemap__fit button { padding: 0.35rem 0.55rem; font: 0.62rem var(--tv-mono); color: var(--tv-muted); }
+.tv-routemap__fit button.is-active { background: var(--tv-ink); color: var(--tv-surface); }
+.tv-routemap__marker { width: 28px; height: 28px; border: 2px solid #fff; border-radius: 50%; background: #1f1e1e; color: #fff; font: 0.67rem var(--tv-mono); box-shadow: 0 1px 8px #0007; cursor: pointer; }
+.tv-routemap__marker.is-origin { background: #708998; }
+.tv-routemap__marker.is-selected { background: #b57731; transform: scale(1.2); }
+.tv-routemap__marker.is-nearby { width: 17px; height: 17px; background: #b78758; font-size: .9rem; line-height: 10px; }
+.tv-routemap__marker:focus-visible { outline: 2px solid var(--tv-blue-fg); outline-offset: 2px; }
 
 /* ==========================================================================
  * Origin prompt
