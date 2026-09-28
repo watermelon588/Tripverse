@@ -1,0 +1,52 @@
+/* Sketchbook pages (components/sketch). Colours come from the app tokens, so dark mode follows. */
+.tv-sketch {
+  --sk-hand: 'Caveat', 'Yomogi', 'Segoe Print', cursive;
+  --sk-paper: #fbf8f1;
+  --sk-dot: rgba(60, 50, 30, .14);
+  --sk-ink: #22201c;
+  --sk-ink-soft: rgba(34, 32, 28, .08);
+  --sk-muted: #6f6b63;
+  --sk-muted-soft: #fbf0c4; /* sticky notes */
+  --sk-accent: var(--tv-blue-fg);
+  --sk-accent-soft: rgba(31, 108, 159, .28);
+  --sk-red: #c0392b;
+  --sk-red-soft: rgba(192, 57, 43, .2);
+  --sk-green: var(--tv-green-fg);
+  --sk-green-soft: rgba(52, 101, 56, .2);
+  --sk-hl: rgba(255, 214, 10, .5);
+  display: flex; flex-direction: column; gap: .5rem;
+  width: 100%; height: 100%; min-height: 0; padding: .75rem;
+  touch-action: pan-y; outline: none;
+}
+.is-dark .tv-sketch {
+  --sk-paper: #1f1e1b;
+  --sk-dot: rgba(255, 250, 235, .09);
+  --sk-ink: #ece8df;
+  --sk-ink-soft: rgba(236, 232, 223, .06);
+  --sk-muted: #a8a397;
+  --sk-muted-soft: #3a3421;
+  --sk-accent-soft: rgba(142, 197, 234, .22);
+  --sk-red: #ef7f73;
+  --sk-red-soft: rgba(239, 127, 115, .2);
+  --sk-green-soft: rgba(140, 200, 140, .18);
+  --sk-hl: rgba(255, 214, 10, .28);
+}
+.tv-sketch:focus-visible .tv-sketch__page { outline: 2px solid var(--sk-accent); outline-offset: 3px; }
+
+.tv-sketch__stage { flex: 1; min-height: 0; display: grid; place-items: center; }
+.tv-sketch__page {
+  width: 100%; height: 100%; max-height: 100%;
+  font-family: var(--sk-hand); user-select: text;
+  animation: tv-sketch-turn .28s cubic-bezier(.2, .8, .2, 1);
+}
+.tv-sketch__paper { fill: var(--sk-paper); }
+.tv-sketch__dot { fill: var(--sk-dot); }
+.is-dark .tv-sketch__grain { opacity: .5; }
+.tv-sketch__hl { fill: var(--sk-hl); }
+.tv-sketch__ink text { font-family: var(--sk-hand); }
+
+.tv-sketch__nav { display: flex; align-items: center; justify-content: center; gap: .75rem; }
+.tv-sketch__count { min-width: 12rem; text-align: center; font-size: .88rem; color: var(--tv-ink); }
+
+@keyframes tv-sketch-turn { from { opacity: 0; transform: translateX(12px); } }
+@media (prefers-reduced-motion: reduce) { .tv-sketch__page { animation: none; } }

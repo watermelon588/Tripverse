@@ -29,9 +29,12 @@ import { ExportMenu } from './ExportMenu';
 import '../../styles/trip-studio.css';
 
 const SpatialWorkspace = React.lazy(() => import('../create/SpatialWorkspace').then((module) => ({ default: module.SpatialWorkspace })));
+const SketchbookView = React.lazy(() => import('../sketch/SketchbookView').then((module) => ({ default: module.SketchbookView })));
 
-type Tab = 'plan' | 'map' | 'graph';
-const TABS: { id: Tab; label: string }[] = [{ id: 'plan', label: 'Plan' }, { id: 'map', label: 'Map' }, { id: 'graph', label: '3D' }];
+type Tab = 'plan' | 'sketch' | 'map' | 'graph';
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'plan', label: 'Plan' }, { id: 'sketch', label: 'Sketch' }, { id: 'map', label: 'Map' }, { id: 'graph', label: '3D' },
+];
 
 type Win = 'days' | 'details' | 'chat';
 const WINDOWS: { id: Win; label: string; Icon: typeof ClockIcon }[] = [
@@ -62,7 +65,7 @@ const readLayout = (): Layout => {
 };
 
 const readTab = (): Tab => {
-  try { const value = localStorage.getItem('tripverse-studio-tab'); return value === 'map' || value === 'graph' ? value : 'plan'; }
+  try { const value = localStorage.getItem('tripverse-studio-tab'); return value === 'sketch' || value === 'map' || value === 'graph' ? value : 'plan'; }
   catch { return 'plan'; }
 };
 
@@ -226,9 +229,14 @@ export function TripStudio({
         <div className="tv-studio__board" ref={boardRef}>
           <div className={`tv-studio__canvas is-${tab}`} id="studio-canvas" role="tabpanel" aria-labelledby={`studio-tab-${tab}`}
             style={{ '--inset-left': `${inset.left}px`, '--inset-right': `${inset.right}px` } as React.CSSProperties}>
-            {tab === 'plan' ? (
-              document ? <StudioPlan document={document} day={day} onSelectDay={onSelectDay} />
-                : <p className="tv-plan__empty">Loading your plan…</p>
+            {tab === 'plan' || tab === 'sketch' ? (
+              !document ? <p className="tv-plan__empty">Loading your plan…</p>
+                : tab === 'plan' ? <StudioPlan document={document} day={day} onSelectDay={onSelectDay} />
+                  : (
+                    <React.Suspense fallback={<p className="tv-plan__empty">Loading the sketchbook…</p>}>
+                      <SketchbookView document={document} day={day} onSelectDay={onSelectDay} />
+                    </React.Suspense>
+                  )
             ) : (
               <React.Suspense fallback={<p className="tv-plan__empty">Loading the {tab === 'map' ? 'map' : '3D view'}…</p>}>
                 <SpatialWorkspace isOpen embedded mode={tab} onModeChange={(mode) => pickTab(mode)}
