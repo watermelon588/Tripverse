@@ -69,6 +69,15 @@ backend/app/
 └── core/              # Config & database connection lifespan
 ```
 
+## Build With Agent (day-by-day co-planning)
+
+After onboarding, send `{"message_type": "UI_ACTION", "payload": {"action": "START_BUILD_WITH_AGENT", "budget_amount": 20000, "currency": "JPY", "travel_mode": "transit", "vibe": ["chill"]}}` (all fields optional). Every later message on the trip, text or UI action, goes to the agent in `app/agents/trip_planner/copilot/`.
+
+- Each assistant reply's payload is `{"kind": "ITINERARY_GRAPH", "graph": ..., "copilot": ...}`, so the map and budget ledger update every turn. The stream endpoint also emits a `{"type": "copilot"}` event. The `copilot` object holds the days, the budget, the hard and soft preferences, and `last_suggestions` for numbered choice chips.
+- Buttons can skip the intent model by sending `{"action": "COPILOT_OPS", "ops": [{"op": "add", "name": "Nezu Museum", "day": 2}]}`. The op list is in `copilot/graph.py` (`INTERPRET_INSTRUCTION`).
+- Candidates come from traveler posts on Reddit, Quora and TripAdvisor forums. Costs are estimates marked by `basis`, and traveler-entered costs (`set_cost`) always win. An add that would break the budget, fill the day, or clash with a hard "avoid" is blocked and returns cheaper alternatives, other days where it fits, and moves that save money.
+- Per-node models: intent and extraction nodes use `GROQ_FAST_MODEL`, and replies use `GROQ_MODEL`. Gemini remains the fallback when Groq hits a rate limit.
+
 ## Next Focus
 
 - Implement **Trip Planner LangGraph Runtime** (`backend/app/agents/trip_planner/`) state schema, intent reasoning nodes, and conditional edge routing beyond onboarding.

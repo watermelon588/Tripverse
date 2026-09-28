@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
-from typing import List, Optional, Tuple
+from typing import List, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -45,6 +45,8 @@ class TripResponse(BaseModel):
     user_id: Optional[str] = None
     guest_id: Optional[str] = None
     destination: Optional[str] = None
+    places_to_visit: List[str] = Field(default_factory=list)
+    planning_preferences: dict = Field(default_factory=dict)
 
     origin_text: Optional[str] = None
     origin_latitude: Optional[float] = None
@@ -86,6 +88,18 @@ class SendMessageRequest(BaseModel):
             if not self.payload:
                 raise ValueError("UI_ACTION message must include a non-null payload.")
             action = self.payload.get("action")
+            if action == "SUBMIT_TRIP_ONBOARDING":
+                self.payload = OnboardingFormSubmission.model_validate(self.payload).model_dump(mode="json")
+                self.payload["action"] = action
+                return self
+            if action == "GENERATE_FULL_ITINERARY":
+                return self
+            if action == "START_BUILD_WITH_AGENT":
+                self.payload = BuildWithAgentStart.model_validate(self.payload).model_dump(exclude_none=True)
+                return self
+            if action == "COPILOT_OPS":
+                self.payload = CopilotOps.model_validate(self.payload).model_dump()
+                return self
             if action == "SET_LOCATION":
                 lat = self.payload.get("latitude") if self.payload.get("latitude") is not None else self.payload.get("origin_latitude")
                 lon = self.payload.get("longitude") if self.payload.get("longitude") is not None else self.payload.get("origin_longitude")
@@ -113,5 +127,96 @@ class SendMessageRequest(BaseModel):
         return self
 
 
+class BuildWithAgentStart(BaseModel):
+    action: Literal["START_BUILD_WITH_AGENT"]
+    budget_amount: Optional[float] = Field(default=None, gt=0, le=1_000_000_000)
+    currency: Optional[Literal["INR", "JPY", "USD", "EUR", "GBP", "AUD", "CAD"]] = None
+    travel_mode: Optional[Literal["walk", "transit", "taxi", "drive"]] = None
+    vibe: List[str] = Field(default_factory=list, max_length=5)
+
+
+class CopilotOps(BaseModel):
+    """Structured edits from the client (chips/buttons); the engine validates each op's fields."""
+    action: Literal["COPILOT_OPS"]
+    ops: List[dict] = Field(min_length=1, max_length=10)
+    copilot_day: Optional[int] = Field(default=None, ge=1, le=365)
+
+
+class PlanningPreferences(BaseModel):
+    """The trip brief beyond route basics. Stored as trip.planning_preferences, so every
+    planner prompt and the trip document see it without extra plumbing. All optional."""
+    pace: Literal["relaxed", "balanced", "packed"] = "balanced"
+    interests: List[str] = Field(default_factory=list, max_length=3)
+    avoid: List[str] = Field(default_factory=list, max_length=3)
+    start_date: Optional[date] = None
+    adults: int = Field(default=1, ge=1, le=20)
+    children: int = Field(default=0, ge=0, le=20)
+    comfort: Literal["budget", "mid_range", "comfortable"] = "mid_range"
+    travel_mode: Literal["transit", "walk", "taxi", "drive"] = "transit"
+    guide: Optional[str] = Field(default=None, pattern=r"^[a-z0-9-]{1,32}$")
+
+    @field_validator("interests", "avoid")
+    @classmethod
+    def clean_preferences(cls, values: List[str]) -> List[str]:
+        cleaned = [value.strip() for value in values]
+        if any(not value or len(value) > 80 for value in cleaned):
+            raise ValueError("Each preference must be between 1 and 80 characters.")
+        return list(dict.fromkeys(cleaned))
+
+
+class OnboardingFormSubmission(BaseModel):
+    origin: str = Field(min_length=1, max_length=255)
+    destination: str = Field(min_length=1, max_length=255)
+    duration_days: int = Field(ge=1, le=365)
+    places_to_visit: List[str] = Field(default_factory=list, max_length=20)
+    planning_preferences: PlanningPreferences = Field(default_factory=PlanningPreferences)
+    # Kept in the budget ledger (target + trip currency), not in the brief.
+    budget_amount: Optional[float] = Field(default=None, gt=0, le=1_000_000_000)
+    currency: Optional[Literal["INR", "JPY", "USD", "EUR", "GBP", "AUD", "CAD"]] = None
+
+    @field_validator("origin", "destination")
+    @classmethod
+    def clean_place(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Location cannot be blank.")
+        return value
+
+    @field_validator("places_to_visit")
+    @classmethod
+    def clean_places(cls, values: List[str]) -> List[str]:
+        cleaned = [value.strip() for value in values]
+        if any(not value or len(value) > 255 for value in cleaned):
+            raise ValueError("Each place must be between 1 and 255 characters.")
+        return list(dict.fromkeys(cleaned))
+
+
 class ConversationMessageListResponse(BaseModel):
     messages: List[ConversationMessageResponse]
+
+
+class RouteLegInput(BaseModel):
+    id: str = Field(min_length=1, max_length=64)
+    from_lat: float = Field(ge=-90, le=90)
+    from_lon: float = Field(ge=-180, le=180)
+    to_lat: float = Field(ge=-90, le=90)
+    to_lon: float = Field(ge=-180, le=180)
+
+
+class RouteMetricsRequest(BaseModel):
+    legs: List[RouteLegInput] = Field(max_length=20)
+
+
+class GeocodePlaceInput(BaseModel):
+    id: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=255)
+    is_origin: bool = False
+
+
+class GeocodeRequest(BaseModel):
+    places: List[GeocodePlaceInput] = Field(max_length=20)
+
+
+class NearbyPlacesRequest(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)

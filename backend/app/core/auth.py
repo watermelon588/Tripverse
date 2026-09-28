@@ -1,7 +1,8 @@
 import logging
+import time
 import uuid
 from typing import Optional, Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import jwt
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -18,7 +19,7 @@ class AuthenticatedUser(BaseModel):
     id: str
     email: Optional[str] = None
     role: Optional[str] = "authenticated"
-    user_metadata: Dict[str, Any] = {}
+    user_metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class RequestIdentity(BaseModel):
@@ -40,8 +41,6 @@ class RequestIdentity(BaseModel):
         return self.user_id or self.guest_id
 
 
-import time
-
 # In-memory user cache: token -> (AuthenticatedUser, expiry_timestamp)
 _TOKEN_CACHE: Dict[str, tuple[AuthenticatedUser, float]] = {}
 CACHE_TTL_SECONDS = 300.0  # 5 minutes cache TTL
@@ -59,6 +58,11 @@ def _get_cached_user(token: str) -> Optional[AuthenticatedUser]:
     return None
 
 
+def invalidate_cached_token(token: str) -> None:
+    """Forget an identity after this server processes a logout request."""
+    _TOKEN_CACHE.pop(token, None)
+
+
 def _cache_user(token: str, user: AuthenticatedUser, exp: Optional[float] = None) -> None:
     """Cache user in memory until token expiry or CACHE_TTL_SECONDS."""
     now = time.time()
@@ -73,29 +77,20 @@ def _cache_user(token: str, user: AuthenticatedUser, exp: Optional[float] = None
 
 
 def _decode_supabase_token(token: str) -> Optional[Dict[str, Any]]:
-    """Decode and verify Supabase JWT token locally without network roundtrips."""
-    # 1. Try local secret verification if secret is configured
-    if settings.SUPABASE_JWT_SECRET:
-        try:
-            payload = jwt.decode(
-                token,
-                settings.SUPABASE_JWT_SECRET,
-                algorithms=["HS256"],
-                options={"verify_aud": False},
-            )
-            return payload
-        except jwt.PyJWTError as e:
-            logger.debug(f"JWT secret verification failed: {e}")
-
-    # 2. Try unverified decode for sub & basic fields (verifying expiration)
+    """Trust local claims only after verifying the configured project's signature and claims."""
+    if not settings.SUPABASE_JWT_SECRET or not settings.SUPABASE_URL:
+        return None
     try:
-        payload = jwt.decode(
+        return jwt.decode(
             token,
-            options={"verify_signature": False, "verify_exp": True},
+            settings.SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
+            audience="authenticated",
+            issuer=f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1",
+            options={"require": ["exp", "sub", "aud", "iss"]},
         )
-        return payload
-    except Exception as e:
-        logger.warning(f"Failed to decode token payload: {e}")
+    except jwt.PyJWTError as exc:
+        logger.debug("Local Supabase JWT verification failed: %s", type(exc).__name__)
         return None
 
 
@@ -115,11 +110,13 @@ async def _verify_token_with_supabase(token: str) -> Optional[AuthenticatedUser]
             )
             if res.status_code == 200:
                 data = res.json()
+                if not data.get("id") or data.get("role") != "authenticated":
+                    return None
                 return AuthenticatedUser(
                     id=data.get("id"),
                     email=data.get("email"),
                     role=data.get("role", "authenticated"),
-                    user_metadata=data.get("user_metadata", {}),
+                    user_metadata=data.get("user_metadata") or {},
                 )
     except Exception as e:
         logger.error(f"Error calling Supabase Auth API: {e}")
@@ -131,8 +128,8 @@ async def get_current_user(
 ) -> AuthenticatedUser:
     """
     FastAPI dependency to strictly require an authenticated Supabase user.
-    Uses ultra-fast memory cache (0.001ms) and local JWT decode (0.05ms),
-    completely bypassing redundant remote Supabase network calls.
+    Uses cached verified identities, local HS256 verification when configured,
+    and Supabase Auth verification for other signing algorithms.
     """
     if not credentials or not credentials.credentials:
         raise HTTPException(
@@ -143,28 +140,43 @@ async def get_current_user(
 
     token = credentials.credentials
 
-    # 1. Ultra-fast path: In-memory cache hit (0.001 ms, 0 network calls)
+    # Only identities established by signature verification or Supabase Auth are cached.
     cached_user = _get_cached_user(token)
     if cached_user:
         return cached_user
 
-    # 2. Local JWT decode path: Parse self-contained claims (0.05 ms, 0 network calls)
+    # Local verification covers legacy HS256 signing keys.
     payload = _decode_supabase_token(token)
-    if payload and "sub" in payload:
+    if payload and payload.get("role") == "authenticated":
+        try:
+            uuid.UUID(payload["sub"])
+        except (ValueError, TypeError, AttributeError):
+            payload = None
+    else:
+        payload = None
+    if payload:
         user = AuthenticatedUser(
             id=payload["sub"],
             email=payload.get("email"),
             role=payload.get("role", "authenticated"),
-            user_metadata=payload.get("user_metadata", {}),
+            user_metadata=payload.get("user_metadata") or {},
         )
         exp = payload.get("exp")
         _cache_user(token, user, exp=float(exp) if exp else None)
         return user
 
-    # 3. Last-resort fallback: Remote Supabase Auth API verification
+    # Remote verification also supports projects using asymmetric signing keys.
     user = await _verify_token_with_supabase(token)
     if user:
-        _cache_user(token, user)
+        # Supabase verified the token; read its expiry only to bound cache lifetime.
+        try:
+            exp = jwt.decode(
+                token, options={"verify_signature": False, "verify_exp": False}
+            ).get("exp")
+            if exp is not None:
+                _cache_user(token, user, exp=float(exp))
+        except (jwt.PyJWTError, TypeError, ValueError):
+            pass
         return user
 
     raise HTTPException(
@@ -172,19 +184,6 @@ async def get_current_user(
         detail="Invalid or expired authentication token.",
         headers={"WWW-Authenticate": "Bearer"},
     )
-
-
-async def get_optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-) -> Optional[AuthenticatedUser]:
-    """FastAPI dependency for endpoints that support both authenticated and guest users."""
-    if not credentials or not credentials.credentials:
-        return None
-
-    try:
-        return await get_current_user(credentials)
-    except HTTPException:
-        return None
 
 
 async def get_request_identity(
@@ -201,14 +200,13 @@ async def get_request_identity(
 
     # 1. Resolve authenticated user if token is provided
     if credentials and credentials.credentials:
-        user = await get_optional_user(credentials)
-        if user:
-            user_id = user.id
-            user_name = (
-                user.user_metadata.get("full_name")
-                or user.user_metadata.get("name")
-                or (user.email.split("@")[0].capitalize() if user.email else None)
-            )
+        user = await get_current_user(credentials)
+        user_id = user.id
+        user_name = (
+            user.user_metadata.get("full_name")
+            or user.user_metadata.get("name")
+            or (user.email.split("@")[0].capitalize() if user.email else None)
+        )
 
     # 2. Resolve guest UUID if header is provided
     if x_guest_id:

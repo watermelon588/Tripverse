@@ -15,6 +15,7 @@ import { LogoLockup } from '../common/Logo';
 import { useAuth } from '../../context/AuthContext';
 import { ArrowRightIcon, CloseIcon, CompassIcon } from '../home/v2/IconsV2';
 import { EASE, prefersReducedMotion } from '../home/v2/motion';
+import { openGuide } from '../common/AppBar';
 
 interface CreateSidebarProps {
   isOpen: boolean;
@@ -53,8 +54,7 @@ export const CreateSidebar: React.FC<CreateSidebarProps> = ({
 }) => {
   const { user } = useAuth();
   const root = useRef<HTMLElement>(null);
-  const avatarUrl =
-    user?.user_metadata?.avatar_url || localStorage.getItem('tripverse-user-avatar');
+  const avatarUrl = user?.user_metadata?.avatar_url;
 
   // Stagger the rail's contents in whenever it opens.
   useGSAP(
@@ -163,6 +163,9 @@ export const CreateSidebar: React.FC<CreateSidebarProps> = ({
               <span>Explore routes</span>
             </button>
           )}
+          <button type="button" className="tv-btn tv-btn--ghost tv-btn--sm" style={{ width: '100%' }} onClick={openGuide}>
+            <span>How to use TripVerse</span>
+          </button>
         </div>
 
         {isOpen && (

@@ -76,6 +76,8 @@ async def research_destination(state: PlanningState) -> dict[str, Any]:
     destination = state.get("destination", "Unknown")
     duration_days = state.get("duration_days", 1)
     origin = state.get("origin")
+    places = state.get("places_to_visit") or []
+    preferences = state.get("planning_preferences") or {}
     trip_type = state.get("trip_type", "trip")
     planning_notes = state.get("planning_notes", "")
     existing_queries = state.get("research_queries", [])
@@ -98,6 +100,10 @@ TRIP CONTEXT:
 Destination: {destination}
 Duration: {duration_days} days
 {origin_clause}Trip Type: {trip_type}
+Traveler's requested places (include where practical): {", ".join(places) or "none specified"}
+Travel pace: {preferences.get("pace", "balanced")}
+Traveler interests: {", ".join(preferences.get("interests") or []) or "not specified"}
+Traveler wants to avoid: {", ".join(preferences.get("avoid") or []) or "not specified"}
 Planning Notes: {planning_notes}
 
 {research_context}
@@ -144,6 +150,14 @@ Return the structured JSON object.
                         "reason": str(c.get("reason", "")).strip(),
                     })
 
+            for place in places:
+                if not any(candidate["name"].casefold() == place.casefold() for candidate in formatted_candidates):
+                    formatted_candidates.append({
+                        "name": place,
+                        "type": "city",
+                        "reason": "Requested by the traveler; assess whether it fits the route and available days.",
+                    })
+
             logger.info("🔥 research_destination produced %d candidates", len(formatted_candidates))
             return {
                 "candidates": formatted_candidates,
@@ -159,6 +173,10 @@ Return the structured JSON object.
                 "reason": f"Primary destination for your {duration_days}-day expedition.",
             }
         ]
+        fallback_candidates.extend(
+            {"name": place, "type": "city", "reason": "Requested by the traveler."}
+            for place in places if place.casefold() != destination.casefold()
+        )
         return {
             "candidates": fallback_candidates,
             "_tool_call_pending": False,

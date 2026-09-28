@@ -1,4 +1,14 @@
 import { apiFetch, getAuthHeaders, API_BASE_URL } from './apiClient';
+import type { Coordinates, ItineraryGraph, NearbyPlace, RoadMetric } from '../components/create/itineraryGraph';
+import type { OnboardingValues } from '../components/create/TripOnboardingForm';
+
+export async function getItineraryGraph(tripId: string): Promise<ItineraryGraph> {
+  const response = await apiFetch<ItineraryGraph>(`/api/trips/${tripId}/itinerary-graph`, {
+    method: 'POST',
+  });
+  if (!response.ok || !response.data) throw new Error(response.error || 'Could not load itinerary graph');
+  return response.data;
+}
 
 export interface TripCreateResponse {
   trip_id: string;
@@ -18,6 +28,8 @@ export interface TripModelResponse {
   user_id?: string | null;
   guest_id?: string | null;
   destination?: string | null;
+  places_to_visit: string[];
+  planning_preferences?: Partial<OnboardingValues['planning_preferences']>;
   origin_text?: string | null;
   origin_latitude?: number | null;
   origin_longitude?: number | null;
@@ -27,6 +39,153 @@ export interface TripModelResponse {
   onboarding_status: string;
   created_at: string;
   updated_at: string;
+}
+
+export type BudgetCategory = 'travel' | 'stay' | 'food' | 'activities' | 'other';
+export type BudgetCurrency = 'INR' | 'JPY' | 'USD' | 'EUR' | 'GBP' | 'AUD' | 'CAD';
+
+export interface BudgetItemInput {
+  label: string;
+  category: BudgetCategory;
+  place_name: string | null;
+  quantity: string;
+  unit_amount: string | null;
+  is_included: boolean;
+}
+
+export interface BudgetItem extends BudgetItemInput {
+  id: string;
+  source_key: string | null;
+  scope: 'stop' | 'leg' | 'manual';
+  quote_text: string | null;
+  /** Suggested amount per unit; never counted until accepted into unit_amount. */
+  estimate_amount: string | null;
+  estimate_note: string | null;
+  is_current: boolean;
+  updated_at: string;
+}
+
+export interface TripBudget {
+  trip_id: string;
+  currency: BudgetCurrency;
+  target_amount: string | null;
+  priced_total: string;
+  remaining: string | null;
+  unpriced_count: number;
+  /** Entered amounts plus suggestions for rows still missing one. */
+  projected_total: string;
+  unestimated_count: number;
+  review_count: number;
+  category_totals: Record<string, string>;
+  place_totals: Record<string, string>;
+  items: BudgetItem[];
+}
+
+async function budgetRequest(tripId: string, path: string, method: string, body?: unknown): Promise<TripBudget> {
+  const response = await apiFetch<TripBudget>(`/api/trips/${tripId}/budget${path}`, {
+    method,
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  if (!response.ok || !response.data) throw new Error(response.error || 'Could not update the trip budget');
+  return response.data;
+}
+
+export const getTripBudget = (tripId: string) => budgetRequest(tripId, '', 'GET');
+export const updateBudgetSettings = (tripId: string, body: { currency: BudgetCurrency; target_amount: string | null }) =>
+  budgetRequest(tripId, '/settings', 'PUT', body);
+export const addBudgetItem = (tripId: string, body: BudgetItemInput) =>
+  budgetRequest(tripId, '/items', 'POST', body);
+export const updateBudgetItem = (tripId: string, itemId: string, body: BudgetItemInput) =>
+  budgetRequest(tripId, `/items/${itemId}`, 'PUT', body);
+export const deleteBudgetItem = (tripId: string, itemId: string) =>
+  budgetRequest(tripId, `/items/${itemId}`, 'DELETE');
+/** The normalized trip every view and export reads (backend `GET /trips/{id}/document`). */
+export interface TripDocumentItem {
+  name: string;
+  category: string;
+  time_of_day: 'morning' | 'afternoon' | 'evening' | null;
+  area: string | null;
+  est_cost: number | null;
+  duration_hours: number | null;
+  tip: string | null;
+  source_url: string | null;
+  option: boolean;
+}
+
+export interface TripDocument {
+  trip_id: string;
+  mode: 'agent' | 'one_shot' | 'none';
+  status: 'building' | 'complete' | null;
+  destination: string | null;
+  origin: string | null;
+  duration_days: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  travelers: { adults: number; children: number };
+  comfort: string;
+  travel_mode: string;
+  pace: string;
+  interests: string[];
+  avoid: string[];
+  must_see: string[];
+  guide: string | null;
+  days: { day: number; date: string | null; base: string; items: TripDocumentItem[]; est_cost: number | null; hours: number | null }[];
+  legs: { source: string; target: string; mode: string | null; duration: string | null; distance: string | null; cost: string | null }[];
+  budget: { currency: string; target: number | null; planned: number | null; entered: number; projected: number };
+  graph: ItineraryGraph | null;
+}
+
+export async function getTripDocument(tripId: string): Promise<TripDocument> {
+  const response = await apiFetch<TripDocument>(`/api/trips/${tripId}/document`, { method: 'GET' });
+  if (!response.ok || !response.data) throw new Error(response.error || 'Could not load the trip');
+  return response.data;
+}
+
+export const estimateBudget = (tripId: string) => budgetRequest(tripId, '/estimates', 'POST');
+export const acceptBudgetEstimates = (tripId: string) => budgetRequest(tripId, '/estimates/accept', 'POST');
+
+export async function getRoadMetrics(
+  tripId: string,
+  legs: { id: string; from: Coordinates; to: Coordinates }[],
+): Promise<RoadMetric[]> {
+  if (!legs.length) return [];
+  const response = await apiFetch<{ provider: string; legs: RoadMetric[] }>(
+    `/api/trips/${tripId}/route-metrics`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ legs: legs.map((leg) => ({
+        id: leg.id,
+        from_lat: leg.from.lat, from_lon: leg.from.lon,
+        to_lat: leg.to.lat, to_lon: leg.to.lon,
+      })) }),
+    },
+  );
+  return response.ok ? response.data?.legs || [] : [];
+}
+
+export async function getTripGeocodes(
+  tripId: string,
+  places: { id: string; name: string; is_origin: boolean }[],
+): Promise<Record<string, Coordinates>> {
+  if (!places.length) return {};
+  const response = await apiFetch<{ provider: string; places: { id: string; lat: number; lon: number }[] }>(
+    `/api/trips/${tripId}/geocode`,
+    { method: 'POST', body: JSON.stringify({ places }) },
+  );
+  return Object.fromEntries((response.ok ? response.data?.places || [] : [])
+    .map((place) => [place.id, { lat: place.lat, lon: place.lon }]));
+}
+
+export async function getNearbyPlaces(tripId: string, point: Coordinates): Promise<NearbyPlace[]> {
+  const response = await apiFetch<{ provider: string; places: Omit<NearbyPlace, 'source'>[] }>(
+    `/api/trips/${tripId}/nearby-places`,
+    { method: 'POST', body: JSON.stringify({ lat: point.lat, lon: point.lon }) },
+  );
+  if (response.data?.provider === 'limit_reached') {
+    throw new Error('Live nearby search reached its demo limit. Places from your draft are still available.');
+  }
+  return response.ok && response.data?.provider === 'google'
+    ? response.data.places.map((place) => ({ ...place, source: 'google' as const })) : [];
 }
 
 export interface TripStateResponse {
@@ -88,7 +247,11 @@ export interface StreamActionEventPayload {
 
 export interface SendTripMessageStreamCallbacks {
   onToken: (delta: string) => void;
+  onGraph?: (graph: ItineraryGraph, final: boolean) => void;
+  /** Build-with-agent state, sent as soon as a decision is applied (before the reply streams). */
+  onCopilot?: (copilot: any) => void;
   onMetadata?: (meta: StreamMetadataPayload) => void;
+  onStage?: (label: string) => void;
   onAction?: (actionEvent: StreamActionEventPayload) => void;
   onDone?: (data: StreamDonePayload) => void;
   onError?: (err: Error) => void;
@@ -180,9 +343,19 @@ export async function sendTripMessageStream(
   headers.set('Content-Type', 'application/json');
 
   const url = `${API_BASE_URL}/api/trips/${tripId}/messages/stream`;
+  const controller = new AbortController();
+  let timedOut = false;
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  const resetIdleTimer = () => {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => { timedOut = true; controller.abort(); }, 90000);
+  };
+  resetIdleTimer();
+  try {
   const res = await fetch(url, {
     method: 'POST',
     headers,
+    signal: controller.signal,
     body: JSON.stringify({
       message_type: messageType,
       content,
@@ -210,13 +383,15 @@ export async function sendTripMessageStream(
   const reader = res.body.getReader();
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
+  let receivedDone = false;
 
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      resetIdleTimer();
 
-      buffer += decoder.decode(value, { stream: true });
+      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
       const lines = buffer.split('\n\n');
       buffer = lines.pop() || '';
 
@@ -228,30 +403,41 @@ export async function sendTripMessageStream(
           if (line.startsWith('data: ')) {
             const dataStr = line.slice(6).trim();
             if (!dataStr) continue;
-            try {
-              const event = JSON.parse(dataStr);
+            let event: any;
+            try { event = JSON.parse(dataStr); }
+            catch (jsonErr) { console.warn('Failed to parse SSE JSON:', dataStr, jsonErr); continue; }
               if (event.type === 'token' && event.delta) {
                 callbacks.onToken(event.delta);
+              } else if (event.type === 'graph' && event.graph) {
+                callbacks.onGraph?.(event.graph as ItineraryGraph, Boolean(event.final));
+              } else if (event.type === 'copilot' && event.copilot) {
+                callbacks.onCopilot?.(event.copilot);
               } else if (event.type === 'action') {
                 callbacks.onAction?.(event);
               } else if (event.type === 'metadata') {
                 callbacks.onMetadata?.(event);
+              } else if (event.type === 'stage' && typeof event.label === 'string') {
+                callbacks.onStage?.(event.label);
               } else if (event.type === 'done') {
+                receivedDone = true;
                 callbacks.onDone?.(event);
               } else if (event.type === 'error') {
-                callbacks.onError?.(new Error(event.error || 'Stream error'));
+                throw new Error(event.error || 'The planner could not finish. Please try again.');
               }
-            } catch (jsonErr) {
-              console.warn('Failed to parse SSE JSON:', dataStr, jsonErr);
-            }
           }
         }
       }
+      if (receivedDone) break;
     }
+    if (!receivedDone) throw new Error('The planner stopped before saving the answer. Please try again.');
   } catch (streamErr: any) {
-    callbacks.onError?.(streamErr);
-    throw streamErr;
+    const error = timedOut ? new Error('The planner took too long. Please try again.') : streamErr;
+    callbacks.onError?.(error);
+    throw error;
+  } finally {
+    await reader.cancel().catch(() => undefined);
   }
+  } finally { clearTimeout(idleTimer); }
 }
 
 export interface ConversationMessageApiItem {

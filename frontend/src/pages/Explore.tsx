@@ -197,9 +197,10 @@ interface ExploreProps {
   onStartPlanning: () => void;
   onNavigateHome: () => void;
   onNavigateProfile?: () => void;
+  onNavigateTrips?: () => void;
 }
 
-export function Explore({ onStartPlanning, onNavigateHome, onNavigateProfile }: ExploreProps) {
+export function Explore({ onStartPlanning, onNavigateHome, onNavigateProfile, onNavigateTrips }: ExploreProps) {
   const root = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [category, setCategory] = useState<Category>('All');
@@ -260,6 +261,7 @@ export function Explore({ onStartPlanning, onNavigateHome, onNavigateProfile }: 
       <AppBar
         onNavigateHome={onNavigateHome}
         onNavigateProfile={onNavigateProfile}
+        onNavigateTrips={onNavigateTrips}
         onStartPlanning={onStartPlanning}
         current="explore"
       />

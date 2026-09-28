@@ -64,10 +64,24 @@ async def init_db():
     import app.models  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if "sqlite" in engine.name:
+            columns = (await conn.execute(text("PRAGMA table_info(trips)"))).all()
+            if columns and not any(column[1] == "places_to_visit" for column in columns):
+                await conn.execute(text("ALTER TABLE trips ADD COLUMN places_to_visit JSON NOT NULL DEFAULT '[]'"))
+            if columns and not any(column[1] == "planning_preferences" for column in columns):
+                await conn.execute(text("ALTER TABLE trips ADD COLUMN planning_preferences JSON NOT NULL DEFAULT '{}'"))
+            budget_columns = {column[1] for column in (await conn.execute(text("PRAGMA table_info(budget_items)"))).all()}
+            if budget_columns and "estimate_amount" not in budget_columns:
+                await conn.execute(text("ALTER TABLE budget_items ADD COLUMN estimate_amount NUMERIC(12, 2)"))
+                await conn.execute(text("ALTER TABLE budget_items ADD COLUMN estimate_note VARCHAR(255)"))
         if "postgresql" in engine.name:
             try:
+                await conn.execute(text("ALTER TABLE trips ADD COLUMN IF NOT EXISTS places_to_visit JSON NOT NULL DEFAULT '[]'"))
+                await conn.execute(text("ALTER TABLE trips ADD COLUMN IF NOT EXISTS planning_preferences JSON NOT NULL DEFAULT '{}'"))
                 await conn.execute(text("ALTER TABLE trips ADD COLUMN IF NOT EXISTS guest_id VARCHAR(64);"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_trips_guest_id ON trips(guest_id);"))
+                await conn.execute(text("ALTER TABLE budget_items ADD COLUMN IF NOT EXISTS estimate_amount NUMERIC(12, 2)"))
+                await conn.execute(text("ALTER TABLE budget_items ADD COLUMN IF NOT EXISTS estimate_note VARCHAR(255)"))
             except Exception as e:
                 logger.debug(f"PostgreSQL migration check note: {e}")
     logger.info("Database schema initialized.")

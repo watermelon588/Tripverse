@@ -62,6 +62,8 @@ async def understand_trip(state: PlanningState) -> dict[str, Any]:
     destination = state.get("destination", "Unknown")
     duration_days = state.get("duration_days", 1)
     origin = state.get("origin")
+    places = state.get("places_to_visit") or []
+    preferences = state.get("planning_preferences") or {}
     origin_text = f"Origin: {origin}\n" if origin else "Origin: Not specified\n"
 
     prompt = f"""
@@ -69,6 +71,10 @@ TRIP CONTEXT:
 Destination: {destination}
 Duration: {duration_days} days
 {origin_text}
+Traveler's requested places: {", ".join(places) or "none specified"}
+Travel pace: {preferences.get("pace", "balanced")}
+Traveler interests: {", ".join(preferences.get("interests") or []) or "not specified"}
+Traveler wants to avoid: {", ".join(preferences.get("avoid") or []) or "not specified"}
 Analyze this trip context and return the structured JSON object with "trip_type" and "planning_notes".
 """
 

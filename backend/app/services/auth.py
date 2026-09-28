@@ -62,16 +62,22 @@ class AuthService:
                     )
 
                 user_data = data.get("user") or data
-                access_token = data.get("access_token") or ""
-                refresh_token = data.get("refresh_token") or ""
+                if not user_data.get("id"):
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail="Authentication service returned an incomplete signup response.",
+                    )
+                access_token = data.get("access_token")
+                refresh_token = data.get("refresh_token")
                 expires_in = data.get("expires_in")
+                user_metadata = user_data.get("user_metadata") or {}
 
                 user_profile = UserProfileResponse(
                     id=user_data.get("id"),
                     email=user_data.get("email"),
                     role=user_data.get("role", "authenticated"),
-                    full_name=user_data.get("user_metadata", {}).get("full_name") or full_name,
-                    user_metadata=user_data.get("user_metadata", {}),
+                    full_name=user_metadata.get("full_name") or full_name,
+                    user_metadata=user_metadata,
                     created_at=user_data.get("created_at"),
                 )
 
@@ -80,6 +86,7 @@ class AuthService:
                     refresh_token=refresh_token,
                     expires_in=expires_in,
                     user=user_profile,
+                    needs_email_confirmation=not bool(access_token),
                 )
         except HTTPException:
             raise
@@ -112,7 +119,12 @@ class AuthService:
                     )
 
                 user_data = data.get("user") or {}
-                user_metadata = user_data.get("user_metadata", {})
+                if not user_data.get("id") or not data.get("access_token"):
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail="Authentication service returned an incomplete login response.",
+                    )
+                user_metadata = user_data.get("user_metadata") or {}
 
                 user_profile = UserProfileResponse(
                     id=user_data.get("id"),
@@ -124,8 +136,8 @@ class AuthService:
                 )
 
                 return AuthSessionResponse(
-                    access_token=data.get("access_token", ""),
-                    refresh_token=data.get("refresh_token", ""),
+                    access_token=data["access_token"],
+                    refresh_token=data.get("refresh_token"),
                     expires_in=data.get("expires_in"),
                     user=user_profile,
                 )

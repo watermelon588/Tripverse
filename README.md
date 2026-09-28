@@ -97,6 +97,16 @@ Open your browser at [http://localhost:5173](http://localhost:5173).
 
 ---
 
+### Supabase Auth setup
+
+Set `SUPABASE_URL`, `SUPABASE_KEY` (publishable/anon key), and `SUPABASE_JWT_SECRET` in `backend/.env`; set the matching `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `frontend/.env`. The backend verifies signed access tokens and uses its configured database URL for trip persistence. Keep secrets out of the frontend.
+
+In Supabase Auth URL Configuration, allow `http://localhost:5173/profile` and `http://localhost:5173/reset-password`, plus matching deployed URLs. Enable Google and GitHub in Supabase Auth if those login buttons are used, and configure each provider's client credentials and Supabase callback URL. Email-confirmation signup creates an account without a session until the user confirms their email.
+
+After a guest signs in, send `POST /api/auth/claim-guest-trips` with `Authorization: Bearer <access-token>` and `{"guest_id":"<stored-guest-uuid>"}`. A successful response is `{"claimed_count":N}`; clear the stored guest UUID only after success. The guest UUID is a private capability for those trips. Profile name and avatar URL are stored in Supabase Auth user metadata; avatar upload requires a signed-in user.
+
+---
+
 ## 🗺️ Architectural Phase Roadmap
 
 ```text

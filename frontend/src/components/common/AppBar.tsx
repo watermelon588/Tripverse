@@ -11,15 +11,24 @@ export interface AppBarProps {
   onNavigateHome?: () => void;
   onNavigateExplore?: () => void;
   onNavigateProfile?: () => void;
+  onNavigateTrips?: () => void;
   onStartPlanning?: () => void;
   /** Marks the active destination so it can be de-emphasised in the bar. */
-  current?: 'explore' | 'profile' | 'create';
+  current?: 'explore' | 'profile' | 'create' | 'trips' | 'guide';
+}
+
+/** Open the guide from any surface; App's popstate listener runs the route transition. */
+export function openGuide() {
+  if (window.location.pathname === '/guide') return;
+  window.history.pushState({}, '', '/guide');
+  window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
 export function AppBar({
   onNavigateHome,
   onNavigateExplore,
   onNavigateProfile,
+  onNavigateTrips,
   onStartPlanning,
   current,
 }: AppBarProps) {
@@ -27,7 +36,9 @@ export function AppBar({
 
   const links: Array<{ key: NonNullable<AppBarProps['current']>; label: string; go?: () => void }> = [
     { key: 'explore', label: 'Explore', go: onNavigateExplore },
+    { key: 'trips', label: 'My trips', go: onNavigateTrips },
     { key: 'profile', label: 'Account', go: onNavigateProfile },
+    { key: 'guide', label: 'Guide', go: openGuide },
   ];
 
   return (
@@ -47,6 +58,12 @@ export function AppBar({
       </nav>
 
       <span className="tv-app__bar-spacer" />
+
+      {current === 'trips' && onNavigateProfile ? (
+        <button type="button" className="tv-app__mobile-link" onClick={onNavigateProfile}>Account</button>
+      ) : onNavigateTrips ? (
+        <button type="button" className="tv-app__mobile-link" onClick={onNavigateTrips}>My trips</button>
+      ) : null}
 
       {user && (
         <span className="tv-meta tv-hide-mobile" title={user.email ?? undefined}>
