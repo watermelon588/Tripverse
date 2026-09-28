@@ -1,6 +1,8 @@
+import asyncio
 import logging
 import re
 import uuid
+from datetime import date
 from typing import Any, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +33,31 @@ from app.schemas.trip import (
     TripResponse,
     TripStateResponse,
 )
+from app.services.seasonality import trip_season
 from app.services.trip import trip_service
+
+SEASON_WAIT = 2.0  # seconds a fresh draft may wait for season facts once research is done
+
+
+async def _await_season(task: "asyncio.Task[dict | None]") -> dict | None:
+    """Season facts are optional: a slow or failing lookup never holds up or breaks the draft.
+    It usually finished during research already; shield() lets a slow one complete and cache."""
+    # Retrieve a late failure so it isn't reported as "Task exception was never retrieved".
+    task.add_done_callback(lambda done: done.cancelled() or done.exception())
+    try:
+        return await asyncio.wait_for(asyncio.shield(task), SEASON_WAIT)
+    except asyncio.TimeoutError:
+        logger.info("Season facts not ready in %.1fs; drafting without them", SEASON_WAIT)
+    except Exception as exc:  # optional facts: never fail the draft over them
+        logger.warning("Season facts unavailable: %s", exc)
+    return None
+
+
+def _start_date(preferences: dict | None) -> date | None:
+    try:
+        return date.fromisoformat(str((preferences or {}).get("start_date") or ""))
+    except ValueError:
+        return None
 
 
 _CHANGE_WORDS = re.compile(r"\b(add|swap|move|replace|remove|change|include|skip|drop|make|switch|shift|put|"
@@ -555,6 +581,9 @@ class ConversationService:
             else:
                 # Fresh draft: destination research and candidate curation first.
                 yield f"data: {json.dumps({'type': 'stage', 'label': 'Researching possible stops'})}\n\n"
+                # Typical weather for the travel months runs alongside the research (no LLM call).
+                season_task = asyncio.create_task(trip_season(
+                    trip.destination, _start_date(trip.planning_preferences), trip.duration_days))
                 planning_result = await execute_planning_subgraph(
                     destination=trip.destination,
                     duration_days=trip.duration_days,
@@ -562,6 +591,7 @@ class ConversationService:
                     places_to_visit=trip.places_to_visit or [],
                     planning_preferences=trip.planning_preferences or {},
                 )
+                planning_result["season"] = await _await_season(season_task)
                 candidates = planning_result.get("candidates", [])
                 logger.info("🔥 PLANNING DATA READY: candidates=%d", len(candidates))
                 yield f"data: {json.dumps({'type': 'stage', 'label': 'Writing your day-by-day draft'})}\n\n"
