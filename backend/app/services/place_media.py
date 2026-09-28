@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 CACHE_DB_PATH = Path(__file__).resolve().parents[2] / ".runtime" / "place_media.sqlite3"
 WIKI_API = "https://en.wikipedia.org/w/api.php"
 # Wikimedia's API policy asks every client to identify itself.
-HEADERS = {"User-Agent": "TripVerse/0.1 (https://github.com/; trip planner portfolio project) httpx"}
+HEADERS = {"User-Agent": "TripVerse/0.1 (https://github.com/watermelon588/Tripverse; trip planner portfolio project) httpx"}
 # ponytail: one radius for cities and landmarks; tighten per kind if city photos leak onto landmarks.
 MAX_DISTANCE_KM = 20
 MISS_TTL_SECONDS = 7 * 24 * 3600

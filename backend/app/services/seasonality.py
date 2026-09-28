@@ -12,11 +12,12 @@ import re
 import sqlite3
 import time
 from calendar import month_name
+from datetime import date, timedelta
 
 import httpx
 
 from app.schemas.places import SeasonRequest, SeasonStop
-from app.services.place_media import CACHE_DB_PATH, HEADERS
+from app.services.place_media import CACHE_DB_PATH, HEADERS, WIKI_API
 
 logger = logging.getLogger(__name__)
 POWER_URL = "https://power.larc.nasa.gov/api/temporal/climatology/point"
@@ -144,3 +145,81 @@ async def get_season(request: SeasonRequest) -> dict:
                 "temp_c": round(temp_c, 1), "rain_mm_day": round(rain, 1), **season_tips(stop.month, temp_c, rain, places)}
 
     return {"source": "NASA POWER climatology", "stops": [item for stop in request.stops if (item := tips(stop))]}
+
+
+# ---- One-shot planner: typical weather for the whole trip, before any stop exists ----
+
+PLANNER_GUIDANCE = (
+    "These are typical conditions for the travel month(s), not a forecast. Let them shape the plan: "
+    "in a rainy season keep one day flexible and pair outdoor sights with indoor alternatives; "
+    "in cold months (below about 5 °C) don't build days around gardens, beaches or hikes that are out of season, "
+    "and favour museums, markets, hot springs and winter highlights instead; in hot months put outdoor sights "
+    "early or late in the day. Mention the matching packing tip (umbrella, warm layers, water) once. "
+    "Never describe these figures as a forecast."
+)
+
+
+def pick_location(pages: list[dict]) -> dict | None:
+    """First search result that has coordinates and isn't a disambiguation page."""
+    for page in sorted(pages, key=lambda item: item.get("index", 99)):
+        spot = (page.get("coordinates") or [{}])[0]
+        if "lat" in spot and "disambiguation" not in page.get("pageprops", {}):
+            return {"title": page["title"], "lat": spot["lat"], "lon": spot["lon"]}
+    return None
+
+
+async def _locate(client: httpx.AsyncClient, destination: str) -> dict | None:
+    """Destination coordinates from Wikipedia search (free, no key), cached forever."""
+    key = f"loc:{destination.strip().casefold()}"
+    async with _db_lock:
+        cached = _cache(key)
+    if cached:
+        return cached
+    try:
+        response = await client.get(WIKI_API, params={
+            "action": "query", "format": "json", "formatversion": 2, "redirects": 1,
+            "generator": "search", "gsrsearch": destination, "gsrlimit": 5, "gsrnamespace": 0,
+            "prop": "coordinates|pageprops", "ppprop": "disambiguation"})
+        response.raise_for_status()
+        spot = pick_location(response.json().get("query", {}).get("pages", []))
+    except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+        logger.info("Could not locate %s: %s", destination, exc)
+        return None
+    if not spot:
+        return None
+    async with _db_lock:
+        return _cache(key, spot)
+
+
+def trip_months(start: date, days: int) -> list[int]:
+    """Calendar months the trip touches, in travel order."""
+    months: list[int] = []
+    for offset in range(max(1, days)):
+        month = (start + timedelta(days=offset)).month
+        if month not in months:
+            months.append(month)
+    return months
+
+
+async def trip_season(destination: str | None, start: date | None, days: int | None) -> dict | None:
+    """Typical weather at the destination for each month of the trip, for the one-shot planner's prompt.
+    None when there is no start date, or the place or its climate can't be found; the plan then goes ahead as before."""
+    if not destination or not start:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=15.0, headers=HEADERS) as client:
+            spot = await _locate(client, destination)
+            climate = spot and await _climate(client, f"{spot['lat']:.1f},{spot['lon']:.1f}")
+    except httpx.HTTPError as exc:  # client setup; lookups already handle their own errors
+        logger.info("Season lookup failed for %s: %s", destination, exc)
+        return None
+    if not climate:
+        return None
+    months = []
+    for month in trip_months(start, days or 1):
+        temp_c, rain = climate[MONTHS[month - 1]]
+        tips = season_tips(month, temp_c, rain, [])
+        months.append({"month": month_name[month], "typical_temp_c": round(temp_c), "typical_rain_mm_per_day": round(rain, 1),
+                       "season": tips["badge"]["text"], "notes": [note["text"] for note in tips["notes"]]})
+    return {"source": "NASA POWER monthly climate averages", "located_as": spot["title"], "months": months,
+            "how_to_use": PLANNER_GUIDANCE}
