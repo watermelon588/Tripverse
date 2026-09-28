@@ -40,14 +40,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           onClose();
         }
       } else {
-        const { error } = await signUp(email, password, fullName);
+        const { error, needsEmailConfirmation } = await signUp(email, password, fullName);
         if (error) {
           setErrorMsg(error.message);
+        } else if (needsEmailConfirmation) {
+          setSuccessMsg('Check your email to confirm your account, then sign in.');
         } else {
-          setSuccessMsg('Account created successfully! Check your email to verify if required.');
-          setTimeout(() => {
-            onClose();
-          }, 2000);
+          onClose();
         }
       }
     } catch (err: any) {

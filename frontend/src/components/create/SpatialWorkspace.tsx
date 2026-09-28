@@ -1,159 +1,321 @@
-/*
- * SpatialWorkspace — right-hand column that will host the 3D route graph.
- *
- * Until the React Three Fiber scene lands here, it shows a live-drawn node
- * graph of the active trip: nodes pop in and the edges draw themselves, so
- * the panel previews what the spatial view is for instead of sitting empty.
- */
-import React, { useRef } from 'react';
-import { useGSAP } from '@gsap/react';
-import gsap from 'gsap';
-
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CurrentTripContext } from './CurrentTrip';
-import { CloseIcon, LayersIcon, PinIcon, RouteIcon } from '../home/v2/IconsV2';
-import { EASE, prefersReducedMotion } from '../home/v2/motion';
+import { airDistanceKm, type Coordinates, type ItineraryGraph, type ItineraryNode, type NearbyPlace, type RoadMetric } from './itineraryGraph';
+import { expandLeg, formatMinutes, legFacts, type Prefs } from './spatialModel';
+import { Inspector, Journal, PrefsLine, RouteStrip, RouteTree, type Sel, type SelKind, type SpatialCtx } from './SpatialDetail';
+import type { GraphLayout } from './TripGraph3D';
+import type { MapSkin } from './GoogleTripMap';
+import { getNearbyPlaces, getRoadMetrics, getTripGeocodes } from '../../services/tripService';
+import { usePlaceMedia, type MediaTarget } from '../../services/placeMedia';
+import { useStopCoordinates } from './stopLocations';
+import { CloseIcon, RouteIcon } from '../home/v2/IconsV2';
 
-interface SpatialWorkspaceProps {
+const TripGraph3D = React.lazy(() => import('./TripGraph3D').then((module) => ({ default: module.TripGraph3D })));
+const TripRouteMap = React.lazy(() => import('./TripRouteMap').then((module) => ({ default: module.TripRouteMap })));
+const GoogleTripMap = React.lazy(() => import('./GoogleTripMap').then((module) => ({ default: module.GoogleTripMap })));
+const hasGoogleMap = Boolean(import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
+
+type Variant = 'atlas' | 'outline' | 'journal';
+const VARIANTS: { id: Variant; name: string; note: string; layout: GraphLayout; skin: MapSkin }[] = [
+  { id: 'atlas', name: 'Atlas', note: 'Full-bleed stage, floating detail sheet', layout: 'geo', skin: 'atlas' },
+  { id: 'outline', name: 'Outline', note: 'Route tree · stage · inspector', layout: 'line', skin: 'paper' },
+  { id: 'journal', name: 'Journal', note: 'Stage over an expandable timeline', layout: 'helix', skin: 'atlas' },
+];
+
+interface Props {
   isOpen: boolean;
-  onClose: () => void;
+  onClose?: () => void;
+  /** Fill the parent (Trip Studio) instead of docking beside the chat: no scrim, grip or close. */
+  embedded?: boolean;
+  /** Controlled view; when set, the host's tabs drive it and the internal switch hides. */
+  mode?: 'graph' | 'map';
+  onModeChange?: (mode: 'graph' | 'map') => void;
+  /** Controlled day (Trip Studio day rail). null = overview; undefined = not synced. */
+  selectedDay?: number | null;
+  onSelectDay?: (day: number | null) => void;
   trip?: CurrentTripContext | null;
-  className?: string;
+  tripId?: string;
+  graph?: ItineraryGraph | null;
+  preferences?: Prefs | null;
+  dark?: boolean;
 }
 
-// A small, legible preview graph laid out on a 320×220 canvas.
-const NODES = [
-  { id: 'a', x: 46, y: 150, label: 'Origin' },
-  { id: 'b', x: 128, y: 70, label: 'Stay' },
-  { id: 'c', x: 206, y: 142, label: 'Day trip' },
-  { id: 'd', x: 276, y: 58, label: 'Anchor' },
-];
-const EDGES: Array<[string, string]> = [
-  ['a', 'b'],
-  ['b', 'c'],
-  ['b', 'd'],
-  ['c', 'd'],
-];
+const read = (key: string) => { try { return window.localStorage.getItem(key); } catch { return null; } };
+const write = (key: string, value: string) => { try { window.localStorage.setItem(key, value); } catch { /* storage blocked */ } };
+// The panel docks beside the chat; the chat always keeps at least CHAT_MIN px.
+const PANEL_MIN = 380;
+const CHAT_MIN = 360;
+const maxWidth = () => Math.max(PANEL_MIN, Math.min(window.innerWidth - CHAT_MIN, window.innerWidth * 0.8));
+const clampWidth = (width: number) => Math.round(Math.min(Math.max(PANEL_MIN, width), maxWidth()));
+const coversDay = (node: ItineraryNode, day: number | null | undefined) => day != null && node.day_start != null
+  && day >= node.day_start && day <= (node.day_end ?? node.day_start);
+// Preview graphs stream in several times per turn; legs whose endpoints did not move reuse their metrics.
+const roadCache = new Map<string, RoadMetric>();
+const legKey = (a: Coordinates, b: Coordinates) => `${a.lat},${a.lon}>${b.lat},${b.lon}`;
+// Keyed by name, not list position, so adding a place in chat does not shift every other place's id.
+const placeId = (nodeId: string, name: string) => `draft-${nodeId}-${name.toLowerCase().replace(/\W+/g, '-')}`;
+export const SpatialWorkspace: React.FC<Props> = ({ isOpen, onClose, embedded = false, mode: modeProp, onModeChange, selectedDay, onSelectDay, trip, tripId, graph, preferences, dark = false }) => {
+  const [variant, setVariant] = useState<Variant>(() => VARIANTS.find((item) => item.id === read('tripverse-spatial-variant'))?.id || 'atlas');
+  const [innerMode, setInnerMode] = useState<'graph' | 'map'>(() => read('tripverse-spatial-mode') === 'map' ? 'map' : 'graph');
+  const mode = modeProp ?? innerMode;
+  const [sel, setSel] = useState<Sel | null>(null);
+  const [expandedNode, setExpandedNode] = useState<string | null>(null);
+  const [expandedEdge, setExpandedEdge] = useState<string | null>(null);
+  const [roadMetrics, setRoadMetrics] = useState<Record<string, RoadMetric>>({});
+  const [googleNearby, setGoogleNearby] = useState<Record<string, NearbyPlace[]>>({});
+  const [draftNearbyCoordinates, setDraftNearbyCoordinates] = useState<Record<string, Coordinates>>({});
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+  const [nearbyError, setNearbyError] = useState<string | null>(null);
+  const attemptedNearbyGeocodes = useRef(new Set<string>());
+  const [width, setWidth] = useState(() => clampWidth(Number(read('tripverse-spatial-width')) || window.innerWidth * 0.5));
+  const panel = useRef<HTMLElement>(null);
+  const drag = useRef<{ x: number; width: number } | null>(null);
+  const commitWidth = (next: number) => {
+    const value = clampWidth(next);
+    setWidth(value);
+    panel.current?.style.setProperty('--sv-w', `${value}px`);
+    write('tripverse-spatial-width', String(value));
+  };
+  useEffect(() => {
+    const onResize = () => setWidth((current) => clampWidth(current));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const prefs = useMemo<Prefs>(() => ({ ...preferences, interests: preferences?.interests?.length ? preferences.interests : trip?.interests }), [preferences, trip?.interests]);
 
-export const SpatialWorkspace: React.FC<SpatialWorkspaceProps> = ({ isOpen, onClose, trip, className = '' }) => {
-  const root = useRef<HTMLElement>(null);
+  const nodesById = useMemo(() => Object.fromEntries((graph?.nodes || []).map((node) => [node.id, node])), [graph]);
+  // Latest day props in a ref so onSelect stays stable (the map rebuilds overlays when it changes).
+  const daySync = useRef({ selectedDay, onSelectDay, nodesById });
+  daySync.current = { selectedDay, onSelectDay, nodesById };
+  const onSelect = useCallback((kind: SelKind, id: string) => {
+    setSel({ kind, id });
+    if (kind === 'node') {
+      setExpandedNode(id); setExpandedEdge(null);
+      // Report a day only when the host's day falls outside this stop, so D2 inside a D1–3 stop doesn't jump to D1.
+      const node = daySync.current.nodesById[id];
+      if (node?.day_start != null && !coversDay(node, daySync.current.selectedDay)) daySync.current.onSelectDay?.(node.day_start);
+    }
+    if (kind === 'edge') { setExpandedEdge(id); setExpandedNode(null); }
+  }, []);
+  const collapse = useCallback(() => {
+    setExpandedNode(null); setExpandedEdge(null); setSel(null);
+    if (daySync.current.selectedDay != null) daySync.current.onSelectDay?.(null);
+  }, []);
+  // Host picked a day (or Overview): open that day's stop. Reacts to the prop only, not to clicks inside.
+  // Streamed preview graphs re-run this; apply only when the day or its stop actually changes.
+  const appliedDay = useRef<string | null>(null);
+  useEffect(() => {
+    if (selectedDay === undefined || !graph) return;
+    const node = selectedDay === null ? null : graph.nodes.find((item) => coversDay(item, selectedDay));
+    const key = `${selectedDay}:${node?.id ?? ''}`;
+    if (appliedDay.current === key) return;
+    appliedDay.current = key;
+    if (selectedDay === null) { setExpandedNode(null); setExpandedEdge(null); setSel(null); return; }
+    if (node) { setSel({ kind: 'node', id: node.id }); setExpandedNode(node.id); setExpandedEdge(null); }
+  }, [selectedDay, graph]);
+  const pickVariant = (next: Variant) => { setVariant(next); write('tripverse-spatial-variant', next); };
+  const pickMode = (next: 'graph' | 'map') => { setInnerMode(next); write('tripverse-spatial-mode', next); onModeChange?.(next); };
 
-  useGSAP(
-    () => {
-      if (!isOpen || prefersReducedMotion()) return;
+  useEffect(() => {
+    attemptedNearbyGeocodes.current.clear();
+    setSel(null); setExpandedNode(null); setExpandedEdge(null);
+    setRoadMetrics({}); setGoogleNearby({}); setDraftNearbyCoordinates({}); setNearbyError(null);
+  }, [tripId]);
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (expandedNode || expandedEdge) collapse(); else onClose?.();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose, collapse, expandedNode, expandedEdge]);
 
-      const tl = gsap.timeline({ defaults: { ease: EASE } });
-      tl.from(root.current, { x: 40, opacity: 0, duration: 0.7 })
-        .from('.tv-graph2__node', {
-          scale: 0,
-          transformOrigin: '50% 50%',
-          duration: 0.6,
-          stagger: 0.1,
-          ease: 'back.out(1.8)',
-        }, '-=0.3');
+  const { coordinates, locating: geocoding } = useStopCoordinates(isOpen ? graph : null, trip?.destination, tripId);
 
-      // Draw each edge along its own length.
-      gsap.utils.toArray<SVGLineElement>('.tv-graph2__edge').forEach((line, i) => {
-        const len = line.getTotalLength();
-        gsap.fromTo(
-          line,
-          { strokeDasharray: len, strokeDashoffset: len },
-          { strokeDashoffset: 0, duration: 0.9, ease: 'power2.inOut', delay: 0.55 + i * 0.12 },
-        );
-      });
+  useEffect(() => {
+    if (!isOpen || !graph || !tripId || Object.keys(coordinates).length < 2) return;
+    const legs = graph.edges.flatMap((edge) => {
+      if (edge.mode && /flight|plane|rail|train|shinkansen|metro|bus|ferry|walk|cycle/i.test(edge.mode)
+        && !/car|taxi|drive|road/i.test(edge.mode)) return [];
+      const from = coordinates[edge.source]; const to = coordinates[edge.target];
+      if (!from || !to || (!edge.mode && airDistanceKm(from, to) > 700)) return [];
+      return [{ id: edge.id, from, to }];
+    });
+    const fromCache = () => Object.fromEntries(legs.flatMap((leg) => {
+      const hit = roadCache.get(legKey(leg.from, leg.to));
+      return hit ? [[leg.id, { ...hit, id: leg.id }]] : [];
+    }));
+    const missing = legs.filter((leg) => !roadCache.has(legKey(leg.from, leg.to)));
+    setRoadMetrics(fromCache());
+    if (!missing.length) return;
+    let active = true;
+    void getRoadMetrics(tripId, missing).then((rows) => {
+      rows.forEach((row) => { const leg = missing.find((item) => item.id === row.id); if (leg) roadCache.set(legKey(leg.from, leg.to), row); });
+      if (active) setRoadMetrics(fromCache());
+    });
+    return () => { active = false; };
+  }, [isOpen, graph, tripId, coordinates]);
 
-      tl.from('.tv-spatial__row', { y: 14, opacity: 0, duration: 0.6, stagger: 0.07 }, '-=0.2');
+  useEffect(() => {
+    const point = expandedNode && coordinates[expandedNode];
+    if (!isOpen || !tripId || !expandedNode || !point || googleNearby[expandedNode]) return;
+    let active = true;
+    setNearbyLoading(true);
+    setNearbyError(null);
+    void getNearbyPlaces(tripId, point).then((places) => {
+      if (active) setGoogleNearby((previous) => ({ ...previous, [expandedNode]: places }));
+    }).catch((error) => { if (active) { setGoogleNearby((previous) => ({ ...previous, [expandedNode]: [] })); setNearbyError(error instanceof Error ? error.message : 'Live nearby search is unavailable.'); } })
+      .finally(() => { if (active) setNearbyLoading(false); });
+    return () => { active = false; };
+  }, [isOpen, tripId, expandedNode, coordinates, googleNearby]);
 
-      // Slow ambient pulse on the anchor node.
-      gsap.to('.tv-graph2__halo', {
-        scale: 1.6,
-        opacity: 0,
-        transformOrigin: '50% 50%',
-        duration: 2.2,
-        repeat: -1,
-        ease: 'power1.out',
-      });
-    },
-    { scope: root, dependencies: [isOpen] },
-  );
+  // Locate every stop's planned places, not just the open stop's, so each one can be pinned
+  // on the map the moment the chat adds it.
+  useEffect(() => {
+    if (!isOpen || !tripId || !graph) return;
+    const targets = graph.nodes.flatMap((node) => (node.nearby_places || []).slice(0, 8).map((place) => ({
+      id: placeId(node.id, place.name), name: place.name, is_origin: false,
+    }))).filter((place) => !draftNearbyCoordinates[place.id] && !attemptedNearbyGeocodes.current.has(place.id));
+    if (!targets.length) return;
+    targets.forEach((place) => attemptedNearbyGeocodes.current.add(place.id));
+    let active = true;
+    void getTripGeocodes(tripId, targets).then((located) => {
+      if (active) setDraftNearbyCoordinates((previous) => ({ ...previous, ...located }));
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [isOpen, tripId, graph, draftNearbyCoordinates]);
+
+  const nearby = useMemo(() => {
+    const itineraryNearby: NearbyPlace[] = (expandedNode && nodesById[expandedNode]?.nearby_places || []).map((place) => ({
+      id: placeId(expandedNode!, place.name), name: place.name, category: place.category,
+      evidence: place.evidence, source: 'itinerary',
+      lat: draftNearbyCoordinates[placeId(expandedNode!, place.name)]?.lat,
+      lon: draftNearbyCoordinates[placeId(expandedNode!, place.name)]?.lon,
+    }));
+    const googlePlaces = expandedNode ? googleNearby[expandedNode] || [] : [];
+    const parent = expandedNode ? coordinates[expandedNode] : undefined;
+    return [...itineraryNearby.map((place) => {
+      const match = googlePlaces.find((other) => other.name.toLowerCase() === place.name.toLowerCase());
+      const merged = match ? { ...place, lat: place.lat ?? match.lat, lon: place.lon ?? match.lon, distance_km: match.distance_km, maps_url: match.maps_url, price_level: match.price_level } : place;
+      return merged.distance_km === undefined && parent && merged.lat !== undefined && merged.lon !== undefined
+        ? { ...merged, distance_km: airDistanceKm(parent, { lat: merged.lat, lon: merged.lon }) } : merged;
+    }), ...googlePlaces.filter((place) => !itineraryNearby.some((other) => other.name.toLowerCase() === place.name.toLowerCase()))];
+  }, [expandedNode, nodesById, draftNearbyCoordinates, googleNearby, coordinates]);
+
+  // Every stop's located planned places, for pinning on the map without opening the stop.
+  const planned = useMemo(() => (graph?.nodes || []).flatMap((node) => (node.nearby_places || []).flatMap((place) => {
+    const at = draftNearbyCoordinates[placeId(node.id, place.name)];
+    return at ? [{ id: placeId(node.id, place.name), parent: node.id, name: place.name, lat: at.lat, lon: at.lon }] : [];
+  })), [graph, draftNearbyCoordinates]);
+
+  // Photos for everything the views show. Stops wait for their coordinates so the server's
+  // distance check can reject namesakes; nearby places without their own point borrow the stop's.
+  const mediaTargets = useMemo<MediaTarget[]>(() => {
+    const stops = (graph?.nodes || []).flatMap((node) => coordinates[node.id]
+      ? [{ id: node.id, name: node.name, lat: coordinates[node.id].lat, lon: coordinates[node.id].lon }] : []);
+    const home = expandedNode ? coordinates[expandedNode] : undefined;
+    const around = nearby.flatMap((place) => place.lat !== undefined && place.lon !== undefined
+      ? [{ id: place.id, name: place.name, lat: place.lat, lon: place.lon }]
+      : home ? [{ id: place.id, name: place.name, lat: home.lat, lon: home.lon }] : []);
+    return [...stops, ...around, ...planned.map(({ id, name, lat, lon }) => ({ id, name, lat, lon }))];
+  }, [graph, coordinates, nearby, expandedNode, planned]);
+  const media = usePlaceMedia(mediaTargets);
+
+  const facts = useMemo(() => Object.fromEntries((graph?.edges || []).map((edge) => {
+    const from = coordinates[edge.source]; const to = coordinates[edge.target];
+    return [edge.id, legFacts(edge, roadMetrics[edge.id], from && to ? airDistanceKm(from, to) : null, prefs)];
+  })), [graph, coordinates, roadMetrics, prefs]);
+  const expansion = useMemo(() => {
+    const edge = expandedEdge && graph?.edges.find((item) => item.id === expandedEdge);
+    if (!edge || !facts[edge.id]) return null;
+    return expandLeg(edge, facts[edge.id], [nodesById[edge.source]?.name || 'Start', nodesById[edge.target]?.name || 'End'],
+      coordinates[edge.source], coordinates[edge.target], roadMetrics[edge.id]);
+  }, [expandedEdge, graph, facts, nodesById, coordinates, roadMetrics]);
 
   if (!isOpen) return null;
+  const spec = VARIANTS.find((item) => item.id === variant) || VARIANTS[0];
+  const ctx: SpatialCtx | null = graph ? { graph, nodesById, facts, coordinates, prefs, nearby, nearbyLoading, nearbyError,
+    expandedNode, expandedEdge, expansion, sel, onSelect, collapse, media } : null;
+  const totals = Object.values(facts).reduce((sum, f) => ({ km: sum.km + (f.km || 0), min: sum.min + (f.minutes || 0) }), { km: 0, min: 0 });
+  const night = variant === 'atlas' || dark;
 
-  const pos = Object.fromEntries(NODES.map((n) => [n.id, n]));
+  const stage = graph && <div className="tv-sv__stage">
+    <React.Suspense fallback={<div className="tv-spatial__loading">Loading route view…</div>}>
+      {mode === 'graph'
+        ? <TripGraph3D graph={graph} layout={spec.layout} night={night} coordinates={coordinates} facts={facts} nearby={nearby}
+          expandedNode={expandedNode} expandedEdge={expandedEdge} expansion={expansion} selected={sel?.id || null} onSelect={onSelect} />
+        : hasGoogleMap
+          ? <GoogleTripMap graph={graph} skin={dark ? 'night' : spec.skin} coordinates={coordinates} roadMetrics={roadMetrics} facts={facts} nearby={nearby}
+            expandedNode={expandedNode} expandedEdge={expandedEdge} expansion={expansion} selected={sel?.id || null} onSelect={onSelect}
+            inset={variant === 'atlas' ? { right: 400, bottom: 110 } : undefined} planned={planned} media={media} />
+          : <TripRouteMap graph={graph} coordinates={coordinates} roadMetrics={roadMetrics} nearby={nearby} focusedNode={expandedNode}
+            selectedNode={sel?.kind === 'node' ? sel.id : null} selectedEdge={sel?.kind === 'edge' ? sel.id : null}
+            onSelectNode={(id) => onSelect('node', id)} onSelectEdge={(id) => onSelect('edge', id)} onSelectNearby={(id) => onSelect('nearby', id)} />}
+    </React.Suspense>
+    {(expandedNode || expandedEdge) && <button type="button" className="tv-sv__collapse" onClick={collapse}>← Whole route <kbd>Esc</kbd></button>}
+    <span className="tv-sv__status">{geocoding ? 'Locating stops…' : `${Object.keys(coordinates).length}/${graph.nodes.length} located`}</span>
+  </div>;
 
-  return (
-    <aside className={`tv-spatial ${className}`} ref={root} aria-label="Spatial trip workspace">
-      <div className="tv-spatial__bar">
-        <LayersIcon width={16} height={16} />
-        <span className="tv-label">Spatial view</span>
-        <span className="tv-app__bar-spacer" />
-        <button type="button" className="tv-iconbtn" onClick={onClose} aria-label="Close spatial view">
-          <CloseIcon width={16} height={16} />
-        </button>
-      </div>
+  const summary = <div className="tv-sv__summary">
+    <div><strong>{graph?.nodes.length || 0}</strong><span>stops</span></div>
+    <div><strong>{graph?.edges.length || 0}</strong><span>legs</span></div>
+    <div><strong>{totals.km ? Math.round(totals.km).toLocaleString() : '—'}</strong><span>km</span></div>
+    <div><strong>{totals.min ? formatMinutes(totals.min) : '—'}</strong><span>moving</span></div>
+  </div>;
 
-      <div className="tv-spatial__body">
-        <div className="tv-spatial__canvas">
-          <svg viewBox="0 0 320 220" className="tv-graph2" role="img" aria-label="Preview of the trip route graph">
-            {EDGES.map(([from, to]) => (
-              <line
-                key={`${from}-${to}`}
-                className="tv-graph2__edge"
-                x1={pos[from].x}
-                y1={pos[from].y}
-                x2={pos[to].x}
-                y2={pos[to].y}
-              />
-            ))}
-            {NODES.map((n) => (
-              <g key={n.id}>
-                {n.id === 'd' && <circle className="tv-graph2__halo" cx={n.x} cy={n.y} r={11} />}
-                <circle className={`tv-graph2__node ${n.id === 'd' ? 'is-anchor' : ''}`} cx={n.x} cy={n.y} r={n.id === 'd' ? 8 : 6} />
-                <text className="tv-graph2__label" x={n.x} y={n.y + 22} textAnchor="middle">
-                  {n.label}
-                </text>
-              </g>
-            ))}
-          </svg>
+  return <>
+    {!embedded && <button type="button" className="tv-spatial__scrim" aria-label="Close spatial view" onClick={onClose} />}
+    <aside ref={panel} className={`tv-sv is-${variant} ${night ? 'is-night' : ''} ${embedded ? 'is-embedded' : ''}`} aria-label="Spatial trip workspace"
+      style={{ '--sv-w': `${width}px` } as React.CSSProperties}>
+      {/* Drag writes the CSS variable directly; React state commits once on release. */}
+      {!embedded && <div className="tv-sv__grip" role="separator" tabIndex={0} aria-orientation="vertical" aria-label="Resize route panel"
+        aria-valuemin={PANEL_MIN} aria-valuemax={Math.round(maxWidth())} aria-valuenow={width} title="Drag to resize · double-click to toggle size"
+        onPointerDown={(event) => { drag.current = { x: event.clientX, width }; event.currentTarget.setPointerCapture(event.pointerId); panel.current?.classList.add('is-resizing'); }}
+        onPointerMove={(event) => { if (drag.current) panel.current?.style.setProperty('--sv-w', `${clampWidth(drag.current.width + drag.current.x - event.clientX)}px`); }}
+        onPointerUp={(event) => { if (!drag.current) return; commitWidth(drag.current.width + drag.current.x - event.clientX); drag.current = null; panel.current?.classList.remove('is-resizing'); }}
+        onPointerCancel={() => { if (drag.current) commitWidth(drag.current.width); drag.current = null; panel.current?.classList.remove('is-resizing'); }}
+        onDoubleClick={() => commitWidth(width > window.innerWidth * 0.6 ? window.innerWidth * 0.42 : maxWidth())}
+        onKeyDown={(event) => {
+          const step = event.shiftKey ? 120 : 40;
+          const next = { ArrowLeft: width + step, ArrowRight: width - step, Home: maxWidth(), End: PANEL_MIN }[event.key];
+          if (next !== undefined) { event.preventDefault(); commitWidth(next); }
+        }}><span aria-hidden="true" /></div>}
+      <header className="tv-sv__bar">
+        <div className="tv-sv__variants" role="tablist" aria-label="Layout variation">
+          {VARIANTS.map((item, index) => <button key={item.id} type="button" role="tab" aria-selected={variant === item.id}
+            className={variant === item.id ? 'is-active' : ''} onClick={() => pickVariant(item.id)} title={item.note}>
+            <em>{String.fromCharCode(65 + index)}</em>{item.name}</button>)}
         </div>
+        {modeProp === undefined && <div className="tv-sv__modes" role="group" aria-label="Route view">
+          <button type="button" aria-pressed={mode === 'graph'} className={mode === 'graph' ? 'is-active' : ''} onClick={() => pickMode('graph')}>3D graph</button>
+          <button type="button" aria-pressed={mode === 'map'} className={mode === 'map' ? 'is-active' : ''} onClick={() => pickMode('map')}>Map</button>
+        </div>}
+        {!embedded && onClose && <button type="button" className="tv-iconbtn" onClick={onClose} aria-label="Close spatial view"><CloseIcon width={16} height={16} /></button>}
+      </header>
 
-        <h3 className="tv-display tv-spatial__title">
-          {trip?.destination ? (
-            <>
-              {trip.destination} <em>as a graph.</em>
-            </>
-          ) : (
-            <>
-              Your route, <em>as a graph.</em>
-            </>
-          )}
-        </h3>
-
-        <p className="tv-body tv-spatial__copy">
-          Cities, stays, transit and costs become connected nodes as the plan takes shape. The full 3D
-          universe opens here once the itinerary is ready.
-        </p>
-
-        <dl className="tv-spatial__rows">
-          <div className="tv-spatial__row">
-            <dt className="tv-meta">
-              <PinIcon width={12} height={12} /> Anchor
-            </dt>
-            <dd>{trip?.destination || 'Not set'}</dd>
-          </div>
-          <div className="tv-spatial__row">
-            <dt className="tv-meta">
-              <RouteIcon width={12} height={12} /> Stage
-            </dt>
-            <dd>{trip?.status ? trip.status.toLowerCase() : 'discovery'}</dd>
-          </div>
-          <div className="tv-spatial__row">
-            <dt className="tv-meta">
-              <LayersIcon width={12} height={12} /> Length
-            </dt>
-            <dd>{trip?.days ? `${trip.days} days` : '—'}</dd>
-          </div>
-        </dl>
-      </div>
+      {!graph || !ctx ? <div className="tv-spatial__empty"><RouteIcon width={28} height={28} />
+        <h3>Your route will take shape with the itinerary.</h3>
+        <p>When the planner writes a draft, its places and connections appear here during the same response.</p>
+      </div> : variant === 'atlas' ? <div className="tv-sv__body">
+        {stage}
+        <div className="tv-sv__title"><span>{trip?.days ? `${trip.days} days` : 'Route'}</span><h2>{trip?.destination || 'Your journey'}</h2>{summary}</div>
+        <div className="tv-sv__sheet" key={sel?.id || 'none'}><Inspector ctx={ctx} /></div>
+        <RouteStrip ctx={ctx} />
+      </div> : variant === 'outline' ? <div className="tv-sv__body">
+        <div className="tv-sv__rail">
+          <div className="tv-sv__title"><span>Route outline</span><h2>{trip?.destination || 'Your journey'}</h2>{summary}<PrefsLine prefs={prefs} /></div>
+          <RouteTree ctx={ctx} />
+        </div>
+        {stage}
+        <div className="tv-sv__sheet" key={sel?.id || 'none'}><Inspector ctx={ctx} /></div>
+      </div> : <div className="tv-sv__body">
+        <div className="tv-sv__lead">
+          <div className="tv-sv__title"><span>The journey, in order</span><h2>{trip?.destination || 'Your journey'} <em>as a journal.</em></h2>{summary}<PrefsLine prefs={prefs} /></div>
+          {stage}
+        </div>
+        <Journal ctx={ctx} />
+      </div>}
     </aside>
-  );
+  </>;
 };

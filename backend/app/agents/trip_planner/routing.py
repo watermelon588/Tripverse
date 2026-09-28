@@ -11,6 +11,6 @@ def route_after_validation(state: TripPlanningState) -> str:
     """
 
     if state.get("onboarding_complete"):
-        return "complete"
+        return "complete" if state.get("planning_started") else "choice"
 
     return "incomplete"

@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     # Groq LLM Configuration (Primary)
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "openai/gpt-oss-120b"
+    # Smaller Groq model for JSON extraction/intent nodes; empty uses GROQ_MODEL.
+    GROQ_FAST_MODEL: str = "openai/gpt-oss-20b"
 
     # Google Gemini LLM Configuration (Fallback)
     GEMINI_API_KEY: str = ""
@@ -40,6 +42,11 @@ class Settings(BaseSettings):
 
     # Tavily Web Search Configuration
     TAVILY_API_KEY: str = ""
+
+    # Optional free openrouteservice key for road distance and duration.
+    ORS_API_KEY: str = ""
+    GOOGLE_MAPS_API_KEY: str = ""
+    GOOGLE_ROUTES_ENABLED: bool = False
 
     # Cloudinary Configuration
     CLOUDINARY_CLOUD_NAME: str = ""

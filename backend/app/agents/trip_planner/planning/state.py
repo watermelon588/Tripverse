@@ -7,6 +7,8 @@ class PlanningState(TypedDict, total=False):
     destination: str
     duration_days: int
     origin: str | None
+    places_to_visit: list[str]
+    planning_preferences: dict[str, Any]
 
     trip_type: str | None
     planning_notes: str | None
@@ -24,12 +26,16 @@ def create_initial_planning_state(
     destination: str,
     duration_days: int,
     origin: str | None = None,
+    places_to_visit: list[str] | None = None,
+    planning_preferences: dict[str, Any] | None = None,
 ) -> PlanningState:
     """Create a clean, initialized PlanningState from basic trip context."""
     return PlanningState(
         destination=destination,
         duration_days=duration_days,
         origin=origin,
+        places_to_visit=places_to_visit or [],
+        planning_preferences=planning_preferences or {},
         trip_type=None,
         planning_notes=None,
         research_queries=[],

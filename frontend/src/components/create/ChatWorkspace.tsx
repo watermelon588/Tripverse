@@ -4,7 +4,7 @@
  * Header bar, scrolling transcript, and a sticky composer. Hairlines and
  * quiet surfaces replace the previous hard-shadow tactile chrome.
  */
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 
@@ -12,7 +12,9 @@ import { ChatMessage, type ChatMessageItem } from './ChatMessage';
 import { AssistantAvatar } from './AssistantAvatar';
 import { ChatWelcome } from './ChatWelcome';
 import { ChatComposer } from './ChatComposer';
-import { OriginPromptCard } from './OriginPromptCard';
+import { TripOnboardingForm, type OnboardingValues } from './TripOnboardingForm';
+import { TripPlanningChoice } from './TripPlanningChoice';
+import { CopilotPanel, type CopilotOp, type CopilotState } from './CopilotPanel';
 import { ThemeToggle } from '../common/ThemeToggle';
 import { MenuIcon, LayersIcon, GraphIcon } from '../home/v2/IconsV2';
 import { EASE, prefersReducedMotion } from '../home/v2/motion';
@@ -26,12 +28,23 @@ interface ChatWorkspaceProps {
   activeChatTitle?: string;
   isSpatialOpen: boolean;
   onToggleSpatial: () => void;
+  isBudgetOpen?: boolean;
+  onToggleBudget?: () => void;
   onSelectPrompt: (promptText: string) => void;
   isLoading?: boolean;
+  loadingStage?: string;
   onResetChat?: () => void;
-  showOriginPrompt?: boolean;
-  onSubmitManualOrigin?: (originText: string) => void;
-  onSubmitGeolocationOrigin?: (latitude: number, longitude: number, label?: string) => void;
+  onboardingValues?: Partial<OnboardingValues> | null;
+  onSubmitOnboarding?: (values: OnboardingValues) => void;
+  showPlanningChoice?: boolean;
+  planningBrief?: Partial<OnboardingValues> | null;
+  onGenerateFull?: () => void;
+  onStartBuild?: () => void;
+  copilot?: CopilotState | null;
+  onCopilotOps?: (ops: CopilotOp[], label: string, day: number) => void;
+  copilotDay?: number | null;
+  onCopilotDay?: (day: number) => void;
+  showComposer?: boolean;
 }
 
 function ResetIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -43,6 +56,12 @@ function ResetIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+function BudgetIcon(props: React.SVGProps<SVGSVGElement>) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+    <rect x="3" y="5" width="18" height="15" rx="2" /><path d="M3 9h18M7 5V3m10 2V3M7 14h4m3 0h3" />
+  </svg>;
+}
+
 export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   messages,
   onSendMessage,
@@ -52,22 +71,37 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   activeChatTitle,
   isSpatialOpen,
   onToggleSpatial,
+  isBudgetOpen = false,
+  onToggleBudget,
   onSelectPrompt,
   isLoading = false,
+  loadingStage = 'Putting your trip together',
   onResetChat,
-  showOriginPrompt = false,
-  onSubmitManualOrigin,
-  onSubmitGeolocationOrigin,
+  onboardingValues,
+  onSubmitOnboarding,
+  showPlanningChoice,
+  planningBrief,
+  onGenerateFull,
+  onStartBuild,
+  copilot,
+  onCopilotOps,
+  copilotDay,
+  onCopilotDay,
+  showComposer = true,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
+  const [editingBrief, setEditingBrief] = useState(false);
   const hasMessages = messages.length > 0;
 
-  // Follow the transcript down as it grows; return to the top on a new chat.
+  // Follow the transcript down as it grows, but only while the reader is already at
+  // the bottom — a streamed itinerary must not yank someone reading further up.
+  const pinned = useRef(true);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTop = hasMessages || isLoading ? el.scrollHeight : 0;
+    if (!hasMessages && !isLoading) { el.scrollTop = 0; pinned.current = true; return; }
+    if (pinned.current) el.scrollTop = el.scrollHeight;
   }, [messages, isLoading, hasMessages]);
 
   useGSAP(
@@ -112,6 +146,12 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 
         <ThemeToggle />
 
+        {onToggleBudget && <button type="button"
+          className={`tv-btn tv-btn--sm ${isBudgetOpen ? 'tv-btn--primary' : 'tv-btn--ghost'}`}
+          onClick={onToggleBudget} aria-pressed={isBudgetOpen} aria-label="Trip budget">
+          <BudgetIcon width={14} height={14} /><span className="tv-hide-mobile">Budget</span>
+        </button>}
+
         <button
           type="button"
           className={`tv-btn tv-btn--sm ${isSpatialOpen ? 'tv-btn--primary' : 'tv-btn--ghost'}`}
@@ -119,11 +159,14 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           aria-pressed={isSpatialOpen}
         >
           <LayersIcon width={14} height={14} />
-          <span className="tv-hide-mobile">Spatial view</span>
+          <span className="tv-hide-mobile">Route & map</span>
         </button>
       </header>
 
-      <div className="tv-chat__scroll" ref={scrollRef}>
+      <div className="tv-chat__scroll" ref={scrollRef} onScroll={(event) => {
+        const el = event.currentTarget;
+        pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+      }}>
         {!hasMessages && !isLoading ? (
           <div className="tv-chat__welcome-wrap">
             <ChatWelcome onSelectPrompt={onSelectPrompt} />
@@ -134,19 +177,23 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
               <ChatMessage key={msg.id} message={msg} />
             ))}
 
-            {showOriginPrompt && !isLoading && onSubmitManualOrigin && onSubmitGeolocationOrigin && (
-              <OriginPromptCard
-                onSubmitManual={onSubmitManualOrigin}
-                onSubmitGeolocation={onSubmitGeolocationOrigin}
-                disabled={isLoading}
-              />
+            {/* Forms belong to the turn before a stream; the trip status only updates when
+                the stream finishes, so hide them while a response is being written. */}
+            {!isLoading && onboardingValues && onSubmitOnboarding && (
+              <TripOnboardingForm initial={onboardingValues} onSubmit={onSubmitOnboarding} disabled={isLoading} />
+            )}
+
+            {!isLoading && showPlanningChoice && onGenerateFull && (
+              editingBrief && planningBrief && onSubmitOnboarding
+                ? <TripOnboardingForm initial={planningBrief} disabled={isLoading} onSubmit={(values) => { setEditingBrief(false); onSubmitOnboarding(values); }} />
+                : <TripPlanningChoice disabled={isLoading} onGenerateFull={onGenerateFull} onStartBuild={onStartBuild} brief={planningBrief || undefined} onEditDetails={() => setEditingBrief(true)} />
             )}
 
             {isLoading && (
               <div className="tv-chat__thinking">
                 <AssistantAvatar size={34} isThinking />
                 <div className="tv-chat__thinking-body">
-                  <span className="tv-label">TripVerse is reasoning</span>
+                  <span className="tv-label">{loadingStage}</span>
                   <span className="tv-dots" aria-hidden="true">
                     <i /> <i /> <i />
                   </span>
@@ -157,17 +204,20 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         )}
       </div>
 
-      <div className="tv-chat__composer">
+      {copilot && onCopilotOps && onCopilotDay && <CopilotPanel copilot={copilot} disabled={isLoading}
+        viewDay={copilotDay || copilot.current_day} onViewDay={onCopilotDay} onOps={onCopilotOps} />}
+
+      {showComposer && <div className="tv-chat__composer">
         <ChatComposer
           onSendMessage={onSendMessage}
           isLoading={isLoading}
           placeholder={
             hasMessages
-              ? 'Refine it — add a city, move a day, cap the budget…'
-              : 'Describe the trip: where, how long, how you like to travel…'
+              ? 'Tell me where you want to go, or ask a travel question…'
+              : 'Where are you thinking of going?'
           }
         />
-      </div>
+      </div>}
     </div>
   );
 };

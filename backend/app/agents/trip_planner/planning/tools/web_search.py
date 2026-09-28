@@ -8,7 +8,9 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-async def search_web(query: str, max_results: int = 4) -> list[dict[str, Any]]:
+async def search_web(
+    query: str, max_results: int = 4, include_domains: list[str] | None = None,
+) -> list[dict[str, Any]]:
     """
     Execute a web search for destination research evidence.
     Prioritizes Tavily API when configured, with fallback to HTML search / deterministic summary.
@@ -42,6 +44,8 @@ async def search_web(query: str, max_results: int = 4) -> list[dict[str, Any]]:
                     "max_results": max_results,
                     "topic": "general",
                 }
+                if include_domains:
+                    payload["include_domains"] = include_domains
                 resp = await client.post(
                     "https://api.tavily.com/search",
                     json=payload,
@@ -84,7 +88,8 @@ async def search_web(query: str, max_results: int = 4) -> list[dict[str, Any]]:
         async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
             resp = await client.get(
                 "https://html.duckduckgo.com/html/",
-                params={"q": cleaned_query},
+                # The HTML endpoint takes one site: filter reliably, so use the first domain.
+                params={"q": f"{cleaned_query} site:{include_domains[0]}" if include_domains else cleaned_query},
                 headers=headers,
             )
             if resp.status_code == 200:

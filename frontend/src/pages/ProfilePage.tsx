@@ -2,10 +2,10 @@
  * ProfilePage — v2 design system.
  *
  * Editorial account page: identity block, an account record set as a mono
- * key/value ledger, and a saved-trips rail. Same tokens, type and hairlines
+ * key/value ledger, and a link to the real trip library. Same tokens, type and hairlines
  * as the marketing surface at the app surface's tighter density.
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 
@@ -13,28 +13,30 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { uploadAvatar } from '../services/uploadService';
 import { AppBar } from '../components/common/AppBar';
-import { DESTINATIONS } from '../components/home/v2/content';
+import { apiFetch } from '../services/apiClient';
+import type { TripModelResponse } from '../services/tripService';
 import {
   ArrowUpRightIcon,
   CheckIcon,
   ClockIcon,
   CompassIcon,
   GraphIcon,
-  PinIcon,
   PlusIcon,
 } from '../components/home/v2/IconsV2';
-import { EASE, parallaxImage, prefersReducedMotion, splitLines } from '../components/home/v2/motion';
+import { EASE, prefersReducedMotion, splitLines } from '../components/home/v2/motion';
 
 interface ProfilePageProps {
   onNavigateHome: () => void;
   onNavigateExplore?: () => void;
   onStartPlanning?: () => void;
+  onNavigateTrips?: () => void;
 }
 
 export const ProfilePage: React.FC<ProfilePageProps> = ({
   onNavigateHome,
   onNavigateExplore,
   onStartPlanning,
+  onNavigateTrips,
 }) => {
   const { user, signOut } = useAuth();
   const root = useRef<HTMLDivElement>(null);
@@ -45,20 +47,39 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
     user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Traveller',
   );
   const [avatarUrl, setAvatarUrl] = useState<string>(
-    user?.user_metadata?.avatar_url || localStorage.getItem('tripverse-user-avatar') || '',
+    user?.user_metadata?.avatar_url || '',
   );
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [tripCount, setTripCount] = useState<number | null>(null);
 
   const email = user?.email || 'Not signed in';
   const initials = displayName.trim().slice(0, 2).toUpperCase();
   const userId = user?.id || 'guest-session';
   const isGuest = !user;
 
-  // Saved trips: the first three curated routes stand in until the trips API
-  // is wired to this page.
-  const savedTrips = DESTINATIONS.slice(0, 3);
+  useEffect(() => {
+    setDisplayName(user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Traveller');
+    setAvatarUrl(user?.user_metadata?.avatar_url || '');
+  }, [user?.id, user?.user_metadata?.full_name, user?.user_metadata?.avatar_url, user?.email]);
+
+  useEffect(() => {
+    let active = true;
+    const loadTrips = () => {
+      void apiFetch<TripModelResponse[]>('/api/trips', { method: 'GET' }).then((response) => {
+        if (active && response.ok && response.data) setTripCount(response.data.length);
+      });
+    };
+    loadTrips();
+    window.addEventListener('tripverse:trips-claimed', loadTrips);
+    return () => {
+      active = false;
+      window.removeEventListener('tripverse:trips-claimed', loadTrips);
+    };
+  }, [user?.id]);
 
   useGSAP(
     () => {
@@ -78,19 +99,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           stagger: 0.09,
         }, '-=0.6');
 
-      gsap.from('.tv-profile__trip', {
-        y: 30,
-        opacity: 0,
-        duration: 0.95,
-        ease: EASE,
-        stagger: 0.09,
-        scrollTrigger: { trigger: '.tv-profile__trips', start: 'top 85%' },
-      });
-
-      gsap.utils.toArray<HTMLElement>('.tv-profile__trip img').forEach((el) => {
-        parallaxImage(el, { trigger: el.closest('.tv-profile__trip') ?? el, amount: 7 });
-      });
-
       return () => split?.revert();
     },
     { scope: root },
@@ -104,36 +112,56 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
     setIsUploading(true);
     setUploadError(null);
 
-    const { url, error } = await uploadAvatar(file);
-    setIsUploading(false);
-
-    if (error || !url) {
-      setUploadError(error || 'That photo could not be uploaded.');
-      window.setTimeout(() => setUploadError(null), 4000);
+    if (!user) {
+      setUploadError('Sign in to update your profile photo.');
+      setIsUploading(false);
       return;
     }
 
-    setAvatarUrl(url);
-    localStorage.setItem('tripverse-user-avatar', url);
+    const { url, error } = await uploadAvatar(file);
 
-    if (user) {
-      try {
-        await supabase.auth.updateUser({ data: { avatar_url: url } });
-      } catch (err) {
-        console.warn('Could not persist avatar to Supabase metadata:', err);
-      }
+    if (error || !url) {
+      setUploadError(error || 'That photo could not be uploaded.');
+      setIsUploading(false);
+      return;
+    }
+
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ data: { avatar_url: url } });
+      if (updateError) setUploadError(updateError.message);
+      else setAvatarUrl(url);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Could not save your profile photo.');
+    } finally {
+      setIsUploading(false);
     }
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSaved(true);
-    window.setTimeout(() => setIsSaved(false), 3000);
+    setSaveError(null);
+    setIsSaved(false);
+    const fullName = displayName.trim();
+    if (!fullName) {
+      setSaveError('Enter a display name.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ data: { full_name: fullName } });
+      if (error) setSaveError(error.message);
+      else setIsSaved(true);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not save your details.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleSignOut = async () => {
-    await signOut();
-    onNavigateHome();
+    const { error } = await signOut();
+    if (error) setSaveError(error.message);
+    else onNavigateHome();
   };
 
   return (
@@ -142,6 +170,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
         onNavigateHome={onNavigateHome}
         onStartPlanning={onStartPlanning}
         onNavigateExplore={onNavigateExplore}
+        onNavigateTrips={onNavigateTrips}
         current="profile"
       />
 
@@ -202,6 +231,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
             </div>
 
             <form onSubmit={handleSaveProfile} className="tv-profile__form">
+              {saveError && <div className="tv-alert" role="alert">{saveError}</div>}
               <div className="tv-field">
                 <label htmlFor="pf-name" className="tv-field__label">Display name</label>
                 <input
@@ -221,14 +251,14 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                 </span>
               </div>
 
-              <button type="submit" className="tv-btn tv-btn--primary" style={{ width: '100%' }}>
+              <button type="submit" className="tv-btn tv-btn--primary" disabled={isSaving} style={{ width: '100%' }}>
                 {isSaved ? (
                   <>
                     <CheckIcon width={15} height={15} />
                     <span>Saved</span>
                   </>
                 ) : (
-                  <span>Save changes</span>
+                  <span>{isSaving ? 'Saving…' : 'Save changes'}</span>
                 )}
               </button>
             </form>
@@ -245,9 +275,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
               {[
                 { k: 'Session', v: isGuest ? 'Guest' : 'Authenticated' },
                 { k: 'User ID', v: `${userId.slice(0, 12)}${userId.length > 12 ? '…' : ''}` },
-                { k: 'Saved trips', v: String(savedTrips.length) },
-                { k: 'Graph nodes', v: '23' },
-                { k: 'Last plan', v: 'Japan · 14 nights' },
+                { k: 'Journeys', v: tripCount === null ? '—' : String(tripCount) },
               ].map((row) => (
                 <div key={row.k} className="tv-ledger__row">
                   <dt className="tv-meta">{row.k}</dt>
@@ -268,61 +296,21 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           </section>
         </div>
 
-        {/* Saved trips */}
+        {/* Trip library entry */}
         <section className="tv-profile__trips" aria-labelledby="saved-trips">
           <div className="tv-sec__head tv-sec__head--row" style={{ marginBottom: '1.75rem' }}>
             <div>
-              <span className="tv-label">Saved</span>
+              <span className="tv-label">Your collection</span>
               <h2 id="saved-trips" className="tv-display tv-profile__trips-title">
-                Trips you can reopen.
+                Every journey has a place.
               </h2>
             </div>
-            <button type="button" className="tv-link tv-hide-mobile" onClick={onNavigateExplore}>
-              <span>Explore more</span>
+            <button type="button" className="tv-link" onClick={onNavigateTrips}>
+              <span>Open trip library</span>
               <ArrowUpRightIcon width={15} height={15} />
             </button>
           </div>
-
-          {savedTrips.length === 0 ? (
-            <div className="tv-empty">
-              <div className="tv-empty__art" aria-hidden="true">
-                <span className="tv-empty__bar" />
-                <span className="tv-empty__bar" />
-                <span className="tv-empty__bar" />
-              </div>
-              <p className="tv-body">You have not saved a trip yet.</p>
-              <button type="button" className="tv-btn tv-btn--primary" onClick={onStartPlanning}>
-                <span>Plan your first trip</span>
-                <ArrowUpRightIcon width={15} height={15} />
-              </button>
-            </div>
-          ) : (
-            <div className="tv-profile__trip-grid tv-collapse">
-              {savedTrips.map((t) => (
-                <article key={t.code} className="tv-profile__trip" onClick={onStartPlanning}>
-                  <figure className="tv-figure tv-profile__trip-fig">
-                    <img src={t.image} alt={`${t.city}, ${t.country}`} className="tv-img tv-img--drift" loading="lazy" />
-                  </figure>
-                  <div className="tv-profile__trip-meta">
-                    <div className="tv-rail__line">
-                      <h3 className="tv-rail__city">{t.city}</h3>
-                      <span className="tv-meta">{t.code}</span>
-                    </div>
-                    <p className="tv-meta tv-rail__note">{t.note}</p>
-                    <div className="tv-rail__foot">
-                      <span className="tv-tag">
-                        <ClockIcon width={12} height={12} />
-                        {t.nights} nights
-                      </span>
-                      <span className="tv-meta">
-                        <PinIcon width={12} height={12} /> {t.country}
-                      </span>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
+          <p className="tv-body">{tripCount === null ? 'Open your trip library to see plans in progress and finished itineraries.' : tripCount === 0 ? 'No journeys yet. Begin planning and they will appear here.' : `${tripCount} ${tripCount === 1 ? 'journey' : 'journeys'} ready to revisit in your trip library.`}</p>
         </section>
       </main>
     </div>

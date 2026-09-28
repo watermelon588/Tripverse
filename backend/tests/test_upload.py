@@ -3,6 +3,14 @@ import pytest
 from unittest.mock import patch, MagicMock
 from httpx import AsyncClient, ASGITransport
 from app.main import app
+from app.core.auth import AuthenticatedUser, get_current_user
+
+
+@pytest.fixture(autouse=True)
+def authenticated_upload():
+    app.dependency_overrides[get_current_user] = lambda: AuthenticatedUser(id="test-user")
+    yield
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.mark.asyncio
@@ -71,3 +79,14 @@ async def test_upload_avatar_cloudinary_success():
         assert data["url"] == "https://res.cloudinary.com/testcloud/image/upload/v1234/tripverse/avatars/test.jpg"
         assert data["public_id"] == "tripverse/avatars/test"
         assert data["provider"] == "cloudinary"
+
+
+@pytest.mark.asyncio
+async def test_upload_avatar_requires_authentication():
+    app.dependency_overrides.pop(get_current_user, None)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.post(
+            "/api/upload/avatar", files={"file": ("avatar.png", b"image", "image/png")}
+        )
+    assert response.status_code == 401

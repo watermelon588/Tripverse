@@ -145,22 +145,13 @@ async def test_understand_user_message_manual_origin_extracts_correctly():
 # ==============================================================================
 
 @pytest.mark.asyncio
-async def test_trip_planner_graph_location_tool_flow():
-    """Verify full graph flow: understand -> validate -> respond_to_user with location tool."""
-    initial_state: TripPlanningState = {
-        "trip_id": "test-e2e-location",
-        "user_message": "use my current location",
-        "destination": "Japan",
-        "duration_days": 10,
-        "origin": None,
+async def test_incomplete_graph_uses_form_without_location_tool():
+    state: TripPlanningState = {
+        "trip_id": "test-e2e-location", "user_message": "use my current location",
+        "destination": "Japan", "duration_days": 10, "origin": None,
         "onboarding_complete": False,
-        "missing_fields": [],
-        "assistant_response": "",
     }
-
-    final_state = await trip_planner_graph.ainvoke(initial_state)
-
-    assert final_state["onboarding_complete"] is False
-    assert "origin" in final_state["missing_fields"]
-    assert "ui_action" in final_state
-    assert final_state["ui_action"]["action"] == "use_current_location"
+    result = await trip_planner_graph.ainvoke(state)
+    assert result["onboarding_complete"] is False
+    assert result["ui_action"]["action"] == "SHOW_ONBOARDING_FORM"
+    assert "origin" in result["missing_fields"]
