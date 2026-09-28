@@ -189,19 +189,22 @@ async def _ensure_plan(db: AsyncSession, trip_id: UUID) -> BudgetPlan:
     return plan
 
 
-async def budget_response(db: AsyncSession, trip: Trip, *, sync: bool = True) -> BudgetResponse:
+async def budget_response(db: AsyncSession, trip: Trip, *, sync: bool = True,
+                          payload: dict | None = None) -> BudgetResponse:
+    """`payload`: the latest itinerary payload when the caller already has it. Each database
+    round trip is ~0.5 s against a remote Postgres, so the message scan runs once, not three times."""
     plan = await _ensure_plan(db, trip.id)
     await db.flush()  # Sessions disable autoflush; include just-saved edits in the returned totals.
     if sync:
-        graph = await latest_itinerary_graph(db, trip.id)
-        if graph:
-            await sync_budget_for_graph(db, trip.id, graph)
+        payload = payload if payload is not None else (await latest_itinerary_payload(db, trip.id) or {})
+        if payload.get("graph"):
+            await sync_budget_for_graph(db, trip.id, payload["graph"])
     result = await db.execute(select(BudgetItem).where(BudgetItem.trip_id == trip.id)
                               .order_by(BudgetItem.scope, BudgetItem.place_name, BudgetItem.category, BudgetItem.label))
     items = list(result.scalars())
     if sync:
         # Keep the ledger's suggestions equal to the build-with-agent plan, turn by turn.
-        copilot = await latest_copilot_state(db, trip.id)
+        copilot = payload.get("copilot")
         if copilot and copilot.get("currency") == trip.currency:
             current = [item for item in items if item.is_current]
             for item in current:

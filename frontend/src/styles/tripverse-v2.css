@@ -598,3 +598,18 @@
 
 /* Fill the viewport so the app shell background never shows through. */
 .tv2 { min-height: 100dvh; }
+
+/* ---- Scrollbars ------------------------------------------------------------
+ * Thin, token-tinted thumb on a transparent track, in both themes. The standard
+ * properties cover Chromium and Firefox; ::-webkit-scrollbar covers Safari.
+ * :where() keeps specificity at zero so `scrollbar-width: none` strips still win.
+ * The document root sits outside .tv2 (and always light), so it gets literal values.
+ */
+html { scrollbar-width: thin; scrollbar-color: rgba(28, 27, 25, .24) transparent; }
+:where(.tv2, .tv2 *) { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--tv-ink) 22%, transparent) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 999px; background: rgba(28, 27, 25, .24) padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: rgba(28, 27, 25, .42); }
+:where(.tv2) ::-webkit-scrollbar-thumb { background-color: color-mix(in srgb, var(--tv-ink) 22%, transparent); }
+:where(.tv2) ::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--tv-ink) 40%, transparent); }

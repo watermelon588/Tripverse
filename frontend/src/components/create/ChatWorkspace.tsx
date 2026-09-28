@@ -26,8 +26,12 @@ interface ChatWorkspaceProps {
   isSidebarOpen?: boolean;
   onToggleSidebar?: () => void;
   activeChatTitle?: string;
-  isSpatialOpen: boolean;
-  onToggleSpatial: () => void;
+  /** Opens the Trip Studio (plan, map, 3D). Hidden until a plan exists. */
+  onOpenStudio?: () => void;
+  /** The trip card that closes the conversation and leads into the studio. */
+  tripPreview?: React.ReactNode;
+  /** 'drawer': the same chat inside the studio, without page-level controls. */
+  variant?: 'page' | 'drawer';
   isBudgetOpen?: boolean;
   onToggleBudget?: () => void;
   onSelectPrompt: (promptText: string) => void;
@@ -69,8 +73,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   isSidebarOpen = true,
   onToggleSidebar,
   activeChatTitle,
-  isSpatialOpen,
-  onToggleSpatial,
+  onOpenStudio,
+  tripPreview,
+  variant = 'page',
   isBudgetOpen = false,
   onToggleBudget,
   onSelectPrompt,
@@ -119,9 +124,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   );
 
   return (
-    <div className="tv-chat" ref={root}>
+    <div className={`tv-chat ${variant === 'drawer' ? 'tv-chat--drawer' : ''}`} ref={root}>
       <header className="tv-chat__bar">
-        <button
+        {variant === 'page' && <button
           type="button"
           className="tv-iconbtn"
           onClick={onToggleSidebar || onOpenMobileSidebar}
@@ -129,7 +134,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           title={isSidebarOpen ? 'Collapse sidebar' : 'Open sidebar'}
         >
           <MenuIcon width={19} height={19} />
-        </button>
+        </button>}
 
         <div className="tv-chat__title">
           <GraphIcon width={15} height={15} />
@@ -138,29 +143,26 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 
         <span className="tv-app__bar-spacer" />
 
-        {hasMessages && onResetChat && (
+        {variant === 'page' && hasMessages && onResetChat && (
           <button type="button" className="tv-iconbtn" onClick={onResetChat} title="Start over" aria-label="Start over">
             <ResetIcon width={17} height={17} />
           </button>
         )}
 
-        <ThemeToggle />
+        {variant === 'page' && <ThemeToggle />}
 
-        {onToggleBudget && <button type="button"
+        {variant === 'page' && onToggleBudget && <button type="button"
           className={`tv-btn tv-btn--sm ${isBudgetOpen ? 'tv-btn--primary' : 'tv-btn--ghost'}`}
           onClick={onToggleBudget} aria-pressed={isBudgetOpen} aria-label="Trip budget">
           <BudgetIcon width={14} height={14} /><span className="tv-hide-mobile">Budget</span>
         </button>}
 
-        <button
-          type="button"
-          className={`tv-btn tv-btn--sm ${isSpatialOpen ? 'tv-btn--primary' : 'tv-btn--ghost'}`}
-          onClick={onToggleSpatial}
-          aria-pressed={isSpatialOpen}
-        >
-          <LayersIcon width={14} height={14} />
-          <span className="tv-hide-mobile">Route & map</span>
-        </button>
+        {variant === 'page' && onOpenStudio && (
+          <button type="button" className="tv-btn tv-btn--sm tv-btn--ghost" onClick={onOpenStudio}>
+            <LayersIcon width={14} height={14} />
+            <span className="tv-hide-mobile">Open studio</span>
+          </button>
+        )}
       </header>
 
       <div className="tv-chat__scroll" ref={scrollRef} onScroll={(event) => {
@@ -188,6 +190,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                 ? <TripOnboardingForm initial={planningBrief} disabled={isLoading} onSubmit={(values) => { setEditingBrief(false); onSubmitOnboarding(values); }} />
                 : <TripPlanningChoice disabled={isLoading} onGenerateFull={onGenerateFull} onStartBuild={onStartBuild} brief={planningBrief || undefined} onEditDetails={() => setEditingBrief(true)} />
             )}
+
+            {tripPreview}
 
             {isLoading && (
               <div className="tv-chat__thinking">
