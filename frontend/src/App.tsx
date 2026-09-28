@@ -36,12 +36,15 @@ const getViewFromPath = (): ViewState => {
   if (path === '/reset-password') return 'reset-password';
   if (path === '/profile') return 'profile';
   if (path === '/trips') return 'trips';
+  if (path.startsWith('/trips/')) return 'create'; // Trip Studio lives inside the planner
   if (path === '/guide') return 'guide';
   return 'home';
 };
 
 export const App: React.FC = () => {
   const [view, setView] = useState<ViewState>(getViewFromPath);
+  const viewRef = useRef(view);
+  viewRef.current = view;
   const { user, loading: authLoading } = useAuth();
   const curtain = useRef<RouteCurtainHandle>(null);
 
@@ -66,7 +69,11 @@ export const App: React.FC = () => {
   };
 
   useEffect(() => {
-    const handlePopState = () => transitionTo(getViewFromPath());
+    // Chat <-> studio history steps stay inside the planner: no page curtain for them.
+    const handlePopState = () => {
+      const next = getViewFromPath();
+      if (next !== viewRef.current) transitionTo(next);
+    };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [transitionTo]);
