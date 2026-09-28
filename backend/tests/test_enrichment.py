@@ -117,6 +117,7 @@ async def test_forecast_inside_the_window_typical_beyond_it_plus_holidays_and_ra
     assert {s.covers for s in result.sources} == {"Place lookup", "Weather forecast", "Typical weather",
                                                   "Public holidays", "Exchange rates"}
     assert calls.count("nominatim") == 1 and calls.count("met.no") == 1  # one base, looked up once
+    assert [(p.name, round(p.lat, 2), p.country) for p in result.places] == [("Kyoto", 35.01, "jp")]
 
 
 @pytest.mark.asyncio

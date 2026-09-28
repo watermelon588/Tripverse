@@ -95,7 +95,15 @@ class DocSource(BaseModel):
     covers: str  # what it provided, e.g. "Weather forecast"
 
 
+class DocPlace(BaseModel):
+    name: str  # a day's base city, as written in the plan
+    lat: float
+    lon: float
+    country: Optional[str] = None  # ISO 3166-1 alpha-2, lower case
+
+
 class DocEnrichment(BaseModel):
+    places: list[DocPlace] = Field(default_factory=list)  # located base cities (OpenStreetMap)
     weather: list[DocWeather] = Field(default_factory=list)
     holidays: list[DocHoliday] = Field(default_factory=list)
     exchange: Optional[DocExchange] = None

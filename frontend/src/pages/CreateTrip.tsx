@@ -442,6 +442,18 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
     },
   };
 
+  // "Add to day N" from Around here. Build-with-the-agent trips take a structured add (budget and day
+  // checks run in the engine); one-shot plans get the same request as a chat message, which revises the draft.
+  const addPlace = (name: string, day: number | null) => {
+    if (activeCopilot) {
+      const target = day ?? copilotDay ?? activeCopilot.current_day;
+      void sendMessage(`Add ${name} to day ${target}`, undefined, undefined,
+        { action: 'COPILOT_OPS', ops: [{ op: 'add', name, day: target }], copilot_day: target });
+    } else {
+      void sendMessage(day ? `Please add ${name} to day ${day}.` : `Please add ${name} to the plan.`);
+    }
+  };
+
   return (
     <div className={'tv2 tv2-app tv-create ' + (theme === 'dark' ? 'is-dark dark' : '') + (studioOpen ? ' is-studio' : '')}>
       <CreateSidebar
@@ -475,6 +487,7 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
           document={studioDoc?.trip_id === activeTrip.id ? studioDoc : null} dark={theme === 'dark'}
           isLoading={isLoading} loadingStage={loadingStage} day={studioDay} onSelectDay={setStudioDay}
           onBack={() => closeStudio()} onOpenBudget={() => setIsBudgetOpen(true)}
+          onAddPlace={isLoading ? undefined : addPlace}
           chat={<ChatWorkspace key={`drawer-${activeSessionId}`} {...chatProps} variant="drawer" />} />
       )}
       {isBudgetOpen && activeTrip && <React.Suspense fallback={null}>

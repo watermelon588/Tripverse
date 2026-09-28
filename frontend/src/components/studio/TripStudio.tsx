@@ -26,6 +26,7 @@ import { EASE, prefersReducedMotion } from '../home/v2/motion';
 import { StudioPlan, dayDate, money } from './StudioPlan';
 import { TripConditions } from './TripConditions';
 import { ExportMenu } from './ExportMenu';
+import { AroundHere } from '../create/AroundHere';
 import '../../styles/trip-studio.css';
 
 const SpatialWorkspace = React.lazy(() => import('../create/SpatialWorkspace').then((module) => ({ default: module.SpatialWorkspace })));
@@ -92,11 +93,13 @@ interface Props {
   onSelectDay: (day: number | null) => void;
   onBack: () => void;
   onOpenBudget: () => void;
+  /** "Add to day N" in Around here; left out while a reply is streaming, which hides the button. */
+  onAddPlace?: (name: string, day: number | null) => void;
   chat: React.ReactNode;
 }
 
 export function TripStudio({
-  trip, tripContext, graph, document, dark, isLoading, loadingStage, day, onSelectDay, onBack, onOpenBudget, chat,
+  trip, tripContext, graph, document, dark, isLoading, loadingStage, day, onSelectDay, onBack, onOpenBudget, onAddPlace, chat,
 }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -110,6 +113,9 @@ export function TripStudio({
   const guide = guideById(trip.planning_preferences?.guide);
   const days = document?.days ?? [];
   const budget = document?.budget;
+  // The selected day's base city, located by the enrichment: what "Around here" in Trip details centres on.
+  const dayBase = days.find((entry) => entry.day === day)?.base;
+  const nearby = dayBase ? document?.enrichment?.places?.find((place) => place.name === dayBase) : undefined;
   // The brief is on the trip from the start; the document arrives a moment later.
   const prefs = trip.planning_preferences;
   const people = (prefs?.adults ?? document?.travelers.adults ?? 1) + (prefs?.children ?? document?.travelers.children ?? 0);
@@ -241,7 +247,7 @@ export function TripStudio({
               <React.Suspense fallback={<p className="tv-plan__empty">Loading the {tab === 'map' ? 'map' : '3D view'}…</p>}>
                 <SpatialWorkspace isOpen embedded mode={tab} onModeChange={(mode) => pickTab(mode)}
                   selectedDay={day} onSelectDay={onSelectDay} trip={tripContext} tripId={trip.id}
-                  graph={graph} preferences={trip.planning_preferences} dark={dark} />
+                  graph={graph} preferences={trip.planning_preferences} dark={dark} onAddPlace={onAddPlace} />
               </React.Suspense>
             )}
           </div>
@@ -294,6 +300,12 @@ export function TripStudio({
                   </section>
                 )}
                 {document && <TripConditions enrichment={document.enrichment} selectedDay={day} onSelectDay={onSelectDay} />}
+                {nearby && (
+                  <section className="tv-studio__card">
+                    <span className="tv-label">DAY {day} · {nearby.name.toUpperCase()}</span>
+                    <AroundHere lat={nearby.lat} lon={nearby.lon} day={day} onAddPlace={onAddPlace} />
+                  </section>
+                )}
                 {!budget && !document && <p className="tv-plan__empty">Loading trip details…</p>}
               </div>
             </FloatingWindow>
