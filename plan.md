@@ -69,7 +69,7 @@ Rejected:
 3. ✅ **Session 2:** Trip Studio page + hand-off. *Checkpoint 1*. *Done 2026-09-28: `/trips/:id` studio, chat preview card with photo strip, GSAP Flip card→studio morph, chat drawer inside the studio.*
 4. ✅ **Spatial S1:** place photos. *Done 2026-09-28 (photo strip ready for Session 2's preview card).*
 5. ✅ **Session 3:** sketchbook engine. *Done 2026-09-29: Sketch tab in the studio (overview + a page per day), Rough.js pages, sticky notes, stamps, receipt, highlights.*
-6. ⏭️ **Session 4:** guide characters + motion. **Next.** *Checkpoint 2*. **Spatial S2** ("Around here") runs alongside Sessions 3–4.
+6. ✅ **Session 4:** guide characters + motion. *Done 2026-09-29: the guide draws each sketch page with a pen, redraws only what changed while the agent works, and is the same character in the chat.* Next: the PDF (Session 6). *Checkpoint 2*. **Spatial S2** ("Around here") runs alongside Sessions 3–4.
 7. ✅ **Session 5:** weather, holidays, currency. *Done 2026-09-28 (built ahead of Sessions 3–4). `<TripConditions>` is mounted in the studio's Details window (by the map session); the sketch's weather doodles move to Session 3.*
 8. **Spatial S3:** season-aware recommendations. *Climate tips done early (2026-09-28); the forecast and agent prompts follow Session 5.*
 9. **Session 6:** exports. *Checkpoint 3*.
@@ -188,6 +188,37 @@ Each session is roughly one long working session: backend + frontend + tests + a
 **Files:** new `frontend/src/components/sketch/{types,layout,render,notes}.ts(x)`, `SketchbookView.tsx`, `public/fonts/*`, `src/assets/doodles.svg`, CSS, and tests. Adds `roughjs`, `perfect-freehand` and `vitest`.
 
 ### Session 4: Guide characters and motion (the "wow")
+**Status (2026-09-29): done.**
+- `components/guide/GuideCharacter.tsx`: one portrait, five moods (idle, thinking, drawing, celebrating, confused), made from GSAP transforms plus a mood badge. Aoi keeps her two hand-made thinking frames (`thinkingFrames` in `guides.ts`).
+- `components/sketch/motion.ts` (`drawPage`):
+  - DrawSVG inks each outline in reading order, and the guide's pen (its portrait on a pencil) rides the first stroke with MotionPath.
+  - Labels are written with a clip-path wipe (SplitText can't split SVG text).
+  - Doodles pop, sticky notes slap on, stamps thud, highlights sweep.
+  - A first draw is capped at 3.2 s.
+- `components/sketch/live.ts`:
+  - `withCopilot` folds each streamed `copilot` event into the studio document (same mapping as the backend's `_agent_days`), so the sketch updates mid-reply.
+  - `diffPages` finds what's new, now that cards have name-based ids.
+  - `describeChange` gives the speech bubble text, from names only.
+- `SketchbookView` behavior:
+  - The guide draws a page the first time you open it.
+  - On a change, it flips to that day, draws only the new elements, and says so ("Added Kagurazaka to day 3.").
+  - It looks confused and circles the receipt when the plan goes over budget.
+  - It thinks out loud with the agent's stage while a turn runs.
+  - A Redraw button replays a page.
+- Chat: `GuideContext` makes every assistant avatar and name the trip's guide, including the thinking row. The dead `.tv-ava` CSS was removed.
+- Receipt: the total is max(ledger projected, planned), so agent trips don't show ¥0.
+- Rough.js `toPaths` dropped dashes; dashed cards and flight arcs now render dashed.
+- Verified:
+  - Headless Chrome captures: Day 1 draws in about 3 s, with the pen mid-word at 1.2 s.
+  - A place added to a day you've already seen: the guide is on that page in 63 ms and animates only that card's name, meta and note.
+  - The over-budget change: confused, and the total circled.
+  - Reduced motion: every page final instantly, and the guide still.
+  - 29 vitest tests pass (6 new in `live.test.ts`).
+- **Deviations and open items:**
+  - A one-shot draft doesn't fill in while it streams: its day plan only exists after extraction, so the pages draw when the draft lands. Streaming `day_plan` from the backend would be needed.
+  - An add the agent *blocks* for budget (not added) doesn't trigger the confused state. Only a plan that actually goes over does.
+  - The DevTools performance profile is still to do. By construction the tweens only touch transforms, opacity, clip-path and stroke dashes.
+
 **Goal:** An anime guide sketches your trip live and reacts to what's happening.
 
 - **Guide characters:** the PFP set becomes a cast with a name and personality line, picked in the brief (Session 1). The existing two-frame Miku "thinking" loop becomes the template for the states **idle, thinking, drawing, celebrating and confused**. Frames are generated from the source art with simple CSS and GSAP transforms (bob, tilt, squash), so no new art is needed.

@@ -224,7 +224,7 @@ function receipt(doc: TripDocument): SketchElement[] {
     { id: 'rc-box', kind: 'box', x, y, w, h: bottom - y, tone: 'ink' },
     { id: 'rc-head', kind: 'text', x: x + w / 2, y: y + 32, lines: ['RECEIPT'], size: 22, tone: 'muted', anchor: 'middle', bold: true },
   ];
-  if (!rows.length && !projected) {
+  if (!rows.length && !projected && !planned) {
     els.push({ id: 'rc-empty', kind: 'text', x: x + w / 2, y: y + 100, lines: ['Nothing costed yet'], size: 22, tone: 'muted', anchor: 'middle' });
     return els;
   }
@@ -235,14 +235,16 @@ function receipt(doc: TripDocument): SketchElement[] {
   });
   const ty = y + 64 + rows.length * lineH + 18;
   els.push({ id: 'rc-rule', kind: 'path', points: [[x + 16, ty - 22], [x + w - 16, ty - 22]], tone: 'muted', dashed: true });
-  const over = target != null && projected > target;
-  const total = money(projected, currency);
+  // Agent trips have a planned total before anything is logged in the ledger.
+  const sum = Math.max(projected, planned ?? 0);
+  const over = target != null && sum > target;
+  const total = money(sum, currency);
   els.push({ id: 'rc-total-l', kind: 'text', x: x + 18, y: ty + 6, lines: ['Total'], size: 24, tone: 'ink', bold: true });
   els.push({ id: 'rc-total-v', kind: 'text', x: x + w - 18, y: ty + 6, lines: [total], size: 24, tone: over ? 'red' : 'ink', anchor: 'end', bold: true });
   if (over) {
     const tw = textWidth(total, 24);
     els.push({ id: 'rc-circle', kind: 'ellipse', cx: x + w - 18 - tw / 2, cy: ty - 2, w: tw + 30, h: 42, tone: 'red' });
-    els.push({ id: 'rc-over', kind: 'text', x: x + w - 18, y: ty + 32, lines: [`over by ${money(projected - target!, currency)}`], size: 19, tone: 'red', anchor: 'end' });
+    els.push({ id: 'rc-over', kind: 'text', x: x + w - 18, y: ty + 32, lines: [`over by ${money(sum - target!, currency)}`], size: 19, tone: 'red', anchor: 'end' });
   }
   return els;
 }
@@ -267,6 +269,20 @@ export function slotItems(items: TripDocumentItem[]) {
     columns[emptiest].push({ item, index });
   });
   return columns;
+}
+
+/**
+ * Card ids come from the place's name, not its position, so adding or removing a place
+ * leaves every other card's id alone (the live sketch only draws what's new).
+ */
+export function itemIds(prefix: string, items: TripDocumentItem[]) {
+  const seen = new Map<string, number>();
+  return items.map((item) => {
+    const slug = norm(item.name).replace(/ /g, '-').slice(0, 40) || 'place';
+    const count = (seen.get(slug) ?? 0) + 1;
+    seen.set(slug, count);
+    return `${prefix}-p-${slug}${count > 1 ? `-${count}` : ''}`;
+  });
 }
 
 function dayPage(doc: TripDocument, day: TripDocument['days'][number]): SketchPage {
@@ -304,6 +320,7 @@ function dayPage(doc: TripDocument, day: TripDocument['days'][number]): SketchPa
   }
 
   const columns = slotItems(day.items);
+  const ids = itemIds(p, day.items);
   const mustSee = doc.must_see;
   const visible: { id: string; x: number; y: number; item: TripDocumentItem }[] = [];
   columns.forEach((column, c) => {
@@ -312,8 +329,8 @@ function dayPage(doc: TripDocument, day: TripDocument['days'][number]): SketchPa
     els.push({ id: `${p}-slot-${c}-t`, kind: 'text', x: x + 34, y: 168, lines: [SLOTS[c][0].toUpperCase() + SLOTS[c].slice(1)], size: 24, tone: 'muted', bold: true });
     column.slice(0, CARD.perColumn).forEach(({ item, index }, row) => {
       const y = CARD.top + row * CARD.pitch;
-      const id = `${p}-i${index}`;
-      els.push({ id, kind: 'box', x, y, w: CARD.w, h: CARD.h, tone: item.option ? 'muted' : 'ink', dashed: item.option });
+      const id = ids[index];
+      els.push({ id, kind: 'box', x, y, w: CARD.w, h: CARD.h, tone: item.option ? 'muted' : 'ink', dashed: item.option, label: item.name });
       els.push({ id: `${id}-icon`, kind: 'doodle', name: categoryDoodle(item.category), x: x + 12, y: y + 14, size: 34, tone: 'accent' });
       const name = wrap(item.name, CARD.w - 66, 25, 3);
       if (isMustSee(item.name, mustSee)) {

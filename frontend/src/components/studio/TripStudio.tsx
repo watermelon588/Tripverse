@@ -240,7 +240,7 @@ export function TripStudio({
                 : tab === 'plan' ? <StudioPlan document={document} day={day} onSelectDay={onSelectDay} />
                   : (
                     <React.Suspense fallback={<p className="tv-plan__empty">Loading the sketchbook…</p>}>
-                      <SketchbookView document={document} day={day} onSelectDay={onSelectDay} />
+                      <SketchbookView document={document} day={day} onSelectDay={onSelectDay} guide={guide} busy={isLoading} stage={loadingStage} />
                     </React.Suspense>
                   )
             ) : (

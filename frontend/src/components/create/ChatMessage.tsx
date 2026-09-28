@@ -11,6 +11,7 @@ import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 
 import { AssistantAvatar } from './AssistantAvatar';
+import { useGuide } from '../guide/GuideContext';
 import { MarkdownMessage } from './MarkdownMessage';
 import { useAuth } from '../../context/AuthContext';
 import { CheckIcon, ClockIcon, PinIcon, PlaneIcon, WalletIcon } from '../home/v2/IconsV2';
@@ -44,6 +45,7 @@ interface ChatMessageProps {
 export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
   const { user } = useAuth();
   const root = useRef<HTMLDivElement>(null);
+  const guide = useGuide();
 
   const avatarUrl = user?.user_metadata?.avatar_url;
   const isUser = message.sender === 'user';
@@ -89,13 +91,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
             )}
           </span>
         ) : (
-          <AssistantAvatar size={34} />
+          <AssistantAvatar size={34} alt="" />
         )}
       </div>
 
       <div className="tv-msg2__col">
         <div className="tv-msg2__head">
-          <span className="tv-label">{isUser ? 'You' : 'TripVerse'}</span>
+          <span className="tv-label">{isUser ? 'You' : guide.name}</span>
           <span className="tv-meta">{message.timestamp}</span>
         </div>
 

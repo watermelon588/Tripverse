@@ -10,6 +10,8 @@ import gsap from 'gsap';
 
 import { ChatMessage, type ChatMessageItem } from './ChatMessage';
 import { AssistantAvatar } from './AssistantAvatar';
+import { GuideContext } from '../guide/GuideContext';
+import { guideById } from '../guide/guides';
 import { ChatWelcome } from './ChatWelcome';
 import { ChatComposer } from './ChatComposer';
 import { TripOnboardingForm, type OnboardingValues } from './TripOnboardingForm';
@@ -49,6 +51,8 @@ interface ChatWorkspaceProps {
   copilotDay?: number | null;
   onCopilotDay?: (day: number) => void;
   showComposer?: boolean;
+  /** The trip's chosen guide (planning_preferences.guide); every assistant avatar becomes them. */
+  guideId?: string | null;
 }
 
 function ResetIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -93,6 +97,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   copilotDay,
   onCopilotDay,
   showComposer = true,
+  guideId,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -124,6 +129,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   );
 
   return (
+    <GuideContext.Provider value={guideById(guideId)}>
     <div className={`tv-chat ${variant === 'drawer' ? 'tv-chat--drawer' : ''}`} ref={root}>
       <header className="tv-chat__bar">
         {variant === 'page' && <button
@@ -223,5 +229,6 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         />
       </div>}
     </div>
+    </GuideContext.Provider>
   );
 };
