@@ -70,8 +70,8 @@ Rejected:
 4. ✅ **Spatial S1:** place photos. *Done 2026-09-28 (photo strip ready for Session 2's preview card).*
 5. **Session 3:** sketchbook engine
 6. **Session 4:** guide characters + motion. *Checkpoint 2*. **Spatial S2** ("Around here") runs alongside Sessions 3–4.
-7. **Session 5:** weather, holidays, currency
-8. **Spatial S3:** season-aware recommendations
+7. ✅ **Session 5:** weather, holidays, currency. *Done 2026-09-28 (built ahead of Sessions 3–4). Two follow-ups: mount `<TripConditions>` in the studio info rail once the map session's panel work lands, and the sketch's weather doodles move to Session 3.*
+8. **Spatial S3:** season-aware recommendations. *Climate tips done early (2026-09-28); the forecast and agent prompts follow Session 5.*
 9. **Session 6:** exports. *Checkpoint 3*
 10. **Session 7:** polish and the one-time docs pass. The docs pass also covers the Spatial features.
 
@@ -199,6 +199,15 @@ Each session is roughly one long working session: backend + frontend + tests + a
 #### Checkpoint 2 (after Sessions 3–4): does it feel like someone who knows the place is sketching the trip with you?
 
 ### Session 5: Weather, holidays and currency
+**Status: done (2026-09-28).**
+- `services/enrichment.py`: Nominatim finds each base city (1 request a second, cached forever), then MET Norway, Nager.Date and Frankfurter run in parallel, with TTL caches in the shared runtime SQLite file (forecast 1 h, holidays 30 days, rates 6 h). Failed calls are never cached, and each source hides only its own part.
+- Days inside the forecast window get a real forecast. Later days get "Typical for <month>" from the map session's NASA POWER climate plus its `season_tips` rules. Forecast days have their own `forecast_tips` (rain, storms, heat, frost, with an indoor backup named from the day's plan).
+- The trip document has a new `enrichment` field (weather, holidays, exchange, sources). Trips without a plan get conditions for the destination on each date.
+- Build with the agent: `FACTS.conditions` (the current day in detail plus heads-ups) and a reply rule for using it. Cached, so turns stay fast; 8 s cap on a cold start.
+- `ENRICHMENT_ENABLED` setting (off in tests). `tests/test_enrichment.py` has 11 tests; 145 pass in total. Live run: Kyoto/Osaka forecast, "Typical for October", Sports Day, INR→JPY; 4.6 s cold, 0.04 s cached.
+- Frontend: `TripEnrichment` type, and `components/studio/TripConditions.tsx` (weather rows, heads-up, money, credits), checked in the browser in light and dark with live data. Also fixed `DocDay.date`, whose type resolved to `None`.
+- **Open:** mount `TripConditions` in the studio info rail (`enrichment={doc.enrichment} selectedDay onSelectDay`); sketch weather doodles (Session 3); a home-currency setting (INR is assumed for now); holiday and weather facts for the one-shot planner's prompt.
+
 **Goal:** The studio knows the world around your dates.
 
 - **Backend** `services/enrichment.py` with a TTL cache:
@@ -304,7 +313,7 @@ _Added 2026-09-28 by the map session, which owns the 3D view, the map and their 
 
 ### Progress checklist (map session, updated 2026-09-28)
 
-Building is **paused** at the user's request. `[x]` = done and verified; `[ ]` = not started or waiting.
+Building resumed on 2026-09-28 with Spatial S2. `[x]` = done and verified; `[ ]` = not started or waiting.
 
 **Before the plan (route & map redesign):**
 - [x] Three layouts (Atlas, Outline, Journal), each with a 3D graph and a Google map; all three kept as a user-facing switcher
@@ -328,15 +337,43 @@ Building is **paused** at the user's request. `[x]` = done and verified; `[ ]` =
 - [x] `<TripPhotoStrip>` for the chat preview card, plus the shared `useStopCoordinates` hook
 - [ ] Mount the strip in `TripPreviewCard` (build-with-the-agent session, in Session 2)
 - [ ] Day covers in the studio's day rail (after Session 2)
-- [ ] Photos on trip library cards
+- [x] Photos on trip library cards: a thumbnail per row and a credited cover in the detail panel, looked up by destination name (done 2026-09-28)
 
 **Spatial S2: "Around here"**
-- [ ] Not started
+- [x] Backend `GET /api/places/around?lat&lon`: Wikivoyage listings + Wikipedia landmarks and stations, merged by Wikidata id, credited photos only, 30-day cache per ~1 km cell, guests allowed, anonymous refused, 4 tests (128 pass in total)
+- [x] `<AroundHere lat lon day onAddPlace/>` in the stop detail panel: four tabs, photo or tinted monogram, distance from the stop, hours, listed price marked "may be outdated", credits
+- [x] `SpatialWorkspace` `onAddPlace` prop; "Add to day N" shows only when the host passes it
+- [ ] Wire `onAddPlace` to `COPILOT_OPS {op: 'add', name, day}` (build-with-the-agent session, where the studio mounts the views)
+- [ ] Mount `<AroundHere>` in the studio's info rail (optional, same session)
 
-**Spatial S3: Season- and weather-aware tips**
-- [ ] Not started (needs Session 5's weather service; the start date is available from Session 1)
+**Spatial S3: Season- and weather-aware tips** (climate part pulled forward: it needs only NASA POWER and the start date)
+- [x] Backend `POST /api/places/season`: NASA POWER monthly climate per ~10 km cell (cached forever), deterministic rules for rainy season, showers, cold, freezing and snow, heat and pleasant months, crossed with each stop's planned places; 6 tests (134 pass in total)
+- [x] Season figure and tips in the stop panel, a season tag on every stop in the outline, journal and route strip, and a **Heads-up** list in the overview
+- [ ] Forecast inside the window from Session 5's MET Norway service (label "forecast" rather than "typical for <month>")
+- [x] Feed the tips to the agent: Session 5's `enrichment.py` calls `season_tips` for typical days and adds them to FACTS.conditions. The one-shot prompt is still open.
+- [x] Heads-up in the studio: Session 5's `<TripConditions>` is mounted in the studio's Details window (map session, 2026-09-28)
 
-**Clean-up owed:** the dead `.tv-spatial__*` rules in `tripverse-v2-planner.css`.
+**Clean-up:**
+- [x] Removed the dead `.tv-spatial__*` and `.tv-routegraph*` rules from `tripverse-v2-planner.css` (113 lines to 22). Kept `.tv-spatial__loading`, `.tv-spatial__empty` and the fallback map's `.tv-routemap*`. _(✅ done 2026-09-28 by the map session)_
+
+**Studio panels, scrollbars and spacing** (user request, 2026-09-28, map session, with Session 2's owner's go-ahead)
+- [x] **App-wide scrollbars:** thin, with a token-tinted thumb in both themes (`tripverse-v2.css`, zero specificity so `scrollbar-width: none` strips still win)
+- [x] **`FloatingWindow`** (`components/common/FloatingWindow.tsx` + `floating-window.css`):
+  - drag the title bar to move, drag the corner grip to resize, × to close, double-click the bar to reset
+  - arrow keys move, Shift + arrow keys resize
+  - windows snap to edges and are clamped to the board
+- [x] **Studio (Days, Details, Chat):**
+  - The three windows have toggles in a toolbar beside Plan · Map · 3D, plus Reset, and the layout is remembered.
+  - A window docked to a side reserves that strip, so the plan and map reflow beside it instead of hiding under it.
+  - Screens up to 900 px use one bottom sheet at a time.
+  - The phone header is one row.
+  - Folded in Session 2's four pending fixes: the canvas is isolated so map panels can't cover windows; the phone bar no longer wraps; the traveler count comes from the brief; `data-flip-id` stays on the stage.
+- [x] **The workspace's own panels:**
+  - Atlas summary, details and route; Outline outline and details; Journal summary.
+  - Each has a toggle in the bar and a × on the panel.
+  - Atlas's floating summary and details can also be dragged (`useSpatialPanels.ts`), and the map re-centres when they're hidden.
+- [x] **Checked:** 1440, 1024, 768 and 390 px, both themes, no horizontal overflow; tsc and vite build pass
+- [ ] Check the chat card → studio Flip morph in the real app (needs a real trip; Session 2 owns `CreateTrip.tsx`)
 
 ### Done so far (map session, 2026-09-28)
 
@@ -433,6 +470,19 @@ Rejected or fallback only:
 ### Spatial S2: "Around here" (see, eat, stay, landmarks and transit)
 **Goal:** For any stop, a photo-rich list of what's nearby to pick from.
 
+> **Status (2026-09-28): built by the map session; "Add to day" wiring waits on the studio host.**
+> - **Backend:** `services/around_here.py`, `GET /api/places/around`, `tests/test_around_here.py` (4 tests; 128 pass in total).
+>   - A new area costs at most 6 requests: two geosearches, then one batch each of Wikivoyage wikitext, Wikidata sitelinks, article lead photos and Commons credits.
+>   - Listings farther than 3 km are dropped, and so are events and electoral areas.
+>   - Listings with no image borrow the free lead photo of their Wikipedia article. That is the article they name, or the one their Wikidata item links to. An article with the same name counts only if it sits within 1 km.
+>   - Excerpts are the listing's first sentence (at most 180 characters), credited and linked. Nothing is paraphrased, because that would need an LLM.
+> - **Live check:**
+>   - Shibuya: every tab filled, 5 of 12 sights with photos.
+>   - Kyoto Higashiyama: 9 of 12 sights with photos.
+>   - Jaipur, Hallstatt (small town) and Pushkar (small town, in the browser): all tabs filled.
+>   - Food and stay rarely have free photos, so they show a tinted monogram.
+> - **Frontend:** `services/aroundHere.ts` (`useAroundHere`, cached per ~1 km cell per session) and `AroundHere.tsx`, mounted under "Nearby" in the stop panel. Checked at 1400 px and 390 px with no overflow. In the harness, "Add to day 3" calls `onAddPlace('A Blue Star', 3)`.
+
 - **Backend** `services/around_here.py` + `GET /api/places/around?lat&lon`:
   - Wikivoyage listings for the district (see, eat, drink, sleep, buy), merged with Wikipedia geosearch landmarks and stations
   - de-duplicated by wikidata id or name, with the distance from the stop
@@ -454,6 +504,23 @@ Rejected or fallback only:
 
 ### Spatial S3: Season- and weather-aware recommendations
 **Goal:** The plan fits the time of year. The user is warned about the rainy season, told when to pack an umbrella, and steered away from places with no fun in that season (bare gardens or closed trails in winter, beaches in the cold) toward better ones.
+
+> **Status (2026-09-28): climate tips built by the map session; forecast and agent prompts wait for Session 5.**
+> - **Backend:** `services/seasonality.py`, `POST /api/places/season` (stops with coordinates, month and planned places), `tests/test_seasonality.py` (6 tests; 134 pass in total).
+>   - One NASA POWER climatology call per ~10 km cell, cached forever. It uses the monthly mean temperature and rain; POWER's max and min figures are monthly extremes, so they aren't used.
+>   - **Rules:** rain of at least 5 mm/day means rainy season (umbrella, a flexible day, indoor backups); at least 3.5 means showers; under 5 °C is cold (outdoor places flagged as low season, indoor ones suggested); under 0 °C with alpine places means snow; 26 °C or more is hot (go early or late); 12–24 °C and dry is pleasant.
+>   - Place keywords match at word starts only, so "Sparks" isn't read as a park.
+> - **Live check:**
+>   - June Tokyo: "Rainy season", pack an umbrella.
+>   - January Kyoto: the bamboo grove and Kinkaku-ji flagged, Nishiki Market suggested.
+>   - May Jaipur: "Do Amber Fort early or late".
+>   - July Mumbai: rainy season.
+>   - January Zermatt: freezing, snow note.
+>   - Every figure is labelled "Typical for <month> · NASA POWER climate"; there are no forecast claims.
+> - **Frontend:** `services/seasonality.ts` (`useSeason`), and `stopMonth` in `spatialModel.ts` (start date + stop day).
+>   - The Season figure and tips are in the stop panel. `SeasonTag` is on every stop row, and a Heads-up list in the overview opens the stop.
+>   - Without a start date, the panel asks for one in the trip brief.
+>   - Checked in the harness (Rajasthan, May), at desktop and 390 px.
 
 - **Climate facts:** NASA POWER monthly averages per base city (temperature, rainfall), cached per location forever. Inside the forecast window, use Session 5's MET Norway forecast instead. Always label which one it is: "typical for June" or "forecast".
 - **Deterministic rules, no LLM call** (`spatialModel`-style, unit-tested):
