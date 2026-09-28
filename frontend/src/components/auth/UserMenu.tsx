@@ -31,7 +31,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({ onNavigateProfile }) => {
     'VOYAGER';
 
   const initials = displayName.substring(0, 2).toUpperCase();
-  const avatarUrl = user.user_metadata?.avatar_url || localStorage.getItem('tripverse-user-avatar');
+  const avatarUrl = user.user_metadata?.avatar_url;
 
   const handleProfileClick = () => {
     setIsDropdownOpen(false);

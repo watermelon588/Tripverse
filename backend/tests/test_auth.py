@@ -51,6 +51,26 @@ async def test_auth_signup_success(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_auth_signup_requires_email_confirmation(client: AsyncClient):
+    """Supabase may create a user without issuing a session until email confirmation."""
+    mock_client = AsyncMock()
+    mock_client.post.return_value = Response(200, json={
+        "user": {"id": str(uuid.uuid4()), "email": "new@example.com", "user_metadata": {}},
+    })
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.__aexit__.return_value = None
+    with patch("app.services.auth.httpx.AsyncClient", return_value=mock_client), patch(
+        "app.services.auth.auth_service.base_url", "https://mock.supabase.co"
+    ), patch("app.services.auth.auth_service.api_key", "mock-key"):
+        res = await client.post("/api/auth/signup", json={
+            "email": "new@example.com", "password": "secretpassword123"
+        })
+    assert res.status_code == 201
+    assert res.json()["access_token"] is None
+    assert res.json()["needs_email_confirmation"] is True
+
+
+@pytest.mark.asyncio
 async def test_auth_login_success(client: AsyncClient):
     """Test successful user login via /api/auth/login."""
     mock_user_id = str(uuid.uuid4())
@@ -114,6 +134,23 @@ async def test_auth_login_invalid_credentials(client: AsyncClient):
             assert res.status_code == 401
             data = res.json()
             assert "Invalid login credentials" in data["detail"]
+
+
+@pytest.mark.asyncio
+async def test_auth_login_rejects_missing_session(client: AsyncClient):
+    mock_client = AsyncMock()
+    mock_client.post.return_value = Response(200, json={
+        "user": {"id": str(uuid.uuid4()), "email": "traveler@example.com"}
+    })
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.__aexit__.return_value = None
+    with patch("app.services.auth.httpx.AsyncClient", return_value=mock_client), patch(
+        "app.services.auth.auth_service.base_url", "https://mock.supabase.co"
+    ), patch("app.services.auth.auth_service.api_key", "mock-key"):
+        res = await client.post("/api/auth/login", json={
+            "email": "traveler@example.com", "password": "secretpassword123"
+        })
+    assert res.status_code == 502
 
 
 @pytest.mark.asyncio
@@ -276,7 +313,7 @@ async def test_end_to_end_guest_and_user_trip_flow(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_local_jwt_decode_and_cache_avoids_remote_auth():
-    """Verify that valid JWTs decode locally and cache in memory, NEVER calling remote Supabase API."""
+    """A signed token for this project can be verified locally and cached."""
     import jwt
     import time
     from fastapi.security import HTTPAuthorizationCredentials
@@ -285,20 +322,24 @@ async def test_local_jwt_decode_and_cache_avoids_remote_auth():
     test_user_id = str(uuid.uuid4())
     payload = {
         "sub": test_user_id,
+        "aud": "authenticated",
+        "iss": "https://mock.supabase.co/auth/v1",
         "email": "fastuser@example.com",
         "role": "authenticated",
         "user_metadata": {"full_name": "Fast User"},
         "exp": int(time.time()) + 3600,
     }
-    # Encode token (unverified or signed)
-    token = jwt.encode(payload, "a-secure-32-byte-secret-key-12345", algorithm="HS256")
+    secret = "a-secure-32-byte-secret-key-12345"
+    token = jwt.encode(payload, secret, algorithm="HS256")
     creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
 
     # Clear cache before test
     _TOKEN_CACHE.pop(token, None)
 
-    with patch("app.core.auth._verify_token_with_supabase") as mock_remote:
+    with patch("app.core.auth.settings.SUPABASE_JWT_SECRET", secret), patch(
+        "app.core.auth.settings.SUPABASE_URL", "https://mock.supabase.co"
+    ), patch("app.core.auth._verify_token_with_supabase") as mock_remote:
         # First call: local JWT decode, no remote call
         user1 = await get_current_user(creds)
         assert user1.id == test_user_id
@@ -309,4 +350,76 @@ async def test_local_jwt_decode_and_cache_avoids_remote_auth():
         user2 = await get_current_user(creds)
         assert user2.id == test_user_id
         mock_remote.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_forged_token_is_rejected_even_with_guest_header():
+    import jwt
+    import time
+    from fastapi import HTTPException
+    from fastapi.security import HTTPAuthorizationCredentials
+    from app.core.auth import get_request_identity
+
+    token = jwt.encode({
+        "sub": str(uuid.uuid4()), "role": "authenticated", "aud": "authenticated",
+        "iss": "https://mock.supabase.co/auth/v1", "exp": int(time.time()) + 3600,
+    }, "a-different-secure-32-byte-secret-key", algorithm="HS256")
+    creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+    with patch("app.core.auth.settings.SUPABASE_JWT_SECRET", "the-real-secure-32-byte-secret-key"), patch(
+        "app.core.auth.settings.SUPABASE_URL", "https://mock.supabase.co"
+    ), patch("app.core.auth._verify_token_with_supabase", return_value=None):
+        with pytest.raises(HTTPException) as exc:
+            await get_request_identity(creds, str(uuid.uuid4()))
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_claim_guest_trips_transfers_only_matching_unowned_records(client: AsyncClient):
+    from sqlalchemy import select
+    from app.core.auth import get_current_user
+    from app.main import app
+    from app.models.trip import Trip
+    from conftest import TestingSessionLocal
+
+    guest_id = str(uuid.uuid4())
+    other_guest_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+    already_owned_id = str(uuid.uuid4())
+    async with TestingSessionLocal() as db:
+        db.add_all([
+            Trip(guest_id=guest_id),
+            Trip(guest_id=other_guest_id),
+            Trip(guest_id=guest_id, user_id=already_owned_id),
+        ])
+        await db.commit()
+
+    app.dependency_overrides[get_current_user] = lambda: AuthenticatedUser(id=user_id)
+    try:
+        res = await client.post("/api/auth/claim-guest-trips", json={"guest_id": guest_id})
+        assert res.status_code == 200
+        assert res.json() == {"claimed_count": 1}
+        repeat = await client.post("/api/auth/claim-guest-trips", json={"guest_id": guest_id})
+        assert repeat.json() == {"claimed_count": 0}
+        async with TestingSessionLocal() as db:
+            trips = (await db.execute(select(Trip))).scalars().all()
+            assert sum(t.user_id == user_id and t.guest_id is None for t in trips) == 1
+            assert sum(t.guest_id == other_guest_id for t in trips) == 1
+            assert sum(t.user_id == already_owned_id for t in trips) == 1
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_claim_guest_trips_requires_verified_user(client: AsyncClient):
+    with patch("app.core.auth._verify_token_with_supabase", return_value=None):
+        missing = await client.post(
+            "/api/auth/claim-guest-trips", json={"guest_id": str(uuid.uuid4())}
+        )
+        invalid = await client.post(
+            "/api/auth/claim-guest-trips",
+            headers={"Authorization": "Bearer invalid-token"},
+            json={"guest_id": str(uuid.uuid4())},
+        )
+    assert missing.status_code == 401
+    assert invalid.status_code == 401
 

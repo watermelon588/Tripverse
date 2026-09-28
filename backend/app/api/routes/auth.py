@@ -1,9 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import AuthenticatedUser, get_current_user, security
+from app.core.auth import AuthenticatedUser, get_current_user, invalidate_cached_token, security
+from app.core.database import get_db
+from app.repositories.trip import TripRepository
 from app.schemas.auth import (
     AuthSessionResponse,
+    ClaimGuestTripsRequest,
+    ClaimGuestTripsResponse,
     ForgotPasswordRequest,
     LoginRequest,
     MessageResponse,
@@ -14,6 +19,7 @@ from app.schemas.auth import (
 from app.services.auth import auth_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+trip_repository = TripRepository()
 
 
 @router.post("/signup", response_model=AuthSessionResponse, status_code=status.HTTP_201_CREATED)
@@ -46,7 +52,9 @@ async def logout(
             detail="Authentication credentials were not provided.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return await auth_service.logout(credentials.credentials)
+    result = await auth_service.logout(credentials.credentials)
+    invalidate_cached_token(credentials.credentials)
+    return result
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
@@ -85,3 +93,14 @@ async def get_current_user_profile(
         full_name=current_user.user_metadata.get("full_name"),
         user_metadata=current_user.user_metadata,
     )
+
+
+@router.post("/claim-guest-trips", response_model=ClaimGuestTripsResponse)
+async def claim_guest_trips(
+    request: ClaimGuestTripsRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Assign trips held by a guest UUID to the authenticated user."""
+    count = await trip_repository.claim_guest_trips(db, request.guest_id, current_user.id)
+    return ClaimGuestTripsResponse(claimed_count=count)
