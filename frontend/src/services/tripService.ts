@@ -1,4 +1,5 @@
 import { apiFetch, getAuthHeaders, API_BASE_URL } from './apiClient';
+import type { Coordinates, NearbyPlace, RoadMetric } from '../components/create/itineraryGraph';
 
 export interface TripCreateResponse {
   trip_id: string;
@@ -292,3 +293,46 @@ export async function deleteTrip(tripId: string): Promise<boolean> {
   return res.ok;
 }
 
+export async function getRoadMetrics(
+  tripId: string,
+  legs: { id: string; from: Coordinates; to: Coordinates }[],
+): Promise<RoadMetric[]> {
+  if (!legs.length) return [];
+  const response = await apiFetch<{ provider: string; legs: RoadMetric[] }>(
+    `/api/trips/${tripId}/route-metrics`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ legs: legs.map((leg) => ({
+        id: leg.id,
+        from_lat: leg.from.lat, from_lon: leg.from.lon,
+        to_lat: leg.to.lat, to_lon: leg.to.lon,
+      })) }),
+    },
+  );
+  return response.ok ? response.data?.legs || [] : [];
+}
+
+export async function getTripGeocodes(
+  tripId: string,
+  places: { id: string; name: string; is_origin: boolean }[],
+): Promise<Record<string, Coordinates>> {
+  if (!places.length) return {};
+  const response = await apiFetch<{ provider: string; places: { id: string; lat: number; lon: number }[] }>(
+    `/api/trips/${tripId}/geocode`,
+    { method: 'POST', body: JSON.stringify({ places }) },
+  );
+  return Object.fromEntries((response.ok ? response.data?.places || [] : [])
+    .map((place) => [place.id, { lat: place.lat, lon: place.lon }]));
+}
+
+export async function getNearbyPlaces(tripId: string, point: Coordinates): Promise<NearbyPlace[]> {
+  const response = await apiFetch<{ provider: string; places: Omit<NearbyPlace, 'source'>[] }>(
+    `/api/trips/${tripId}/nearby-places`,
+    { method: 'POST', body: JSON.stringify({ lat: point.lat, lon: point.lon }) },
+  );
+  if (response.data?.provider === 'limit_reached') {
+    throw new Error('Live nearby search reached its demo limit. Places from your draft are still available.');
+  }
+  return response.ok && response.data?.provider === 'google'
+    ? response.data.places.map((place) => ({ ...place, source: 'google' as const })) : [];
+}
