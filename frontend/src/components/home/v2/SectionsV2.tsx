@@ -550,8 +550,8 @@ export function CtaBand({ onStartPlanning }: { onStartPlanning?: () => void }) {
           Describe the trip. <em>Watch it get built.</em>
         </h2>
         <p className="tv-lead tv-cta__lead">
-          No forms. No dropdowns. One sentence about where you want to go, and the agent starts
-          reasoning in front of you.
+          Start with a short trip brief. Add the places and travel pace that matter to you,
+          then generate a day-by-day first draft you can review.
         </p>
         <button type="button" className="tv-btn tv-btn--primary" onClick={onStartPlanning}>
           <span>Start planning</span>

@@ -7,7 +7,7 @@
  * Scrolling is smoothed by Lenis and driven through GSAP's ticker so the
  * pinned capabilities section stays locked to the smoothed position.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
