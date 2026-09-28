@@ -1,19 +1,24 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import gsap from 'gsap';
+import { Flip } from 'gsap/Flip';
 import { CreateSidebar } from '../components/create/CreateSidebar';
 import { ChatWorkspace } from '../components/create/ChatWorkspace';
 import type { ChatSessionItem } from '../components/create/ChatHistory';
 import type { ChatMessageItem } from '../components/create/ChatMessage';
 import type { CurrentTripContext } from '../components/create/CurrentTrip';
-import type { CopilotState } from '../components/create/CopilotPanel';
+import type { CopilotOp, CopilotState } from '../components/create/CopilotPanel';
 import type { OnboardingValues } from '../components/create/TripOnboardingForm';
 import { graphFromLegacyText, type ItineraryGraph } from '../components/create/itineraryGraph';
+import { TripPreviewCard } from '../components/create/TripPreviewCard';
+import { TripStudio } from '../components/studio/TripStudio';
+import { prefersReducedMotion } from '../components/home/v2/motion';
 import { useTheme } from '../context/ThemeContext';
 import {
-  createTrip, deleteTrip, getItineraryGraph, getTripMessages, listTrips, sendTripMessageStream,
-  type TripModelResponse,
+  createTrip, deleteTrip, getItineraryGraph, getTripDocument, getTripMessages, listTrips, sendTripMessageStream,
+  type TripDocument, type TripModelResponse,
 } from '../services/tripService';
 
-const SpatialWorkspace = React.lazy(() => import('../components/create/SpatialWorkspace').then((module) => ({ default: module.SpatialWorkspace })));
+gsap.registerPlugin(Flip);
 const BudgetWorkspace = React.lazy(() => import('../components/create/BudgetWorkspace').then((module) => ({ default: module.BudgetWorkspace })));
 
 interface CreateTripProps {
@@ -25,6 +30,8 @@ interface CreateTripProps {
 }
 
 const sessionId = (tripId: string) => 'session-' + tripId;
+/** `/trips/<id>` opens that trip's studio; the studio lives inside the planner. */
+const studioTripFromPath = () => window.location.pathname.match(/^\/trips\/([^/]+)\/?$/)?.[1] ?? null;
 const timeLabel = (date?: string) =>
   new Date(date || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
@@ -59,7 +66,10 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
   const [loadingStage, setLoadingStage] = useState('Preparing your trip');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(320);
-  const [isSpatialOpen, setIsSpatialOpen] = useState(false);
+  const [studioOpen, setStudioOpen] = useState(() => studioTripFromPath() !== null);
+  const [studioDay, setStudioDay] = useState<number | null>(null);
+  const [studioDoc, setStudioDoc] = useState<TripDocument | null>(null);
+  const studioFlip = useRef<Flip.FlipState | null>(null);
   const [isBudgetOpen, setIsBudgetOpen] = useState(false);
   const [budgetRevision, setBudgetRevision] = useState(0);
   const [backfilledGraphs, setBackfilledGraphs] = useState<Record<string, ItineraryGraph>>({});
@@ -104,7 +114,6 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
         }],
       }));
       setActiveSessionId(id);
-      setIsSpatialOpen(false);
       setIsBudgetOpen(false);
       localStorage.setItem('tripverse-active-session-id', id);
       return { id, tripId: created.trip_id };
@@ -127,7 +136,9 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
         setTripsMap(map);
         setSessions(trips.map(sessionItem));
         const saved = localStorage.getItem('tripverse-active-session-id');
-        const id = saved && map[saved] ? saved : sessionId(trips[0].id);
+        const linked = studioTripFromPath();
+        const id = linked && map[sessionId(linked)] ? sessionId(linked)
+          : saved && map[saved] ? saved : sessionId(trips[0].id);
         setActiveSessionId(id);
         await loadMessages(id, map[id].id);
       } catch (error) {
@@ -139,6 +150,45 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
     void boot();
     return () => { alive = false; };
   }, [loadMessages, startNewTrip]);
+
+  const openStudio = (day: number | null = null, push = true) => {
+    const tripId = activeSessionId ? tripsMap[activeSessionId]?.id : undefined;
+    if (!tripId) return;
+    const card = document.querySelector('.tv-chat [data-flip-id="trip-stage"]');
+    if (card && !prefersReducedMotion()) studioFlip.current = Flip.getState(card);
+    setStudioDay(day);
+    setIsBudgetOpen(false);
+    setStudioOpen(true);
+    if (push && window.location.pathname !== `/trips/${tripId}`) window.history.pushState({ studio: true }, '', `/trips/${tripId}`);
+  };
+
+  const closeStudio = (push = true) => {
+    const finish = () => {
+      setStudioOpen(false);
+      if (push) window.history.pushState({}, '', '/create');
+    };
+    const studio = document.querySelector('.tv-studio');
+    if (!studio || prefersReducedMotion()) return finish();
+    gsap.to(studio, { opacity: 0, scale: 0.985, duration: 0.28, ease: 'power2.in', onComplete: finish });
+  };
+
+  // Back and forward between chat and studio stay inside this page.
+  useEffect(() => {
+    const onPop = () => {
+      if (studioTripFromPath()) openStudio(null, false);
+      else if (studioOpen) closeStudio(false);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  });
+
+  useLayoutEffect(() => {
+    const state = studioFlip.current;
+    studioFlip.current = null;
+    const stage = studioOpen ? document.querySelector('.tv-studio [data-flip-id="trip-stage"]') : null;
+    if (!state || !stage) return;
+    Flip.from(state, { targets: stage, duration: 0.7, ease: 'power3.inOut', absolute: true, scale: false });
+  }, [studioOpen]);
 
   const selectSession = (id: string) => {
     setActiveSessionId(id);
@@ -327,18 +377,73 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
       : null;
   }, [activeMessages, activeTrip, backfilledGraphs]);
 
+  const planned = Boolean(activeTrip && activeTrip.onboarding_status === 'COMPLETE' && activeTrip.status !== 'DRAFT' && activeGraph);
   useEffect(() => {
-    if (!isSpatialOpen || !activeTrip || activeTrip.onboarding_status !== 'COMPLETE' || activeTrip.status === 'DRAFT' || !activeMessages.length) return;
+    if (studioOpen && !planned && !isLoading && activeTrip) closeStudio();
+  }, [studioOpen, planned, isLoading, activeTrip]);
+  useEffect(() => {
+    if (!studioOpen || !activeTrip || isLoading) return;
+    let alive = true;
+    void getTripDocument(activeTrip.id).then((doc) => { if (alive) setStudioDoc(doc); })
+      .catch((error) => console.warn('Could not load the trip document', error));
+    return () => { alive = false; };
+  }, [studioOpen, activeTrip?.id, isLoading, budgetRevision, activeMessages.length]);
+  useEffect(() => { setStudioDay(null); }, [activeTrip?.id]);
+
+  useEffect(() => {
+    if (!studioOpen || !activeTrip || activeTrip.onboarding_status !== 'COMPLETE' || activeTrip.status === 'DRAFT' || !activeMessages.length) return;
     if (activeMessages.some((message) => message.payload?.kind === 'ITINERARY_GRAPH' && (message.payload.graph?.version || 0) >= 8)) return;
     if (attemptedGraphIds.current.has(activeTrip.id)) return;
     attemptedGraphIds.current.add(activeTrip.id);
     void getItineraryGraph(activeTrip.id)
       .then((graph) => setBackfilledGraphs((previous) => ({ ...previous, [activeTrip.id]: graph })))
       .catch((error) => console.warn('Could not backfill itinerary graph', error));
-  }, [activeMessages, activeTrip, isSpatialOpen]);
+  }, [activeMessages, activeTrip, studioOpen]);
+
+  const chatProps = {
+    messages: activeMessages,
+    onSendMessage: sendMessage,
+    isSidebarOpen,
+    onToggleSidebar: () => setIsSidebarOpen((open) => !open),
+    onOpenMobileSidebar: () => setIsSidebarOpen(true),
+    activeChatTitle: sessions.find((item) => item.id === activeSessionId)?.title,
+    isBudgetOpen,
+    onToggleBudget: () => setIsBudgetOpen((open) => !open),
+    onSelectPrompt: (prompt: string) => { void sendMessage(prompt); },
+    isLoading,
+    loadingStage,
+    onResetChat: () => { void startNewTrip(); },
+    onboardingValues: formMessage ? onboardingValues : null,
+    showComposer: !formMessage && !showPlanningChoice,
+    showPlanningChoice,
+    planningBrief: showPlanningChoice && activeTrip ? {
+      origin: activeTrip.origin_text || '',
+      destination: activeTrip.destination || '',
+      duration_days: activeTrip.duration_days || undefined,
+      places_to_visit: activeTrip.places_to_visit || [],
+      planning_preferences: {
+        ...activeTrip.planning_preferences,
+        pace: activeTrip.planning_preferences?.pace || 'balanced',
+        interests: activeTrip.planning_preferences?.interests || [],
+        avoid: activeTrip.planning_preferences?.avoid || [],
+      },
+      currency: activeTrip.currency as OnboardingValues['currency'],
+    } : null,
+    onGenerateFull: () => { void sendMessage('Generate the full itinerary', undefined, undefined, { action: 'GENERATE_FULL_ITINERARY' }); },
+    onStartBuild: () => { void sendMessage("Let's build it day by day together", undefined, undefined, { action: 'START_BUILD_WITH_AGENT' }); },
+    copilot: activeCopilot,
+    copilotDay: activeCopilot ? copilotDay ?? activeCopilot.current_day : null,
+    onCopilotDay: setCopilotDay,
+    onCopilotOps: (ops: CopilotOp[], label: string, day: number) => { void sendMessage(label, undefined, undefined, { action: 'COPILOT_OPS', ops, copilot_day: day }); },
+    onSubmitOnboarding: (values: OnboardingValues) => {
+      const summary = values.origin + ' to ' + values.destination + ' for ' + values.duration_days + ' days'
+        + (values.places_to_visit.length ? ', visiting ' + values.places_to_visit.join(', ') : '');
+      void sendMessage(summary, undefined, values);
+    },
+  };
 
   return (
-    <div className={'tv2 tv2-app tv-create ' + (theme === 'dark' ? 'is-dark dark' : '')}>
+    <div className={'tv2 tv2-app tv-create ' + (theme === 'dark' ? 'is-dark dark' : '') + (studioOpen ? ' is-studio' : '')}>
       <CreateSidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
@@ -353,63 +458,25 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
         onNavigateHome={onNavigateHome}
         onNavigateProfile={onNavigateProfile}
         onNavigateExplore={onNavigateExplore}
-        onExploreSpatial={() => { setIsBudgetOpen(false); setIsSpatialOpen(true); }}
+        onExploreSpatial={() => openStudio()}
       />
       <ChatWorkspace
         key={activeSessionId || 'new-trip'}
-        messages={activeMessages}
-        onSendMessage={sendMessage}
-        isSidebarOpen={isSidebarOpen}
-        onToggleSidebar={() => setIsSidebarOpen((open) => !open)}
-        onOpenMobileSidebar={() => setIsSidebarOpen(true)}
-        activeChatTitle={sessions.find((item) => item.id === activeSessionId)?.title}
-        isSpatialOpen={isSpatialOpen}
-        onToggleSpatial={() => { setIsBudgetOpen(false); setIsSpatialOpen((open) => !open); }}
-        isBudgetOpen={isBudgetOpen}
-        onToggleBudget={() => { setIsSpatialOpen(false); setIsBudgetOpen((open) => !open); }}
-        onSelectPrompt={(prompt) => { void sendMessage(prompt); }}
-        isLoading={isLoading}
-        loadingStage={loadingStage}
-        onResetChat={() => { void startNewTrip(); }}
-        onboardingValues={formMessage ? onboardingValues : null}
-        showComposer={!formMessage && !showPlanningChoice}
-        showPlanningChoice={showPlanningChoice}
-        planningBrief={showPlanningChoice && activeTrip ? {
-          origin: activeTrip.origin_text || '',
-          destination: activeTrip.destination || '',
-          duration_days: activeTrip.duration_days || undefined,
-          places_to_visit: activeTrip.places_to_visit || [],
-          planning_preferences: {
-            ...activeTrip.planning_preferences,
-            pace: activeTrip.planning_preferences?.pace || 'balanced',
-            interests: activeTrip.planning_preferences?.interests || [],
-            avoid: activeTrip.planning_preferences?.avoid || [],
-          },
-          currency: activeTrip.currency as OnboardingValues['currency'],
-        } : null}
-        onGenerateFull={() => { void sendMessage('Generate the full itinerary', undefined, undefined, { action: 'GENERATE_FULL_ITINERARY' }); }}
-        onStartBuild={() => { void sendMessage("Let's build it day by day together", undefined, undefined, { action: 'START_BUILD_WITH_AGENT' }); }}
-        copilot={activeCopilot}
-        copilotDay={activeCopilot ? copilotDay ?? activeCopilot.current_day : null}
-        onCopilotDay={setCopilotDay}
-        onCopilotOps={(ops, label, day) => { void sendMessage(label, undefined, undefined, { action: 'COPILOT_OPS', ops, copilot_day: day }); }}
-        onSubmitOnboarding={(values) => {
-          const summary = values.origin + ' to ' + values.destination + ' for ' + values.duration_days + ' days'
-            + (values.places_to_visit.length ? ', visiting ' + values.places_to_visit.join(', ') : '');
-          void sendMessage(summary, undefined, values);
-        }}
+        {...chatProps}
+        onOpenStudio={planned ? () => openStudio() : undefined}
+        tripPreview={planned && activeTrip && activeGraph ? (
+          <TripPreviewCard tripId={activeTrip.id} destination={activeTrip.destination}
+            days={activeTrip.duration_days} startDate={activeTrip.planning_preferences?.start_date}
+            guideId={activeTrip.planning_preferences?.guide} graph={activeGraph} onOpen={(day) => openStudio(day ?? null)} />
+        ) : null}
       />
-      {isSpatialOpen && <React.Suspense fallback={null}>
-        <SpatialWorkspace
-          isOpen={isSpatialOpen}
-          onClose={() => setIsSpatialOpen(false)}
-          trip={activeTrip ? tripContext(activeTrip) : null}
-          tripId={activeTrip?.id}
-          graph={activeGraph}
-          preferences={activeTrip?.planning_preferences}
-          dark={theme === 'dark'}
-        />
-      </React.Suspense>}
+      {studioOpen && planned && activeTrip && (
+        <TripStudio trip={activeTrip} tripContext={tripContext(activeTrip)} graph={activeGraph}
+          document={studioDoc?.trip_id === activeTrip.id ? studioDoc : null} dark={theme === 'dark'}
+          isLoading={isLoading} loadingStage={loadingStage} day={studioDay} onSelectDay={setStudioDay}
+          onBack={() => closeStudio()} onOpenBudget={() => setIsBudgetOpen(true)}
+          chat={<ChatWorkspace key={`drawer-${activeSessionId}`} {...chatProps} variant="drawer" />} />
+      )}
       {isBudgetOpen && activeTrip && <React.Suspense fallback={null}>
         <BudgetWorkspace tripId={activeTrip.id} destination={activeTrip.destination} graph={activeGraph}
           refreshVersion={budgetRevision} onClose={() => setIsBudgetOpen(false)} />

@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 CACHE_DB_PATH = Path(__file__).resolve().parents[2] / ".runtime" / "place_media.sqlite3"
 WIKI_API = "https://en.wikipedia.org/w/api.php"
 # Wikimedia's API policy asks every client to identify itself.
-HEADERS = {"User-Agent": "TripVerse/0.1 (https://github.com/; trip planner portfolio project) httpx"}
+HEADERS = {"User-Agent": "TripVerse/0.1 (https://github.com/watermelon588/Tripverse; trip planner portfolio project) httpx"}
 # ponytail: one radius for cities and landmarks; tighten per kind if city photos leak onto landmarks.
 MAX_DISTANCE_KM = 20
 MISS_TTL_SECONDS = 7 * 24 * 3600
@@ -114,8 +114,9 @@ async def _search(client: httpx.AsyncClient, place: PlaceMediaItem) -> dict | No
     }
 
 
-async def _credits(client: httpx.AsyncClient, files: list[str]) -> dict[str, dict]:
-    """Author and license per Commons file, in one request. Non-free files are dropped."""
+async def _credits(client: httpx.AsyncClient, files: list[str], thumb_width: int | None = None) -> dict[str, dict]:
+    """Author and license per Commons file, in one request. Non-free files are dropped.
+    With `thumb_width`, each credit also carries a `thumb` URL of that width."""
     if not files:
         return {}
     response = await client.get(WIKI_API, params={
@@ -123,6 +124,7 @@ async def _credits(client: httpx.AsyncClient, files: list[str]) -> dict[str, dic
         "titles": "|".join(f"File:{name}" for name in files[:50]),
         "prop": "imageinfo", "iiprop": "extmetadata|url",
         "iiextmetadatafilter": "Artist|LicenseShortName|LicenseUrl|NonFree",
+        **({"iiurlwidth": thumb_width} if thumb_width else {}),
     })
     response.raise_for_status()
     found = {}
@@ -136,6 +138,7 @@ async def _credits(client: httpx.AsyncClient, files: list[str]) -> dict[str, dic
             "license": meta.get("LicenseShortName", {}).get("value"),
             "license_url": meta.get("LicenseUrl", {}).get("value"),
             "file_page": info.get("descriptionurl"),
+            **({"thumb": info.get("thumburl")} if thumb_width else {}),
         }
     return found
 

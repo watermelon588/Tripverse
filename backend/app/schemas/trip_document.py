@@ -3,6 +3,7 @@
 It is the same shape for both planning modes, so views and exports never disagree.
 """
 
+import datetime as dt
 from datetime import date
 from typing import Literal, Optional
 from uuid import UUID
@@ -24,7 +25,7 @@ class DocItem(BaseModel):
 
 class DocDay(BaseModel):
     day: int
-    date: Optional[date] = None
+    date: Optional[dt.date] = None  # dt.date: a bare "date" here would resolve to the field itself
     base: str
     items: list[DocItem] = Field(default_factory=list)
     est_cost: Optional[float] = None  # whole party, from the agent's day total
@@ -53,6 +54,54 @@ class DocTravelers(BaseModel):
     children: int = 0
 
 
+class DocNote(BaseModel):
+    tone: Literal["good", "warn", "info"]
+    text: str
+
+
+class DocWeather(BaseModel):
+    day: int
+    date: dt.date
+    base: str
+    kind: Literal["forecast", "typical"]  # a real forecast, or the month's climate average
+    label: str  # "Forecast" or "Typical for October": always shown next to the numbers
+    condition: Optional[Literal["sun", "partly", "cloud", "fog", "rain", "snow", "storm"]] = None
+    temp_min: Optional[float] = None
+    temp_max: Optional[float] = None
+    temp_mean: Optional[float] = None
+    rain_mm: Optional[float] = None  # forecast: that day's total; typical: average per day
+    badge: Optional[DocNote] = None
+    notes: list[DocNote] = Field(default_factory=list)
+
+
+class DocHoliday(BaseModel):
+    day: int
+    date: dt.date
+    name: str
+    local_name: Optional[str] = None
+    country: str  # ISO 3166-1 alpha-2
+    regional: bool = False  # only some regions observe it
+
+
+class DocExchange(BaseModel):
+    base: str  # the trip currency
+    rates: dict[str, float]  # 1 base = rate × currency
+    date: str  # reference-rate date
+
+
+class DocSource(BaseModel):
+    name: str
+    url: str
+    covers: str  # what it provided, e.g. "Weather forecast"
+
+
+class DocEnrichment(BaseModel):
+    weather: list[DocWeather] = Field(default_factory=list)
+    holidays: list[DocHoliday] = Field(default_factory=list)
+    exchange: Optional[DocExchange] = None
+    sources: list[DocSource] = Field(default_factory=list)  # attribution for everything above
+
+
 class TripDocument(BaseModel):
     trip_id: UUID
     mode: Literal["agent", "one_shot", "none"]
@@ -74,3 +123,4 @@ class TripDocument(BaseModel):
     legs: list[DocLeg] = Field(default_factory=list)
     budget: DocBudget
     graph: Optional[dict] = None  # the itinerary graph the map and 3D views render
+    enrichment: Optional[DocEnrichment] = None  # None when every source failed or it is switched off

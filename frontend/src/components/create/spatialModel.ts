@@ -6,7 +6,16 @@ import { airDistanceKm, type Coordinates, type ItineraryEdge, type ItineraryNode
 export const dayLabel = (node: ItineraryNode) => node.kind === 'origin' ? 'Departure'
   : node.day_start ? `Day ${node.day_start}${node.day_end && node.day_end !== node.day_start ? `–${node.day_end}` : ''}` : 'Stop';
 
-export interface Prefs { pace?: string; interests?: string[]; avoid?: string[] }
+export interface Prefs { pace?: string; interests?: string[]; avoid?: string[]; start_date?: string | null }
+
+/** Calendar month (1–12) a stop falls in, from the trip's start date; null when either is unknown. */
+export function stopMonth(node: ItineraryNode, startDate?: string | null): number | null {
+  if (!startDate || !node.day_start) return null;
+  const date = new Date(`${startDate}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setDate(date.getDate() + node.day_start - 1);
+  return date.getMonth() + 1;
+}
 export interface Figure { value: string; source: string; estimated?: boolean }
 export interface FitNote { tone: 'good' | 'warn' | 'info'; text: string }
 export interface LegFacts {
