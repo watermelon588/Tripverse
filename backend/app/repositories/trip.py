@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import OnboardingStatus, TripStatus
@@ -52,6 +52,18 @@ class TripRepository:
         stmt = select(Trip).where(Trip.guest_id == guest_id).order_by(Trip.created_at.desc())
         result = await db.execute(stmt)
         return list(result.scalars().all())
+
+    async def claim_guest_trips(
+        self, db: AsyncSession, guest_id: uuid.UUID, user_id: str
+    ) -> int:
+        """Transfer trips identified by the guest capability to a verified user."""
+        result = await db.execute(
+            update(Trip)
+            .where(Trip.guest_id == str(guest_id), Trip.user_id.is_(None))
+            .values(user_id=user_id, guest_id=None)
+        )
+        await db.commit()
+        return result.rowcount or 0
 
     async def delete_trip(
         self, db: AsyncSession, trip: Trip

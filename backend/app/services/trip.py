@@ -89,8 +89,10 @@ class TripService:
             "duration_days": None,
             "origin": None,
             "onboarding_complete": False,
-            "missing_fields": ["destination", "duration_days"],
+            "missing_fields": ["origin", "destination", "duration_days"],
             "assistant_response": "",
+            "places_to_visit": [],
+            "planning_preferences": {},
         }
         graph_result = await trip_planner_graph.ainvoke(initial_state)
 
@@ -101,7 +103,7 @@ class TripService:
             role=MessageRole.ASSISTANT,
             message_type=MessageType.TEXT,
             content=graph_result["assistant_response"],
-            payload=None,
+            payload=graph_result.get("ui_action"),
         )
 
         # 5. Commit everything
