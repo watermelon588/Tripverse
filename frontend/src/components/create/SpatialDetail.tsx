@@ -5,6 +5,8 @@ export { dayLabel } from './spatialModel';
 import { dayLabel, placeLink, type Figure, type FitNote, type LegExpansion, type LegFacts, type Prefs } from './spatialModel';
 import { PinIcon, RouteIcon } from '../home/v2/IconsV2';
 import { creditLine, type PlaceMedia } from '../../services/placeMedia';
+import { AroundHere } from './AroundHere';
+import type { StopSeason } from '../../services/seasonality';
 
 export type SelKind = 'node' | 'edge' | 'nearby' | 'sub' | 'subleg';
 export interface Sel { kind: SelKind; id: string }
@@ -25,6 +27,9 @@ export interface SpatialCtx {
   collapse: () => void;
   /** Credited Wikimedia photos by node / place id, filled in as they arrive. */
   media: Record<string, PlaceMedia>;
+  onAddPlace?: (name: string, day: number | null) => void;
+  /** Typical-weather badge and tips by stop id (needs the trip's start date). */
+  season: Record<string, StopSeason>;
 }
 
 export const clean = (text?: string | null) => text?.replace(/<br\s*\/?\s*>/gi, ' · ').replace(/\*\*/g, '')
@@ -67,6 +72,10 @@ function WikiLine({ media }: { media?: PlaceMedia }) {
   return <p className="tv-sd__wiki">{media.description}{media.article_url && <> · <a href={media.article_url} target="_blank" rel="noopener noreferrer">Wikipedia ↗</a></>}</p>;
 }
 
+export function SeasonTag({ season }: { season?: StopSeason }) {
+  return season ? <b className={`tv-sd-season is-${season.badge.tone}`} title={`${season.label}: about ${Math.round(season.temp_c)} °C`}>{season.badge.text}</b> : null;
+}
+
 export function PrefsLine({ prefs }: { prefs: Prefs }) {
   const bits = [prefs.pace && `${prefs.pace} pace`, ...(prefs.interests || []).slice(0, 3), ...(prefs.avoid || []).slice(0, 2).map((item) => `no ${item}`)].filter(Boolean);
   return bits.length ? <div className="tv-sd__prefs"><span>Checked against</span>{bits.map((bit) => <em key={bit as string}>{bit}</em>)}</div> : null;
@@ -76,8 +85,18 @@ export function PrefsLine({ prefs }: { prefs: Prefs }) {
 
 export function Inspector({ ctx }: { ctx: SpatialCtx }) {
   const { sel, graph, nodesById, facts, nearby, expansion, prefs, onSelect } = ctx;
-  if (!sel) return <div className="tv-sd__empty"><PinIcon width={20} height={20} /><h3>Pick a stop or a leg.</h3>
-    <p>Stops open into nearby places. Legs open into segments with time, distance and cost.</p></div>;
+  if (!sel) {
+    const heads = graph.nodes.flatMap((node) => (ctx.season[node.id]?.notes || []).filter((note) => note.tone === 'warn').map((note) => ({ node, note })));
+    return <div className="tv-sd__empty"><PinIcon width={20} height={20} /><h3>Pick a stop or a leg.</h3>
+      <p>Stops open into nearby places. Legs open into segments with time, distance and cost.</p>
+      {!!heads.length && <section className="tv-sd__block tv-sd__heads" aria-label="Season heads-up">
+        <h4>Heads-up <span>typical weather</span></h4>
+        {heads.map(({ node, note }) => <button type="button" key={`${node.id}${note.text}`} onClick={() => onSelect('node', node.id)}>
+          <strong>{node.name}<SeasonTag season={ctx.season[node.id]} /></strong><small>{note.text}</small>
+        </button>)}
+      </section>}
+    </div>;
+  }
 
   if (sel.kind === 'node' && nodesById[sel.id]) {
     const node = nodesById[sel.id];
@@ -91,8 +110,15 @@ export function Inspector({ ctx }: { ctx: SpatialCtx }) {
       <div className="tv-sd__figs">
         <Fig label="When" figure={{ value: dayLabel(node), source: node.day_start ? 'From itinerary' : 'Not scheduled' }} />
         <Fig label="Located" figure={ctx.coordinates[node.id] ? { value: `${ctx.coordinates[node.id].lat.toFixed(3)}, ${ctx.coordinates[node.id].lon.toFixed(3)}`, source: 'Geocoded' } : { value: 'Pending', source: 'Locating…' }} />
+        {node.kind === 'stop' && <Fig label="Season" wide figure={ctx.season[node.id]
+          ? { value: `${ctx.season[node.id].badge.text} · ${Math.round(ctx.season[node.id].temp_c)} °C · ${ctx.season[node.id].rain_mm_day} mm rain/day`, source: `${ctx.season[node.id].label} · NASA POWER climate` }
+          : !prefs.start_date ? { value: '—', source: 'Add a start date to the trip brief for season tips' }
+            : { value: '—', source: node.day_start ? 'Checking typical weather…' : 'Not scheduled' }} />}
       </div>
+      <Fit notes={ctx.season[node.id]?.notes || []} />
       <SubNodes ctx={ctx} />
+      {ctx.coordinates[node.id] && <AroundHere lat={ctx.coordinates[node.id].lat} lon={ctx.coordinates[node.id].lon}
+        day={node.day_start ?? null} onAddPlace={ctx.onAddPlace} />}
       {!!legs.length && <section className="tv-sd__block"><h4>Connections <span>{legs.length}</span></h4>
         {legs.map((edge) => <button type="button" key={edge.id} className="tv-sd__row" onClick={() => onSelect('edge', edge.id)}>
           <RouteIcon width={13} height={13} /><span>{edge.source === node.id ? `To ${nodesById[edge.target]?.name}` : `From ${nodesById[edge.source]?.name}`}</span>
@@ -209,7 +235,7 @@ export function RouteTree({ ctx }: { ctx: SpatialCtx }) {
         <button type="button" aria-expanded={open} className={`tv-sd-tree__node ${sel?.id === node.id ? 'is-active' : ''}`}
           onClick={() => open ? collapse() : onSelect('node', node.id)}>
           <span className="tv-sd-tree__caret" aria-hidden="true" /><em>{String(index + 1).padStart(2, '0')}</em>
-          <strong>{node.name}</strong><small>{dayLabel(node)}</small>
+          <strong>{node.name}</strong><small>{dayLabel(node)} <SeasonTag season={ctx.season[node.id]} /></small>
         </button>
         {open && <div className="tv-sd-tree__kids">{ctx.nearby.length ? ctx.nearby.map((place) =>
           <button type="button" key={place.id} className={sel?.id === place.id ? 'is-active' : ''} onClick={() => onSelect('nearby', place.id)}>
@@ -248,7 +274,7 @@ export function Journal({ ctx }: { ctx: SpatialCtx }) {
         <section className={`tv-sd-journal__stop ${expandedNode === node.id ? 'is-open' : ''}`}>
           <button type="button" aria-expanded={expandedNode === node.id} onClick={() => expandedNode === node.id ? collapse() : onSelect('node', node.id)}>
             <em>{String(index + 1).padStart(2, '0')}</em>
-            <span><small>{dayLabel(node)}</small><strong>{node.name}</strong>{clean(node.evidence) && <p>{clean(node.evidence)}</p>}</span>
+            <span><small>{dayLabel(node)} <SeasonTag season={ctx.season[node.id]} /></small><strong>{node.name}</strong>{clean(node.evidence) && <p>{clean(node.evidence)}</p>}</span>
             <Thumb media={ctx.media[node.id]} />
           </button>
           {expandedNode === node.id && <div className="tv-sd-journal__open"><Inspector ctx={{ ...ctx, sel: ctx.sel?.kind === 'nearby' ? ctx.sel : { kind: 'node', id: node.id } }} /></div>}
@@ -279,7 +305,7 @@ export function RouteStrip({ ctx }: { ctx: SpatialCtx }) {
       const edge = graph.edges.find((item) => item.source === node.id);
       return <div key={node.id} className="tv-sd-strip__seg">
         <button type="button" className={`tv-sd-strip__stop ${sel?.id === node.id || ctx.expandedNode === node.id ? 'is-active' : ''}`} onClick={() => onSelect('node', node.id)}>
-          {ctx.media[node.id] ? <Thumb media={ctx.media[node.id]} /> : <em>{String(index + 1).padStart(2, '0')}</em>}<strong>{node.name}</strong><small>{dayLabel(node)}</small>
+          {ctx.media[node.id] ? <Thumb media={ctx.media[node.id]} /> : <em>{String(index + 1).padStart(2, '0')}</em>}<strong>{node.name}</strong><small>{dayLabel(node)} <SeasonTag season={ctx.season[node.id]} /></small>
         </button>
         {edge && facts[edge.id] && <button type="button" className={`tv-sd-strip__leg ${sel?.id === edge.id || ctx.expandedEdge === edge.id ? 'is-active' : ''}`} onClick={() => onSelect('edge', edge.id)}>
           <span>{facts[edge.id].duration.value}</span><small>{facts[edge.id].distance.value}</small>

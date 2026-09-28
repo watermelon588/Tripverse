@@ -114,8 +114,9 @@ async def _search(client: httpx.AsyncClient, place: PlaceMediaItem) -> dict | No
     }
 
 
-async def _credits(client: httpx.AsyncClient, files: list[str]) -> dict[str, dict]:
-    """Author and license per Commons file, in one request. Non-free files are dropped."""
+async def _credits(client: httpx.AsyncClient, files: list[str], thumb_width: int | None = None) -> dict[str, dict]:
+    """Author and license per Commons file, in one request. Non-free files are dropped.
+    With `thumb_width`, each credit also carries a `thumb` URL of that width."""
     if not files:
         return {}
     response = await client.get(WIKI_API, params={
@@ -123,6 +124,7 @@ async def _credits(client: httpx.AsyncClient, files: list[str]) -> dict[str, dic
         "titles": "|".join(f"File:{name}" for name in files[:50]),
         "prop": "imageinfo", "iiprop": "extmetadata|url",
         "iiextmetadatafilter": "Artist|LicenseShortName|LicenseUrl|NonFree",
+        **({"iiurlwidth": thumb_width} if thumb_width else {}),
     })
     response.raise_for_status()
     found = {}
@@ -136,6 +138,7 @@ async def _credits(client: httpx.AsyncClient, files: list[str]) -> dict[str, dic
             "license": meta.get("LicenseShortName", {}).get("value"),
             "license_url": meta.get("LicenseUrl", {}).get("value"),
             "file_page": info.get("descriptionurl"),
+            **({"thumb": info.get("thumburl")} if thumb_width else {}),
         }
     return found
 
