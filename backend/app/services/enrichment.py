@@ -23,7 +23,7 @@ from datetime import date, datetime, timedelta
 import httpx
 
 from app.core.config import settings
-from app.schemas.trip_document import DocEnrichment, DocExchange, DocHoliday, DocNote, DocSource, DocWeather
+from app.schemas.trip_document import DocEnrichment, DocExchange, DocHoliday, DocNote, DocPlace, DocSource, DocWeather
 from app.services.place_media import CACHE_DB_PATH, HEADERS, _km
 from app.services.seasonality import INDOOR, MONTHS, OUTDOOR, _climate, _names, season_tips
 
@@ -337,7 +337,8 @@ async def enrich(client: httpx.AsyncClient, destination: str | None, start: date
         _holidays(client, start, days, spots, used) if start and days else asyncio.sleep(0, []),
         _exchange(client, currency, local, home or HOME_CURRENCY, used),
     )
-    return DocEnrichment(weather=weather, holidays=holidays, exchange=exchange,
+    return DocEnrichment(places=[DocPlace(name=base, **spot) for base, spot in spots.items() if spot],
+                         weather=weather, holidays=holidays, exchange=exchange,
                          sources=[source for key, source in SOURCES.items() if key in used])
 
 

@@ -379,8 +379,11 @@ Building resumed on 2026-09-28 with Spatial S2. `[x]` = done and verified; `[ ]`
 - [x] Backend `GET /api/places/around?lat&lon`: Wikivoyage listings + Wikipedia landmarks and stations, merged by Wikidata id, credited photos only, 30-day cache per ~1 km cell, guests allowed, anonymous refused, 4 tests (128 pass in total)
 - [x] `<AroundHere lat lon day onAddPlace/>` in the stop detail panel: four tabs, photo or tinted monogram, distance from the stop, hours, listed price marked "may be outdated", credits
 - [x] `SpatialWorkspace` `onAddPlace` prop; "Add to day N" shows only when the host passes it
-- [ ] Wire `onAddPlace` to `COPILOT_OPS {op: 'add', name, day}` (build-with-the-agent session, where the studio mounts the views)
-- [ ] Mount `<AroundHere>` in the studio's info rail (optional, same session)
+- [x] Wire `onAddPlace` in the studio (Session 5/6 session, 2026-09-29):
+  - Agent trips send `COPILOT_OPS {op: 'add', name, day}`.
+  - One-shot trips send a chat request ("Please add X to day N."), which revises the draft.
+  - The button hides while a reply is streaming.
+- [x] Mount `<AroundHere>` in the studio's Details window for the selected day, centred on that day's base city from `enrichment.places` (same session; checked live on Shibuya)
 
 **Spatial S3: Season- and weather-aware tips** (climate part pulled forward: it needs only NASA POWER and the start date)
 - [x] Backend `POST /api/places/season`: NASA POWER monthly climate per ~10 km cell (cached forever), deterministic rules for rainy season, showers, cold, freezing and snow, heat and pleasant months, crossed with each stop's planned places; 6 tests (134 pass in total)

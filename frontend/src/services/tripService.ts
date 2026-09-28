@@ -116,6 +116,8 @@ export interface TripNote { tone: 'good' | 'warn' | 'info'; text: string }
 
 /** Weather, holidays and exchange rates around the trip's dates (backend `services/enrichment.py`). */
 export interface TripEnrichment {
+  /** The days' base cities, located on OpenStreetMap (optional so fixtures can leave it out). */
+  places?: { name: string; lat: number; lon: number; country: string | null }[];
   weather: {
     day: number;
     date: string;
