@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     ORS_API_KEY: str = ""
     GOOGLE_MAPS_API_KEY: str = ""
     GOOGLE_ROUTES_ENABLED: bool = False
+    # Weather, holidays and exchange rates from free public APIs (services/enrichment.py).
+    ENRICHMENT_ENABLED: bool = True
 
     # Cloudinary Configuration
     CLOUDINARY_CLOUD_NAME: str = ""

@@ -8,6 +8,7 @@ from app.agents.trip_planner.nodes.extract_itinerary_node import normalize_day_p
 from app.models.trip import Trip
 from app.schemas.trip_document import DocBudget, DocDay, DocItem, DocLeg, DocTravelers, TripDocument
 from app.services.budget import budget_response, latest_itinerary_payload
+from app.services.enrichment import get_enrichment
 
 # Graph nearby-place categories → day-plan categories (legacy one-shot trips).
 _GRAPH_CATEGORY = {"attraction": "sight", "restaurant": "food", "neighborhood": "sight"}
@@ -45,7 +46,7 @@ def _legacy_days(graph: dict, duration_days: int, destination: str) -> list[dict
 
 async def build_trip_document(db: AsyncSession, trip: Trip) -> TripDocument:
     payload = await latest_itinerary_payload(db, trip.id) or {}
-    budget = await budget_response(db, trip)  # also syncs ledger rows with the latest route
+    budget = await budget_response(db, trip, payload=payload)  # also syncs ledger rows with the latest route
     prefs = trip.planning_preferences or {}
     graph, copilot = payload.get("graph"), payload.get("copilot")
     duration = trip.duration_days or 0
@@ -62,6 +63,12 @@ async def build_trip_document(db: AsyncSession, trip: Trip) -> TripDocument:
     for day in days:
         day.date = start + timedelta(days=day.day - 1) if start else None
 
+    # Trips without a plan yet still get conditions for the destination across their dates.
+    conditions_days = [(day.day, day.base, [(item.name, " ".join(filter(None, (item.name, item.category, item.area))))
+                                            for item in day.items]) for day in days] \
+        or [(number, trip.destination, []) for number in range(1, duration + 1) if trip.destination]
+    enrichment = await get_enrichment(trip.destination, start, conditions_days, budget.currency)
+
     names = {node.get("id"): node.get("name") for node in (graph or {}).get("nodes", [])}
     legs = [DocLeg(source=names[edge["source"]], target=names[edge["target"]],
                    **{key: edge.get(key) for key in ("mode", "duration", "distance", "cost")})
@@ -75,7 +82,7 @@ async def build_trip_document(db: AsyncSession, trip: Trip) -> TripDocument:
         comfort=prefs.get("comfort") or "mid_range", travel_mode=prefs.get("travel_mode") or "transit",
         pace=prefs.get("pace") or "balanced", interests=prefs.get("interests") or [],
         avoid=prefs.get("avoid") or [], must_see=trip.places_to_visit or [], guide=prefs.get("guide"),
-        days=days, legs=legs, graph=graph,
+        days=days, legs=legs, graph=graph, enrichment=enrichment,
         budget=DocBudget(
             currency=budget.currency,
             target=float(budget.target_amount) if budget.target_amount is not None else None,

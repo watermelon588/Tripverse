@@ -13,6 +13,7 @@ import copy
 import json
 import logging
 import re
+from datetime import date
 from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -20,6 +21,7 @@ from langgraph.graph import END, START, StateGraph
 from app.agents.trip_planner.copilot import engine
 from app.agents.trip_planner.copilot.research import initial_queries, research
 from app.agents.trip_planner.nodes.extract_itinerary_node import build_itinerary_graph
+from app.services.enrichment import agent_facts, get_enrichment
 from app.services.llm.service import llm_service, model_for
 
 logger = logging.getLogger(__name__)
@@ -100,6 +102,10 @@ FACTS come from the planner and are your only source of truth:
   they're in the mood for.
 - First turn (no events and nothing planned yet): say in one line how this works (you'll suggest places for each
   day; they can tap a suggestion or just tell you what they like), then open day 1.
+- conditions (when present): if the current day has weather notes or a public holiday, work it in as one short,
+  practical clause (an umbrella, an indoor backup from the suggestions, booking ahead, possible closures or crowds).
+  Call it a forecast only when the label is "Forecast"; otherwise say it's typical for that month. Mention a
+  heads_up entry only when it affects what they're deciding. Never invent weather or holidays.
 - If status is "complete": a brief wrap-up, one line per day plus the trip total, then invite changes.
 - End with one easy question. Never mention tools, data, JSON, the planner or other internal systems.
 """
@@ -176,9 +182,24 @@ def _brief(item: dict) -> dict:
             "why": item.get("why"), "source_url": item.get("source"), "cost_basis": item["basis"]}
 
 
-def recommend(state: CopilotState) -> dict:
+async def _conditions(state: CopilotState, copilot: dict) -> dict | None:
+    """Weather and holidays for the plan's dates (cached server-side, so usually instant)."""
+    if state.get("nav_only"):
+        return None  # a pure day switch replays the held reply
+    try:
+        start = date.fromisoformat(str((state.get("planning_preferences") or {}).get("start_date")))
+    except ValueError:
+        return None  # no dates, so no forecast or holidays; the exchange rate isn't a planning fact
+    days = [(d["day"], d["base"], [(i["name"], " ".join(filter(None, (i["name"], i.get("category"), i.get("area")))))
+                                   for i in d["items"]]) for d in copilot["days"]]
+    enrichment = await get_enrichment(copilot["destination"], start, days, copilot["currency"], timeout=8.0)
+    return agent_facts(enrichment, copilot["current_day"])
+
+
+async def recommend(state: CopilotState) -> dict:
     copilot = state["copilot"]
     day_no = copilot["current_day"]
+    conditions = await _conditions(state, copilot)
     day = engine.day_of(copilot, day_no)
     blocked = [engine.alternatives_for(copilot, b) for b in state.get("blocked") or []]
     suggestions = engine.rank(copilot, day_no, 3)
@@ -207,6 +228,7 @@ def recommend(state: CopilotState) -> dict:
         "days_overview": [{"day": d["day"], "base": d["base"], "cost": d["cost"],
                            "items": [i["name"] for i in engine.day_of(copilot, d["day"])["items"]]}
                           for d in status["by_day"]],
+        **({"conditions": conditions} if conditions else {}),
     }}
 
 
