@@ -226,7 +226,9 @@ Each session is roughly one long working session: backend + frontend + tests + a
 - `ENRICHMENT_ENABLED` setting (off in tests). `tests/test_enrichment.py` has 11 tests; 145 pass in total. Live run: Kyoto/Osaka forecast, "Typical for October", Sports Day, INR→JPY; 4.6 s cold, 0.04 s cached.
 - Frontend: `TripEnrichment` type, and `components/studio/TripConditions.tsx` (weather rows, heads-up, money, credits), checked in the browser in light and dark with live data. Also fixed `DocDay.date`, whose type resolved to `None`.
 - Mounted in the studio's Details window, synced with the selected day (map session, 2026-09-28).
-- **Open:** sketch weather doodles (Session 3); a home-currency setting (INR is assumed for now); holiday and weather facts for the one-shot planner's prompt.
+- One-shot drafts (2026-09-29): `enrichment.draft_conditions` gives the draft prompt a `conditions` block with forecast days (MET Norway, inside the window only) and public holidays, plus a CONDITIONS_TASK for using them. It runs alongside the research and is awaited together with the map session's season block (2 s cap in total). Live: a Tokyo trip over 10–15 Oct gets Sports Day; one starting tomorrow gets 4 forecast days (1.8 s cold).
+- Home currency (2026-09-29): `planning_preferences.home_currency` (trip brief: "Your home currency"), used for the "≈" rates instead of the INR default.
+- Sketch weather doodles: done in Session 3 (day pages read `enrichment.weather`). Nothing open.
 
 **Goal:** The studio knows the world around your dates.
 

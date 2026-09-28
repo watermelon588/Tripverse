@@ -33,6 +33,7 @@ from app.schemas.trip import (
     TripResponse,
     TripStateResponse,
 )
+from app.services.enrichment import draft_conditions
 from app.services.seasonality import trip_season
 from app.services.trip import trip_service
 
@@ -584,6 +585,9 @@ class ConversationService:
                 # Typical weather for the travel months runs alongside the research (no LLM call).
                 season_task = asyncio.create_task(trip_season(
                     trip.destination, _start_date(trip.planning_preferences), trip.duration_days))
+                # Forecast days and public holidays for the same dates, also alongside the research.
+                conditions_task = asyncio.create_task(draft_conditions(
+                    trip.destination, _start_date(trip.planning_preferences), trip.duration_days, trip.currency))
                 planning_result = await execute_planning_subgraph(
                     destination=trip.destination,
                     duration_days=trip.duration_days,
@@ -591,7 +595,9 @@ class ConversationService:
                     places_to_visit=trip.places_to_visit or [],
                     planning_preferences=trip.planning_preferences or {},
                 )
-                planning_result["season"] = await _await_season(season_task)
+                # Awaited together, so the pair can't hold the draft for more than SEASON_WAIT in total.
+                planning_result["season"], planning_result["conditions"] = await asyncio.gather(
+                    _await_season(season_task), _await_season(conditions_task))
                 candidates = planning_result.get("candidates", [])
                 logger.info("🔥 PLANNING DATA READY: candidates=%d", len(candidates))
                 yield f"data: {json.dumps({'type': 'stage', 'label': 'Writing your day-by-day draft'})}\n\n"

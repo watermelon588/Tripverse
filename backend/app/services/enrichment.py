@@ -33,8 +33,7 @@ NOMINATIM = "https://nominatim.openstreetmap.org/search"
 MET = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
 NAGER = "https://date.nager.at/api/v3/PublicHolidays/{year}/{country}"
 FRANKFURTER = "https://api.frankfurter.dev/v1/latest"
-# ponytail: no home-currency setting yet, and the app's audience prices in rupees; add one to the profile when that changes.
-HOME_CURRENCY = "INR"
+HOME_CURRENCY = "INR"  # when the brief has no home_currency (trips made before it existed)
 FORECAST_DAYS = 8  # MET Norway reaches ~9-10 days ahead; the last day is usually partial
 MAX_BASES = 8
 NOMINATIM_INTERVAL = 1.1  # seconds between uncached lookups (Nominatim's usage policy: max 1/s)
@@ -309,8 +308,8 @@ async def _holidays(client: httpx.AsyncClient, start: date, days: list[DayInput]
     return found
 
 
-async def _exchange(client: httpx.AsyncClient, currency: str, local: set, used: set) -> DocExchange | None:
-    symbols = sorted(code for code in local | {HOME_CURRENCY} if code and code != currency)
+async def _exchange(client: httpx.AsyncClient, currency: str, local: set, home: str, used: set) -> DocExchange | None:
+    symbols = sorted(code for code in local | {home} if code and code != currency)
     if not symbols:
         return None
     async def fetch():
@@ -328,7 +327,7 @@ async def _exchange(client: httpx.AsyncClient, currency: str, local: set, used: 
 # ---------- entry points ----------
 
 async def enrich(client: httpx.AsyncClient, destination: str | None, start: date | None,
-                 days: list[DayInput], currency: str) -> DocEnrichment:
+                 days: list[DayInput], currency: str, home: str | None = None) -> DocEnrichment:
     bases = list(dict.fromkeys(base for _, base, _ in days if base))[:MAX_BASES]
     spots = dict(zip(bases, await asyncio.gather(*(_locate(client, base, destination) for base in bases))))
     used = {"geo"} if any(spots.values()) else set()
@@ -336,23 +335,44 @@ async def enrich(client: httpx.AsyncClient, destination: str | None, start: date
     weather, holidays, exchange = await asyncio.gather(
         _weather(client, start, days, spots, used) if start else asyncio.sleep(0, []),
         _holidays(client, start, days, spots, used) if start and days else asyncio.sleep(0, []),
-        _exchange(client, currency, local, used),
+        _exchange(client, currency, local, home or HOME_CURRENCY, used),
     )
     return DocEnrichment(weather=weather, holidays=holidays, exchange=exchange,
                          sources=[source for key, source in SOURCES.items() if key in used])
 
 
 async def get_enrichment(destination: str | None, start: date | None, days: list[DayInput], currency: str,
-                         timeout: float = 15.0) -> DocEnrichment | None:
+                         timeout: float = 15.0, home: str | None = None) -> DocEnrichment | None:
     """Conditions for a trip, or None when switched off, there's nothing to look up, or everything failed."""
     if not settings.ENRICHMENT_ENABLED or not days:
         return None
     try:
         async with httpx.AsyncClient(timeout=10.0, headers=HEADERS) as client:
-            return await asyncio.wait_for(enrich(client, destination, start, days, currency), timeout)
+            return await asyncio.wait_for(enrich(client, destination, start, days, currency, home), timeout)
     except Exception as exc:  # never let enrichment break the document or a planning turn
         logger.warning("Trip enrichment failed: %s", exc)
         return None
+
+
+async def draft_conditions(destination: str | None, start: date | None, days: int | None, currency: str) -> dict | None:
+    """Forecast days and public holidays for a one-shot draft, which has no day plan yet (so every day is
+    looked up at the destination). Typical weather is left to seasonality.trip_season's "season" block;
+    only real forecasts appear here. None when there's nothing worth telling the planner."""
+    if not destination or not start or not days:
+        return None
+    enrichment = await get_enrichment(destination, start, [(n, destination, []) for n in range(1, days + 1)],
+                                      currency, timeout=8.0)
+    if not enrichment:
+        return None
+    day_name = lambda when: when.strftime("%a %d %b")  # noqa: E731
+    forecast = [{"day": w.day, "date": day_name(w.date), "sky": w.condition, "rain_mm": w.rain_mm,
+                 "temp_c": f"{w.temp_min:.0f}-{w.temp_max:.0f}", **({"note": w.notes[0].text} if w.notes else {})}
+                for w in enrichment.weather if w.kind == "forecast"]
+    holidays = [{"day": h.day, "date": day_name(h.date), "name": h.name, **({"regional": True} if h.regional else {})}
+                for h in enrichment.holidays]
+    if not forecast and not holidays:
+        return None
+    return {**({"forecast": forecast} if forecast else {}), **({"public_holidays": holidays} if holidays else {})}
 
 
 def agent_facts(enrichment: DocEnrichment | None, day: int) -> dict | None:
