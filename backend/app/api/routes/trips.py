@@ -1,6 +1,6 @@
 import uuid
 from typing import List
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,11 +12,33 @@ from app.schemas.trip import (
     TripCreateResponse,
     TripResponse,
     TripStateResponse,
+    RouteMetricsRequest,
+    GeocodeRequest,
+    NearbyPlacesRequest,
+)
+from app.schemas.budget import BudgetItemInput, BudgetResponse, BudgetSettingsUpdate
+from app.schemas.trip_document import TripDocument
+from app.services.trip_document import build_trip_document
+from app.services.budget import (
+    accept_budget_estimates, add_budget_item, budget_response, delete_budget_item, estimate_budget,
+    update_budget_item,
+    update_budget_settings,
 )
 from app.services.conversation import conversation_service
+from app.services.google_places import get_nearby_places
+from app.services.place_geocoding import geocode_places
+from app.services.route_metrics import get_route_metrics
 from app.services.trip import trip_service
 
 router = APIRouter(prefix="/api/trips", tags=["trips"])
+
+
+async def _owned_trip(db: AsyncSession, trip_id: uuid.UUID, identity: RequestIdentity):
+    trip = await trip_service.trip_repo.get_by_id(db, trip_id)
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found.")
+    trip_service.verify_trip_ownership(trip, identity)
+    return trip
 
 
 @router.get("/me", response_model=List[TripResponse])
@@ -107,6 +129,149 @@ async def get_trip_messages(
 ):
     """Retrieve ordered conversation messages for an authorized trip."""
     return await conversation_service.get_trip_messages(db, trip_id, identity=identity)
+
+
+@router.get("/{trip_id}/budget", response_model=BudgetResponse)
+async def get_trip_budget(
+    trip_id: uuid.UUID,
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    """Read the itemized ledger, reconciling it with the latest saved itinerary graph."""
+    trip = await _owned_trip(db, trip_id, identity)
+    response = await budget_response(db, trip)
+    await db.commit()
+    return response
+
+
+@router.put("/{trip_id}/budget/settings", response_model=BudgetResponse)
+async def put_trip_budget_settings(
+    trip_id: uuid.UUID, request: BudgetSettingsUpdate,
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    trip = await _owned_trip(db, trip_id, identity)
+    return await update_budget_settings(db, trip, request)
+
+
+@router.post("/{trip_id}/budget/items", response_model=BudgetResponse, status_code=201)
+async def post_trip_budget_item(
+    trip_id: uuid.UUID, request: BudgetItemInput,
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    trip = await _owned_trip(db, trip_id, identity)
+    return await add_budget_item(db, trip, request)
+
+
+@router.put("/{trip_id}/budget/items/{item_id}", response_model=BudgetResponse)
+async def put_trip_budget_item(
+    trip_id: uuid.UUID, item_id: uuid.UUID, request: BudgetItemInput,
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    trip = await _owned_trip(db, trip_id, identity)
+    return await update_budget_item(db, trip, item_id, request)
+
+
+@router.delete("/{trip_id}/budget/items/{item_id}", response_model=BudgetResponse)
+async def remove_trip_budget_item(
+    trip_id: uuid.UUID, item_id: uuid.UUID,
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    trip = await _owned_trip(db, trip_id, identity)
+    return await delete_budget_item(db, trip, item_id)
+
+
+@router.get("/{trip_id}/document", response_model=TripDocument)
+async def get_trip_document(
+    trip_id: uuid.UUID,
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    """One normalized trip for the studio, sketchbook and exports, whichever planner built it."""
+    trip = await _owned_trip(db, trip_id, identity)
+    document = await build_trip_document(db, trip)
+    await db.commit()  # the budget part reconciles ledger rows, like GET /budget
+    return document
+
+
+@router.post("/{trip_id}/budget/estimates", response_model=BudgetResponse)
+async def post_trip_budget_estimates(
+    trip_id: uuid.UUID,
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    """Suggest per-row amounts (build-with-agent numbers first, then traveler-sourced research)."""
+    trip = await _owned_trip(db, trip_id, identity)
+    return await estimate_budget(db, trip)
+
+
+@router.post("/{trip_id}/budget/estimates/accept", response_model=BudgetResponse)
+async def post_accept_trip_budget_estimates(
+    trip_id: uuid.UUID,
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    """Copy suggestions into every row that has no traveler-entered amount yet."""
+    trip = await _owned_trip(db, trip_id, identity)
+    return await accept_budget_estimates(db, trip)
+
+
+@router.post("/{trip_id}/route-metrics")
+async def route_metrics(
+    trip_id: uuid.UUID,
+    request: RouteMetricsRequest,
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get optional road distance and duration for geocoded itinerary legs."""
+    trip = await trip_service.trip_repo.get_by_id(db, trip_id)
+    if not trip:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found.")
+    trip_service.verify_trip_ownership(trip, identity)
+    return await get_route_metrics(request)
+
+
+@router.post("/{trip_id}/geocode")
+async def geocode_trip_places(
+    trip_id: uuid.UUID,
+    request: GeocodeRequest,
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    """Resolve unresolved graph places without exposing the ORS key to the browser."""
+    trip = await trip_service.trip_repo.get_by_id(db, trip_id)
+    if not trip:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found.")
+    trip_service.verify_trip_ownership(trip, identity)
+    return await geocode_places(request, trip.destination)
+
+
+@router.post("/{trip_id}/nearby-places")
+async def nearby_trip_places(
+    trip_id: uuid.UUID,
+    request: NearbyPlacesRequest,
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return live nearby points of interest for an authorized trip."""
+    trip = await trip_service.trip_repo.get_by_id(db, trip_id)
+    if not trip:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found.")
+    trip_service.verify_trip_ownership(trip, identity)
+    return await get_nearby_places(request, str(trip_id))
+
+
+@router.post("/{trip_id}/itinerary-graph")
+async def itinerary_graph(
+    trip_id: uuid.UUID,
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    """Backfill the graph of an existing, authorized completed itinerary once."""
+    return await conversation_service.get_or_create_itinerary_graph(db, trip_id, identity=identity)
 
 
 @router.delete("/{trip_id}")

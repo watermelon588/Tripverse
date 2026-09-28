@@ -13,6 +13,8 @@ class TripPlanningState(TypedDict, total=False):
     user_message: str
 
     destination: str | None
+    places_to_visit: list[str]
+    planning_preferences: dict[str, Any]
     duration_days: int | None
     origin: str | None
     origin_latitude: float | None
@@ -20,6 +22,7 @@ class TripPlanningState(TypedDict, total=False):
 
     intent: str | None
     onboarding_complete: bool
+    planning_started: bool
     missing_fields: list[str]
 
     assistant_response: str
@@ -31,3 +34,11 @@ class TripPlanningState(TypedDict, total=False):
     research_queries: list[str] | None
     research_results: list[dict[str, Any]] | None
     candidates: list[dict[str, Any]] | None
+    itinerary_graph: dict[str, Any] | None
+    day_plan: list[dict[str, Any]] | None
+
+    # Build-with-agent mode (see copilot/engine.py for the shape)
+    copilot: dict[str, Any] | None
+    currency: str | None
+    budget_target: float | None
+    focus_day: int | None

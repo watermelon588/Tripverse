@@ -338,6 +338,7 @@ async def test_parent_planning_trip_node_adapter_mapping_and_plan_generation():
         "destination": "Japan",
         "duration_days": 10,
         "origin": "Kolkata",
+        "planning_preferences": {"pace": "relaxed", "interests": ["Food"], "avoid": ["Early starts"]},
         "onboarding_complete": True,
         "missing_fields": [],
         "assistant_response": "",
@@ -377,6 +378,7 @@ async def test_parent_planning_trip_node_adapter_mapping_and_plan_generation():
         call_kwargs = mock_llm_generate.call_args[1]
         assert "Tokyo" in call_kwargs["prompt"]
         assert "Kyoto" in call_kwargs["prompt"]
+        assert "Early starts" in call_kwargs["prompt"]
 
         # 2. Verify planning_graph.ainvoke was called exactly once with clean state boundary
         mock_invoke.assert_awaited_once()
@@ -384,6 +386,7 @@ async def test_parent_planning_trip_node_adapter_mapping_and_plan_generation():
         assert invoked_state["destination"] == "Japan"
         assert invoked_state["duration_days"] == 10
         assert invoked_state["origin"] == "Kolkata"
+        assert invoked_state["planning_preferences"]["pace"] == "relaxed"
         assert "user_id" not in invoked_state
         assert "guest_id" not in invoked_state
         assert "user_message" not in invoked_state
