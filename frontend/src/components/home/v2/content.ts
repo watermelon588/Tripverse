@@ -169,13 +169,13 @@ export const STEP_IMAGES = [temple, cityPlan, pagoda, hotelRoom];
 export const STEPS = [
   {
     n: '01',
-    title: 'Describe the trip in your own words',
-    body: 'Dates, a budget, who is coming, how you like to move. Plain sentences — no forms, no dropdowns, no wizard.',
+    title: 'Set your trip brief',
+    body: 'Add your destination, starting point, trip length, must-see places, pace, interests, and anything you want to avoid.',
   },
   {
     n: '02',
-    title: 'Watch the agent build the graph',
-    body: 'It resolves candidate cities, scores them against your constraints, wires the routes, and prices each segment while you read along.',
+    title: 'Generate a first draft',
+    body: 'The agent researches possible stops and builds a day-by-day itinerary around the details you saved.',
   },
   {
     n: '03',
@@ -184,8 +184,8 @@ export const STEPS = [
   },
   {
     n: '04',
-    title: 'Change anything and replan live',
-    body: 'Drop a city, add two nights, cap the spend. The agent reruns the affected branch and shows you exactly what moved.',
+    title: 'Return and refine',
+    body: 'Your draft stays in your trip library. Reopen it to ask for changes and review the updated plan.',
   },
 ];
 
