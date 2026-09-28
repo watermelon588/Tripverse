@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppBar } from '../components/common/AppBar';
 import { ArrowRightIcon, ArrowUpRightIcon, ClockIcon, PinIcon, PlusIcon } from '../components/home/v2/IconsV2';
 import { apiFetch } from '../services/apiClient';
+import { creditLine, usePlaceMedia } from '../services/placeMedia';
 import { deleteTrip, getTripMessages, type TripModelResponse } from '../services/tripService';
 import '../styles/trip-library.css';
 
@@ -41,6 +42,9 @@ const notePreview = (note: string) => {
     .trim()).find(Boolean) || '';
   return firstLine.slice(0, 220) + (firstLine.length > 220 ? '…' : '');
 };
+// Photos fade in once decoded; the ref catches images already in the browser cache.
+const revealed = (event: React.SyntheticEvent<HTMLImageElement>) => event.currentTarget.classList.add('is-loaded');
+const revealIfReady = (img: HTMLImageElement | null) => { if (img?.complete && img.naturalWidth) img.classList.add('is-loaded'); };
 
 export function TripLibrary({ onNavigateHome, onNavigateExplore, onNavigateProfile, onStartPlanning, onOpenTrip }: TripLibraryProps) {
   const detailRef = useRef<HTMLElement>(null);
@@ -87,6 +91,12 @@ export function TripLibrary({ onNavigateHome, onNavigateExplore, onNavigateProfi
   }, [trips, query, filter, sort]);
 
   const selected = visible.find((trip) => trip.id === selectedId) ?? visible[0] ?? null;
+  // ponytail: looked up by destination name only (the library has no coordinates), so the server's
+  // 20 km check is skipped; pass the trip's first located stop if namesakes show up.
+  const mediaTargets = useMemo(() => trips.flatMap((trip) => trip.destination?.trim()
+    ? [{ id: trip.id, name: trip.destination.trim() }] : []), [trips]);
+  const photos = usePlaceMedia(mediaTargets);
+  const cover = selected ? photos[selected.id] : undefined;
   const completedCount = trips.filter(isCompleted).length;
   const ongoingCount = trips.filter(isInProgress).length;
 
@@ -198,7 +208,10 @@ export function TripLibrary({ onNavigateHome, onNavigateExplore, onNavigateProfi
                 <div className="tv-library__list">
                   {visible.map((trip, index) => (
                     <button key={trip.id} type="button" className={`tv-library__row ${selected?.id === trip.id ? 'is-selected' : ''}`} aria-pressed={selected?.id === trip.id} aria-controls="trip-library-detail" onClick={() => selectTrip(trip.id)}>
-                      <span className="tv-library__row-number">{String(index + 1).padStart(2, '0')}</span>
+                      <span className="tv-library__row-number">
+                        {String(index + 1).padStart(2, '0')}
+                        {photos[trip.id] && <img src={photos[trip.id].image} alt="" title={creditLine(photos[trip.id])} loading="lazy" decoding="async" onLoad={revealed} ref={revealIfReady} />}
+                      </span>
                       <span className="tv-library__row-main"><strong>{title(trip)}</strong><span>{trip.origin_text ? `From ${trip.origin_text}` : 'Origin to be decided'} · {trip.duration_days ? `${trip.duration_days} ${trip.duration_days === 1 ? 'day' : 'days'}` : 'Dates open'}</span></span>
                       <span className={`tv-library__status ${isCompleted(trip) ? 'is-ready' : ''}`}>{stateLabel(trip)}</span>
                       <ArrowRightIcon width={17} height={17} />
@@ -211,6 +224,14 @@ export function TripLibrary({ onNavigateHome, onNavigateExplore, onNavigateProfi
             {selected && (
               <aside id="trip-library-detail" ref={detailRef} className="tv-library__detail" aria-label={`Details for ${title(selected)}`}>
                 <div className="tv-library__detail-top"><span className="tv-eyebrow">Journey record</span><span className="tv-meta">Updated {date(selected.updated_at)}</span></div>
+                {cover && (
+                  <figure className="tv-library__cover">
+                    <img key={cover.image} src={cover.image} alt={cover.title} decoding="async" onLoad={revealed} ref={revealIfReady} />
+                    <figcaption>{cover.credit.file_page
+                      ? <a href={cover.credit.file_page} target="_blank" rel="noopener noreferrer">{creditLine(cover)}</a>
+                      : creditLine(cover)}</figcaption>
+                  </figure>
+                )}
                 <span className={`tv-library__status ${isCompleted(selected) ? 'is-ready' : ''}`}>{stateLabel(selected)}</span>
                 <h2 className="tv-display">{title(selected)}</h2>
                 <div className="tv-library__route"><PinIcon width={18} height={18} /><span>{selected.origin_text || 'Choose an origin'} <ArrowRightIcon width={16} height={16} /> {selected.destination || 'Choose a destination'}</span></div>
