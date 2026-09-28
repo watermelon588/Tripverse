@@ -29,6 +29,8 @@ class Trip(Base):
     user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     guest_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     destination: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    places_to_visit: Mapped[List[str]] = mapped_column(JSON, nullable=False, default=list)
+    planning_preferences: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
     origin_text: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     origin_latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -57,6 +59,12 @@ class Trip(Base):
         "ConversationSession",
         back_populates="trip",
         cascade="all, delete-orphan",
+    )
+    budget_plan: Mapped[Optional["BudgetPlan"]] = relationship(
+        "BudgetPlan", back_populates="trip", cascade="all, delete-orphan", uselist=False,
+    )
+    budget_items: Mapped[List["BudgetItem"]] = relationship(
+        "BudgetItem", back_populates="trip", cascade="all, delete-orphan",
     )
 
 

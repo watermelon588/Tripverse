@@ -36,7 +36,9 @@ class GroqProvider(LLMProvider):
         """Create or return client bound to current execution environment."""
         if not self._api_key:
             raise ValueError("GROQ_API_KEY is not configured.")
-        return AsyncGroq(api_key=self._api_key)
+        # No SDK retries: a 429 would otherwise sleep for many seconds before LLMService can
+        # switch to the Gemini fallback, which users experience as a frozen chat.
+        return AsyncGroq(api_key=self._api_key, max_retries=0)
 
     def _build_messages(
         self,

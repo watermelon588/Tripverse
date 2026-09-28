@@ -26,11 +26,24 @@ Create a practical high-level plan for the requested duration.
 
 Guidelines:
 - Use the destination, duration, origin, research findings, and candidates.
+- Include the traveler's requested places when feasible; flag any that do not fit the stay.
+- Follow the traveler's stated pace, interests, and things to avoid when selecting and sequencing activities.
+- Use the rest of the brief in planning_preferences when present: travel dates (season, weekdays; never invent
+  event schedules), adults/children (keep it family-friendly with children), comfort level (budget, mid_range,
+  comfortable) for stays and dining, and travel_mode for how they get around.
+- If a preference conflicts with a requested place or duration, explain the tradeoff rather than ignoring it.
 - Prefer realistic sequencing and avoid unnecessarily complicated travel.
 - Organize the plan by day ranges or logical trip phases.
+- Cover every requested day exactly once. State the day number or range and overnight base for each phase.
+- Keep each day to one main area and a small number of plausible activities. Build in arrival, departure, and transit time.
+- Put nearby visits under their base city so the traveler can understand what expands from each stop on the map.
+- Explain long intercity moves and identify unknown travel times instead of silently compressing them.
+- If the research is thin, say what needs verification rather than filling gaps with confident specifics.
+- Include a short "What to decide next" section with two concrete choices the traveler can change.
 - Explain briefly why each major stop or area is included.
 - Do not invent unsupported facts.
 - Do not claim exact prices, availability, schedules, or booking information.
+- Do not claim a specific train time, fare, pass price, or pass coverage unless the supplied research supports it. Mark unverified transport details as things to check.
 - Do not pretend anything has been booked.
 - Treat the plan as a first draft that the traveler can refine.
 - Keep it useful and reasonably concise.
@@ -48,9 +61,7 @@ Formatting requirements:
 - Do not wrap the entire response in a code block.
 
 Personality:
-- confident
-- expressive
-- slightly bratty/playful
+- clear and direct
 - warm and genuinely helpful
 - conversational rather than robotic
 - do not force catchphrases or overdo the personality
@@ -59,12 +70,52 @@ End with a natural invitation to refine the plan.
 """
 
 
+REVISION_SYSTEM_INSTRUCTION = """
+You are TripVerse, revising a traveler's itinerary while chatting with them.
+
+- Start with one or two natural sentences saying exactly what you changed, like a friend planning alongside
+  them ("Done: Fushimi Inari moves to the morning of day 2, and Okochi-Sanso takes its afternoon slot.").
+- Then give the complete updated itinerary in the same structure and formatting as the current one.
+- Apply the request faithfully. Keep every other day, base and activity as it was unless the change needs it.
+- If the request doesn't work (not enough time, too far, it clashes with their preferences), say so plainly
+  and make the closest sensible change instead.
+- Never invent prices, schedules, availability or bookings; flag details to verify.
+- Markdown only: no raw HTML, no code fences. Never mention internal systems.
+"""
+
+ANSWER_SYSTEM_INSTRUCTION = """
+You are TripVerse, chatting with a traveler about the itinerary you planned together.
+Answer their message directly and naturally in 1-5 sentences, grounded in their itinerary where it helps.
+Don't rewrite or repeat the itinerary. If they seem to want a change, offer to make it ("Want me to swap it in?").
+Never invent prices, schedules or bookings. Markdown only, no headings. Never mention internal systems.
+"""
+
+
+def build_followup_prompt(
+    previous_plan: str,
+    message: str,
+    destination: str | None,
+    duration_days: int | None,
+    origin: str | None,
+    planning_preferences: dict[str, Any] | None,
+) -> str:
+    """Prompt for revising or discussing an existing itinerary without re-researching the trip."""
+    return (
+        f"TRIP: {duration_days} days in {destination}, travelling from {origin or 'not specified'}\n"
+        f"PREFERENCES: {json.dumps(planning_preferences or {}, ensure_ascii=False)}\n\n"
+        f"CURRENT ITINERARY:\n{previous_plan[:16000]}\n\n"
+        f"TRAVELER'S MESSAGE:\n{message}"
+    )
+
+
 def build_plan_generation_prompt(
     planning_result: dict[str, Any],
     destination: str,
     duration_days: int,
     origin: str | None = None,
     user_name: str | None = None,
+    places_to_visit: list[str] | None = None,
+    planning_preferences: dict[str, Any] | None = None,
 ) -> str:
     """
     Build the canonical prompt for turning destination research into an initial trip plan.
@@ -75,6 +126,8 @@ def build_plan_generation_prompt(
         "destination": destination,
         "duration_days": duration_days,
         "origin": origin,
+        "places_to_visit": places_to_visit or [],
+        "planning_preferences": planning_preferences or {},
         "trip_type": planning_result.get("trip_type"),
         "planning_notes": planning_result.get("planning_notes"),
         "research_queries": planning_result.get("research_queries", []),
@@ -125,6 +178,8 @@ Traveler name: {user_name or "not provided"}
 Destination: {destination}
 Duration: {duration_days} days
 Origin: {origin or "not specified"}
+Requested places: {", ".join(places_to_visit or []) or "open to suggestions"}
+Planning preferences: {json.dumps(planning_preferences or {}, ensure_ascii=False)}
 """
 
 
@@ -132,6 +187,8 @@ async def execute_planning_subgraph(
     destination: str,
     duration_days: int,
     origin: str | None = None,
+    places_to_visit: list[str] | None = None,
+    planning_preferences: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Canonical helper to execute the destination research and candidate planning subgraph.
@@ -141,6 +198,8 @@ async def execute_planning_subgraph(
         destination=destination,
         duration_days=duration_days,
         origin=origin,
+        places_to_visit=places_to_visit,
+        planning_preferences=planning_preferences,
     )
 
     logger.info("🔥 INVOKING planning_graph")
@@ -183,6 +242,8 @@ async def planning_trip(state: TripPlanningState) -> dict[str, Any]:
     duration_days = state["duration_days"]
     origin = state.get("origin")
     user_name = state.get("user_name")
+    places_to_visit = state.get("places_to_visit") or []
+    planning_preferences = state.get("planning_preferences") or {}
 
     if not destination or duration_days is None:
         raise ValueError(
@@ -201,6 +262,8 @@ async def planning_trip(state: TripPlanningState) -> dict[str, Any]:
         destination=destination,
         duration_days=duration_days,
         origin=origin,
+        places_to_visit=places_to_visit,
+        planning_preferences=planning_preferences,
     )
 
     # 2. Build canonical plan prompt
@@ -210,6 +273,8 @@ async def planning_trip(state: TripPlanningState) -> dict[str, Any]:
         duration_days=duration_days,
         origin=origin,
         user_name=user_name,
+        places_to_visit=places_to_visit,
+        planning_preferences=planning_preferences,
     )
 
     # 3. Generate initial plan

@@ -1,6 +1,7 @@
 import logging
 from typing import Any, Optional
 
+from app.core.config import settings
 from app.services.llm.base import LLMProvider, LLMResult, ToolCall
 from app.services.llm.providers.gemini import GeminiProvider
 from app.services.llm.providers.groq import GroqProvider
@@ -17,6 +18,15 @@ WELCOME_SYSTEM_INSTRUCTION = (
 
 
 _UNSET = object()
+
+
+def model_for(role: str) -> dict[str, str]:
+    """Per-node model routing: "fast" nodes (JSON extraction, intent) use a smaller Groq model.
+
+    Passed as generate(**kwargs); the Groq primary applies it, the Gemini fallback ignores it.
+    """
+    model = settings.GROQ_FAST_MODEL if role == "fast" else ""
+    return {"model": model} if model else {}
 
 
 class LLMService:

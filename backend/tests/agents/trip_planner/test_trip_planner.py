@@ -94,189 +94,66 @@ def test_validate_state_complete_with_coordinates():
 
 
 @pytest.mark.asyncio
-async def test_trip_planner_graph_incomplete_flow():
-    """Verify graph routes to respond_to_user when required fields are missing."""
-    initial_state = {
-        "trip_id": "test-incomplete",
-        "user_id": None,
-        "guest_id": "guest-1",
-        "user_name": None,
-        "user_message": "Hi there!",
-        "destination": None,
-        "duration_days": None,
-        "origin": None,
-        "onboarding_complete": False,
-        "missing_fields": [],
-        "assistant_response": "",
-    }
-
-    mock_understand_json = '{"intent": "casual_conversation", "destination": null, "duration_days": null, "origin": null}'
-    mock_respond_text = "Where would you like to travel?"
-
-    with (
-        patch("app.services.llm.service.llm_service.generate", return_value=mock_understand_json),
-        patch("app.services.llm.service.llm_service.generate_with_tools", return_value=LLMResult(text=mock_respond_text)),
-    ):
-        result = await trip_planner_graph.ainvoke(initial_state)
-
-    assert result["onboarding_complete"] is False
-    assert "destination" in result["missing_fields"]
-    assert "duration_days" in result["missing_fields"]
-    assert "origin" in result["missing_fields"]
-    assert result["assistant_response"] == mock_respond_text
-
-
-@pytest.mark.asyncio
-async def test_trip_planner_graph_complete_flow():
-    """Verify graph routes to planning_trip and generates initial plan when required fields are provided."""
-    initial_state = {
-        "trip_id": "test-complete",
-        "user_id": None,
-        "guest_id": "guest-1",
-        "user_name": None,
-        "user_message": "I want to visit Tokyo for 5 days from New York",
-        "destination": None,
-        "duration_days": None,
-        "origin": None,
-        "onboarding_complete": False,
-        "missing_fields": [],
-        "assistant_response": "",
-    }
-
-    mock_understand_json = '{"intent": "trip_information", "destination": "Tokyo", "duration_days": 5, "origin": "New York"}'
-    mock_understand_trip_json = '{"trip_type": "single_city", "planning_notes": "5-day trip to Tokyo."}'
-    mock_research_json = '{"needs_search": false, "search_queries": [], "candidates": [{"name": "Tokyo", "type": "city", "reason": "Capital"}]}'
-    mock_plan_text = "Here is your 5-day plan for Tokyo from New York! Days 1-5 exploring Tokyo."
-
-    with patch("app.services.llm.service.llm_service.generate", side_effect=[mock_understand_json, mock_understand_trip_json, mock_research_json, mock_plan_text]):
-        result = await trip_planner_graph.ainvoke(initial_state)
-
-    assert result["onboarding_complete"] is True
-    assert result["destination"] == "Tokyo"
-    assert result["duration_days"] == 5
-    assert result["origin"] == "New York"
-    assert result["missing_fields"] == []
-    assert result["assistant_response"] == mock_plan_text
-    assert len(result["candidates"]) == 1
-    assert result["candidates"][0]["name"] == "Tokyo"
-    assert result["planning_notes"] == "5-day trip to Tokyo."
-
-
-@pytest.mark.asyncio
-async def test_trip_planner_multi_turn_accumulation():
-    """Verify graph accumulates state over multi-turn conversation (destination -> duration -> origin) and generates plan."""
+async def test_graph_greets_before_asking_for_details_without_llm():
     state = {
-        "trip_id": "test-multi-turn",
-        "user_id": None,
-        "guest_id": "guest-1",
-        "user_name": None,
-        "user_message": "I want to go to Rome",
-        "destination": None,
-        "duration_days": None,
-        "origin": None,
+        "trip_id": "new", "user_message": "", "origin": None,
+        "destination": None, "duration_days": None, "places_to_visit": [],
         "onboarding_complete": False,
-        "missing_fields": [],
-        "assistant_response": "",
     }
-
-    # Turn 1: Destination provided
-    mock_turn1_json = '{"intent": "trip_information", "destination": "Rome", "duration_days": null, "origin": null}'
-    mock_turn1_resp = "How many days are you planning to stay in Rome?"
-
-    with (
-        patch("app.services.llm.service.llm_service.generate", return_value=mock_turn1_json),
-        patch("app.services.llm.service.llm_service.generate_with_tools", return_value=LLMResult(text=mock_turn1_resp)),
-    ):
-        result1 = await trip_planner_graph.ainvoke(state)
-
-    state.update(result1)
-    assert state["destination"] == "Rome"
-    assert state["duration_days"] is None
-    assert state["origin"] is None
-    assert state["onboarding_complete"] is False
-
-    # Turn 2: Duration provided
-    state["user_message"] = "Around 4 days"
-    mock_turn2_json = '{"intent": "trip_information", "destination": null, "duration_days": 4, "origin": null}'
-    mock_turn2_resp = "Where will you be travelling from?"
-
-    with (
-        patch("app.services.llm.service.llm_service.generate", return_value=mock_turn2_json),
-        patch("app.services.llm.service.llm_service.generate_with_tools", return_value=LLMResult(text=mock_turn2_resp)),
-    ):
-        result2 = await trip_planner_graph.ainvoke(state)
-
-    state.update(result2)
-    assert state["destination"] == "Rome"
-    assert state["duration_days"] == 4
-    assert state["origin"] is None
-    assert state["onboarding_complete"] is False
-
-    # Turn 3: Origin provided -> invokes planning subgraph and generates initial plan
-    state["user_message"] = "From London"
-    mock_turn3_json = '{"intent": "trip_information", "destination": null, "duration_days": null, "origin": "London"}'
-    mock_understand_trip_json = '{"trip_type": "single_city", "planning_notes": "4 days in Rome."}'
-    mock_research_json = '{"needs_search": false, "search_queries": [], "candidates": [{"name": "Rome", "type": "city", "reason": "Historic capital"}]}'
-    mock_turn3_plan = "Great! Here is your 4-day plan for Rome starting from London."
-
-    with patch("app.services.llm.service.llm_service.generate", side_effect=[mock_turn3_json, mock_understand_trip_json, mock_research_json, mock_turn3_plan]):
-        result3 = await trip_planner_graph.ainvoke(state)
-
-    state.update(result3)
-    assert state["destination"] == "Rome"
-    assert state["duration_days"] == 4
-    assert state["origin"] == "London"
-    assert state["onboarding_complete"] is True
-    assert state["assistant_response"] == mock_turn3_plan
-    assert len(state["candidates"]) == 1
-    assert state["candidates"][0]["name"] == "Rome"
-    assert state["planning_notes"] == "4 days in Rome."
+    with patch("app.services.llm.service.llm_service.generate", side_effect=AssertionError("LLM called")):
+        result = await trip_planner_graph.ainvoke(state)
+    assert result.get("ui_action") is None
+    assert "TripVerse" in result["assistant_response"]
 
 
-# ==============================================================================
-# Interactive Terminal CLI Loop (for manual testing via `python -m ...`)
-# ==============================================================================
-
-async def main():
-    print("\n=== TripVerse Trip Planner Test ===")
-    print("Type 'exit' to quit.\n")
-
-    trip_state = {
-        "trip_id": "terminal-test",
-        "user_id": None,
-        "guest_id": "terminal-test-guest",
-        "user_name": None,
-        "destination": None,
-        "duration_days": None,
-        "origin": None,
+@pytest.mark.asyncio
+async def test_pre_form_travel_question_stays_in_chat():
+    state = {
+        "trip_id": "new", "user_message": "Would spring be a good time to visit Japan?",
+        "origin": None, "destination": None, "duration_days": None,
         "onboarding_complete": False,
-        "missing_fields": [],
-        "assistant_response": "",
     }
-
-    while True:
-        try:
-            user_message = input("You: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            break
-
-        if user_message.lower() == "exit":
-            break
-
-        if not user_message:
-            continue
-
-        # Each message starts a new graph execution,
-        # while the trip state is carried forward.
-        trip_state["user_message"] = user_message
-
-        result = await trip_planner_graph.ainvoke(trip_state)
-
-        # Carry graph state forward to the next message.
-        trip_state.update(result)
-
-        print(f"TripVerse: {result.get('assistant_response', '')}\n")
+    understood = '{"intent":"trip_question","destination":"Japan","duration_days":null,"origin":null,"user_name":null}'
+    with patch("app.services.llm.service.llm_service.generate", new_callable=AsyncMock, return_value=understood), patch(
+        "app.services.llm.service.llm_service.generate_with_tools", new_callable=AsyncMock,
+        return_value=LLMResult(text="Spring can be lovely; dates and crowds matter.", tool_calls=[]),
+    ):
+        result = await trip_planner_graph.ainvoke(state)
+    assert result.get("ui_action") is None
+    assert "Spring can be lovely" in result["assistant_response"]
+    assert result["destination"] == "Japan"
 
 
-if __name__ == "__main__":
-    asyncio.run(main())
+@pytest.mark.asyncio
+async def test_form_submission_asks_for_mode_before_first_draft():
+    state = {
+        "trip_id": "new", "user_message": "", "onboarding_complete": False,
+        "ui_action": {
+            "action": "SUBMIT_TRIP_ONBOARDING", "origin": "Delhi",
+            "destination": "Japan", "places_to_visit": ["Tokyo", "Kyoto"],
+            "duration_days": 8,
+            "planning_preferences": {"pace": "relaxed", "interests": ["Food"], "avoid": ["Early starts"]},
+        },
+    }
+    with patch("app.services.llm.service.llm_service.generate", side_effect=AssertionError("LLM called")):
+        choice = await trip_planner_graph.ainvoke(state)
+    assert choice["onboarding_complete"] is True
+    assert choice["places_to_visit"] == ["Tokyo", "Kyoto"]
+    assert choice["planning_preferences"]["pace"] == "relaxed"
+    assert choice["ui_action"]["action"] == "SHOW_PLANNING_CHOICE"
+    assert not choice.get("itinerary_graph")
+
+    planning = {"trip_type": "multi_city", "planning_notes": "Keep a calm pace.",
+                "research_queries": [], "research_results": [],
+                "candidates": [{"name": "Tokyo", "type": "city", "reason": "Requested"}]}
+    with (patch("app.agents.trip_planner.nodes.planning_trip_node.planning_graph.ainvoke", return_value=planning),
+          patch("app.services.llm.service.llm_service.generate", return_value="First draft") as generate):
+        result = await trip_planner_graph.ainvoke({
+            **choice, "ui_action": {"action": "GENERATE_FULL_ITINERARY"},
+        })
+    assert result["onboarding_complete"] is True
+    assert result["places_to_visit"] == ["Tokyo", "Kyoto"]
+    assert result["assistant_response"] == "First draft"
+    assert "Kyoto" in generate.await_args_list[0].kwargs["prompt"]
+    assert "Early starts" in generate.await_args_list[0].kwargs["prompt"]
+    assert result["itinerary_graph"]["nodes"][0]["name"] == "Delhi"

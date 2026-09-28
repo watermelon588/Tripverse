@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 from app.agents.trip_planner.state import TripPlanningState
-from app.services.llm.service import llm_service
+from app.services.llm.service import llm_service, model_for
 
 logger = logging.getLogger(__name__)
 
@@ -986,6 +986,7 @@ Return only the required JSON object.
             prompt=prompt,
             system_instruction=UNDERSTAND_USER_MSG_NODE_SYSTEM_INSTRUCTION,
             temperature=0.0,
+            **model_for("fast"),  # intent + field extraction: same answers, ~3x faster
         )
 
     except Exception as exc:
