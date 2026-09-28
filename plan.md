@@ -66,13 +66,15 @@ Rejected:
 
 1. ✅ **Session 1:** trip brief v2 + trip document. *Done 2026-09-28.*
 2. ✅ **Spatial S0:** map session makes the 3D and map views embeddable. *Done 2026-09-28.*
-3. ⏭️ **Session 2:** Trip Studio page + hand-off. *Checkpoint 1*. **Next.**
+3. ✅ **Session 2:** Trip Studio page + hand-off. *Checkpoint 1*. *Done 2026-09-28: `/trips/:id` studio, chat preview card with photo strip, GSAP Flip card→studio morph, chat drawer inside the studio.*
 4. ✅ **Spatial S1:** place photos. *Done 2026-09-28 (photo strip ready for Session 2's preview card).*
-5. **Session 3:** sketchbook engine
+5. ⏭️ **Session 3:** sketchbook engine. **Next.**
 6. **Session 4:** guide characters + motion. *Checkpoint 2*. **Spatial S2** ("Around here") runs alongside Sessions 3–4.
-7. ✅ **Session 5:** weather, holidays, currency. *Done 2026-09-28 (built ahead of Sessions 3–4). Two follow-ups: mount `<TripConditions>` in the studio info rail once the map session's panel work lands, and the sketch's weather doodles move to Session 3.*
+7. ✅ **Session 5:** weather, holidays, currency. *Done 2026-09-28 (built ahead of Sessions 3–4). `<TripConditions>` is mounted in the studio's Details window (by the map session); the sketch's weather doodles move to Session 3.*
 8. **Spatial S3:** season-aware recommendations. *Climate tips done early (2026-09-28); the forecast and agent prompts follow Session 5.*
-9. **Session 6:** exports. *Checkpoint 3*
+9. **Session 6:** exports. *Checkpoint 3*.
+   - ✅ Calendar, Google Maps, GPX/KML, budget CSV and JSON exporters, plus the Export menu. *Done 2026-09-28.* It goes into the studio toolbar after Session 2 is committed.
+   - PDF: not started. It's built from Session 3's sketch pages and plugs into the menu's `pdf` slot.
 10. **Session 7:** polish and the one-time docs pass. The docs pass also covers the Spatial features.
 
 Sessions 1–7 are owned by the build-with-agent session. The Spatial sessions are owned by the map session, and their details are at the end of this file. Where one touches the other's files, message first.
@@ -206,7 +208,8 @@ Each session is roughly one long working session: backend + frontend + tests + a
 - Build with the agent: `FACTS.conditions` (the current day in detail plus heads-ups) and a reply rule for using it. Cached, so turns stay fast; 8 s cap on a cold start.
 - `ENRICHMENT_ENABLED` setting (off in tests). `tests/test_enrichment.py` has 11 tests; 145 pass in total. Live run: Kyoto/Osaka forecast, "Typical for October", Sports Day, INR→JPY; 4.6 s cold, 0.04 s cached.
 - Frontend: `TripEnrichment` type, and `components/studio/TripConditions.tsx` (weather rows, heads-up, money, credits), checked in the browser in light and dark with live data. Also fixed `DocDay.date`, whose type resolved to `None`.
-- **Open:** mount `TripConditions` in the studio info rail (`enrichment={doc.enrichment} selectedDay onSelectDay`); sketch weather doodles (Session 3); a home-currency setting (INR is assumed for now); holiday and weather facts for the one-shot planner's prompt.
+- Mounted in the studio's Details window, synced with the selected day (map session, 2026-09-28).
+- **Open:** sketch weather doodles (Session 3); a home-currency setting (INR is assumed for now); holiday and weather facts for the one-shot planner's prompt.
 
 **Goal:** The studio knows the world around your dates.
 
@@ -229,6 +232,19 @@ Each session is roughly one long working session: backend + frontend + tests + a
 **Files:** new `backend/app/services/enrichment.py`, `services/trip_document.py`, `copilot/graph.py` (facts), studio info rail, sketch render, tests.
 
 ### Session 6: Exports (one-click PDF, calendar, maps and data)
+Session 6 (non-PDF exporters): Plan dot cleanup session; PDF: build-with-agent session.
+
+**Status (2026-09-28): everything except the PDF is done.**
+- `frontend/src/lib/exporters/`:
+  - `ics.ts`: an event per item, timed from its block (09:00, 13:00 and 18:00, back to back using `duration_hours`); untimed items and holidays are all-day; escaping and 75-octet folding
+  - `maps.ts`: a Google Maps link per day, up to 9 stops, options left out, and no travel mode for multi-stop transit because Google ignores waypoints there
+  - `gpx.ts` and `kml.ts`, with shared helpers in `points.ts`
+  - `csv.ts`: the budget ledger, with formula-injection guard, a BOM, and totals
+  - `download.ts`: the file names and the no-dialog download
+- `components/studio/ExportMenu.tsx` + `styles/export-menu.css`: the PDF entry only shows when the `pdf` prop is passed; the calendar is disabled with a reason when there's no start date; per-day Google Maps links; status messages are announced to screen readers; Escape and clicking outside close it.
+- Backend `POST /api/exports/points` (`api/routes/exports.py`, `enrichment.locate_places`) finds each place near its base with Nominatim. Places more than 60 km from their base are dropped as namesakes. Lookups are cached; a 40 s budget returns partial results, and the next call finishes from cache.
+- Tests: vitest (`npm test`, 10 tests) and `tests/test_exports.py` (3); 152 backend tests pass. Live: 5 of 6 Kyoto/Osaka places located with correct coordinates ("Springfield" rejected); 9.7 s the first time, 0.1 s cached. Checked in the browser: every download, the error path, the state with no start date, and Escape.
+- **Open:** mount `<ExportMenu document={document} />` in the studio toolbar after the Session 2 commit; the PDF (`pdf` prop); importing the files into real Calendar and Organic Maps apps once (per Verify).
 **Goal:** Take the trip anywhere.
 
 **Export** menu in the studio:
@@ -335,7 +351,7 @@ Building resumed on 2026-09-28 with Spatial S2. `[x]` = done and verified; `[ ]`
 - [x] `usePlaceMedia` hook and `creditLine`
 - [x] Photos in the detail panels, Nearby, route strip, Journal timeline and map photo pins
 - [x] `<TripPhotoStrip>` for the chat preview card, plus the shared `useStopCoordinates` hook
-- [ ] Mount the strip in `TripPreviewCard` (build-with-the-agent session, in Session 2)
+- [x] Mount the strip in `TripPreviewCard` (build-with-the-agent session, in Session 2)
 - [ ] Day covers in the studio's day rail (after Session 2)
 - [x] Photos on trip library cards: a thumbnail per row and a credited cover in the detail panel, looked up by destination name (done 2026-09-28)
 
@@ -350,7 +366,13 @@ Building resumed on 2026-09-28 with Spatial S2. `[x]` = done and verified; `[ ]`
 - [x] Backend `POST /api/places/season`: NASA POWER monthly climate per ~10 km cell (cached forever), deterministic rules for rainy season, showers, cold, freezing and snow, heat and pleasant months, crossed with each stop's planned places; 6 tests (134 pass in total)
 - [x] Season figure and tips in the stop panel, a season tag on every stop in the outline, journal and route strip, and a **Heads-up** list in the overview
 - [ ] Forecast inside the window from Session 5's MET Norway service (label "forecast" rather than "typical for <month>")
-- [x] Feed the tips to the agent: Session 5's `enrichment.py` calls `season_tips` for typical days and adds them to FACTS.conditions. The one-shot prompt is still open.
+- [x] Feed the tips to the agent: Session 5's `enrichment.py` calls `season_tips` for typical days and adds them to FACTS.conditions.
+- [x] Feed the tips to the one-shot planner (map session, 2026-09-28):
+  - `seasonality.trip_season` finds the destination on Wikipedia (cached forever), reads NASA POWER for every month the trip touches, and hands the draft prompt a `season` block with guidance: flexible day and indoor backups in a rainy season, off-season gardens, beaches and hikes swapped for indoor highlights in the cold, outdoor sights early or late in the heat, and one packing tip.
+  - It adds no LLM call. It runs in parallel with the research and waits at most 2 s once the research is done.
+  - It runs on fresh drafts only. Without a start date, the prompt is unchanged.
+  - Checked live: Tokyo in June came out as rainy season, Kyoto in late January as cold through January and February, Rajasthan in May as hot, and Goa in June and July as rainy season. 4 new tests (149 pass in total).
+  - Also sets the Wikimedia User-Agent to the project's repository URL (a live test hit an HTTP 429).
 - [x] Heads-up in the studio: Session 5's `<TripConditions>` is mounted in the studio's Details window (map session, 2026-09-28)
 
 **Clean-up:**
@@ -373,7 +395,7 @@ Building resumed on 2026-09-28 with Spatial S2. `[x]` = done and verified; `[ ]`
   - Each has a toggle in the bar and a × on the panel.
   - Atlas's floating summary and details can also be dragged (`useSpatialPanels.ts`), and the map re-centres when they're hidden.
 - [x] **Checked:** 1440, 1024, 768 and 390 px, both themes, no horizontal overflow; tsc and vite build pass
-- [ ] Check the chat card → studio Flip morph in the real app (needs a real trip; Session 2 owns `CreateTrip.tsx`)
+- [x] Check the chat card → studio Flip morph in the real app (verified by rect sampling: card rect → full screen in ~0.7 s)
 
 ### Done so far (map session, 2026-09-28)
 
