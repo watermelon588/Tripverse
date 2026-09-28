@@ -15,7 +15,7 @@ export interface CurrentTripContext {
   budget?: number;
   currency?: string;
   travelers?: number;
-  status?: 'DISCOVERY' | 'ONBOARDING' | 'ROUTING' | 'ITINERARY' | 'CONFIRMED';
+  status?: 'DISCOVERY' | 'ONBOARDING' | 'CHOOSING' | 'ROUTING' | 'ITINERARY' | 'CONFIRMED';
   interests?: string[];
 }
 
@@ -28,6 +28,7 @@ interface CurrentTripProps {
 const STATUS_TONE: Record<NonNullable<CurrentTripContext['status']>, string> = {
   DISCOVERY: '',
   ONBOARDING: 'tv-tag--blue',
+  CHOOSING: 'tv-tag--blue',
   ROUTING: 'tv-tag--yellow',
   ITINERARY: 'tv-tag--yellow',
   CONFIRMED: 'tv-tag--green',
