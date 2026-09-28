@@ -22,11 +22,13 @@ export const SignupPage: React.FC<SignupPageProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setNotice(null);
 
     if (password.length < 6) {
       setError('Use at least 6 characters for your password.');
@@ -35,9 +37,11 @@ export const SignupPage: React.FC<SignupPageProps> = ({
 
     setLoading(true);
     try {
-      const { error: authError } = await signUp(email.trim(), password, fullName.trim());
+      const { error: authError, needsEmailConfirmation } = await signUp(email.trim(), password, fullName.trim());
       if (authError) {
         setError(authError.message || 'Could not create that account.');
+      } else if (needsEmailConfirmation) {
+        setNotice('Check your email to confirm your account, then sign in.');
       } else {
         onSuccess();
       }
@@ -62,6 +66,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({
           {error}
         </div>
       )}
+      {notice && <div className="tv-alert" role="status">{notice}</div>}
 
       <form onSubmit={handleSubmit} className="tv-auth__form">
         <AuthInput

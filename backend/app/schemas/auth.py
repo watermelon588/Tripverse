@@ -1,3 +1,4 @@
+import uuid
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
 
@@ -43,13 +44,22 @@ class UserProfileResponse(BaseModel):
 
 
 class AuthSessionResponse(BaseModel):
-    access_token: str
+    access_token: Optional[str] = None
     token_type: str = "bearer"
     expires_in: Optional[int] = None
     refresh_token: Optional[str] = None
     user: UserProfileResponse
+    needs_email_confirmation: bool = False
 
 
 class MessageResponse(BaseModel):
     message: str
     status: str = "success"
+
+
+class ClaimGuestTripsRequest(BaseModel):
+    guest_id: uuid.UUID
+
+
+class ClaimGuestTripsResponse(BaseModel):
+    claimed_count: int
