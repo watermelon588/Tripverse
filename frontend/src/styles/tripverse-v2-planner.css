@@ -285,24 +285,6 @@
 .tv-trip__tags { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 
 /* ==========================================================================
- * Assistant avatar
- * ========================================================================== */
-
-.tv-ava {
-  position: relative;
-  flex: none;
-  overflow: hidden;
-  border-radius: 50%;
-  border: 1px solid var(--tv-line-strong);
-  background: var(--tv-surface-sunk);
-  user-select: none;
-}
-
-.tv-ava.is-thinking { background: var(--tv-ink); border-color: var(--tv-ink); }
-.tv-ava__img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
-.tv-ava__img--frame { object-fit: contain; transform: scale(1.1); }
-
-/* ==========================================================================
  * Markdown in agent replies
  * ========================================================================== */
 

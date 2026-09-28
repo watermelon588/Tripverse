@@ -1,0 +1,22 @@
+/* GuideCharacter (components/guide): a round portrait that moves by transforms only. */
+.tv-guide {
+  position: relative; display: inline-block; flex: none;
+  width: var(--guide-size); height: var(--guide-size);
+}
+.tv-guide__body {
+  display: block; width: 100%; height: 100%; overflow: hidden; border-radius: 50%;
+  border: 1px solid var(--tv-line-strong); background: var(--tv-surface-sunk);
+  will-change: transform;
+}
+.tv-guide.has-frames .tv-guide__body { background: var(--tv-ink); border-color: var(--tv-ink); }
+.tv-guide__img { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; user-select: none; }
+.tv-guide.has-frames .tv-guide__img { object-fit: contain; transform: scale(1.1); }
+
+.tv-guide__badge {
+  position: absolute; right: -4px; bottom: -3px; display: grid; place-items: center;
+  width: max(16px, calc(var(--guide-size) * .36)); aspect-ratio: 1; border-radius: 50%;
+  border: 1px solid var(--tv-line-strong); background: var(--tv-surface); color: var(--tv-ink);
+  font: 700 max(10px, calc(var(--guide-size) * .22))/1 var(--tv-sans, system-ui);
+}
+.tv-guide.is-confused .tv-guide__badge { color: var(--tv-red-fg); }
+.tv-guide.is-celebrating .tv-guide__badge { color: var(--tv-yellow-fg); }

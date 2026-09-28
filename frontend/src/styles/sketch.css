@@ -45,8 +45,34 @@
 .tv-sketch__hl { fill: var(--sk-hl); }
 .tv-sketch__ink text { font-family: var(--sk-hand); }
 
+/* Bottom bar: the guide and what they're saying, the pager, and a redraw. */
+.tv-sketch__bar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: .75rem; min-height: 48px; }
+.tv-sketch__guide { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.tv-sketch__say {
+  position: relative; margin: 0; min-width: 0; padding: .4rem .7rem; border: 1px solid var(--tv-line-strong);
+  border-radius: 12px 12px 12px 3px; background: var(--tv-surface); color: var(--tv-ink);
+  font: 600 1.1rem/1.2 var(--sk-hand); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  opacity: 0; transform: translateY(4px) scale(.96); transform-origin: 0 100%;
+  transition: opacity .2s ease, transform .25s cubic-bezier(.2, .8, .2, 1);
+}
+.tv-sketch__say.is-on { opacity: 1; transform: none; }
 .tv-sketch__nav { display: flex; align-items: center; justify-content: center; gap: .75rem; }
-.tv-sketch__count { min-width: 12rem; text-align: center; font-size: .88rem; color: var(--tv-ink); }
+.tv-sketch__count { min-width: 11rem; text-align: center; font-size: .88rem; color: var(--tv-ink); }
+.tv-sketch__replay { justify-self: end; }
+
+/* The guide's pen while drawing. */
+.tv-sketch__pen { pointer-events: none; }
+.tv-sketch__pen-body { fill: var(--sk-muted-soft); stroke: var(--sk-ink); stroke-width: 1.6; stroke-linejoin: round; }
+.tv-sketch__pen-ring { fill: var(--sk-paper); stroke: var(--sk-ink); stroke-width: 1.6; }
+
+@media (max-width: 640px) {
+  .tv-sketch__bar { grid-template-columns: minmax(0, 1fr) auto; }
+  .tv-sketch__nav { grid-row: 2; grid-column: 1 / -1; }
+  .tv-sketch__count { min-width: 0; }
+}
 
 @keyframes tv-sketch-turn { from { opacity: 0; transform: translateX(12px); } }
-@media (prefers-reduced-motion: reduce) { .tv-sketch__page { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .tv-sketch__page { animation: none; }
+  .tv-sketch__say { transition: none; }
+}

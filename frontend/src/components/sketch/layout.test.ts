@@ -43,7 +43,7 @@ describe('layoutSketch', () => {
         });
         // Card text (three-line names and their meta) ends inside the card.
         page.elements.forEach((el) => {
-          if (el.kind !== 'text' || !/-i\d+-(name|meta)$/.test(el.id)) return;
+          if (el.kind !== 'text' || !/-p-[\w-]+-(name|meta)$/.test(el.id)) return;
           const card = page.elements.find((box) => box.id === el.id.replace(/-(name|meta)$/, ''));
           if (card?.kind !== 'box') throw new Error(`no card for ${el.id}`);
           expect(el.y + (el.lines.length - 1) * el.size * 1.08).toBeLessThanOrEqual(card.y + card.h - 6);
@@ -113,7 +113,7 @@ describe('layoutSketch', () => {
 
   it('highlights must-see items and draws flights as dashed arcs', () => {
     const els = layoutSketch(tokyo).flatMap((p) => p.elements);
-    expect(els.filter((el) => el.kind === 'highlight').map((el) => el.id)).toEqual(['d3-i0-hl']);
+    expect(els.filter((el) => el.kind === 'highlight').map((el) => el.id)).toEqual(['d3-p-fushimi-inari-taisha-hl']);
     const flight = layoutSketch(base({
       travel_mode: 'transit', legs: [{ source: 'Delhi', target: 'Goa', mode: 'flight', duration: null, distance: null, cost: null }],
       days: [{ day: 1, date: null, base: 'Delhi', est_cost: null, hours: null, items: [] }, { day: 2, date: null, base: 'Goa', est_cost: null, hours: null, items: [] }],

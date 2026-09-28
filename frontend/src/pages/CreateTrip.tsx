@@ -10,6 +10,7 @@ import type { CopilotOp, CopilotState } from '../components/create/CopilotPanel'
 import type { OnboardingValues } from '../components/create/TripOnboardingForm';
 import { graphFromLegacyText, type ItineraryGraph } from '../components/create/itineraryGraph';
 import { TripPreviewCard } from '../components/create/TripPreviewCard';
+import { withCopilot } from '../components/sketch/live';
 import { TripStudio } from '../components/studio/TripStudio';
 import { prefersReducedMotion } from '../components/home/v2/motion';
 import { useTheme } from '../context/ThemeContext';
@@ -377,6 +378,11 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
       : null;
   }, [activeMessages, activeTrip, backfilledGraphs]);
 
+  // The studio document, with the agent's streamed plan folded in so the sketch updates mid-reply.
+  const liveDoc = useMemo(
+    () => (activeTrip && studioDoc?.trip_id === activeTrip.id ? withCopilot(studioDoc, activeCopilot) : null),
+    [activeTrip, studioDoc, activeCopilot],
+  );
   const planned = Boolean(activeTrip && activeTrip.onboarding_status === 'COMPLETE' && activeTrip.status !== 'DRAFT' && activeGraph);
   useEffect(() => {
     if (studioOpen && !planned && !isLoading && activeTrip) closeStudio();
@@ -412,6 +418,7 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
     onSelectPrompt: (prompt: string) => { void sendMessage(prompt); },
     isLoading,
     loadingStage,
+    guideId: activeTrip?.planning_preferences?.guide,
     onResetChat: () => { void startNewTrip(); },
     onboardingValues: formMessage ? onboardingValues : null,
     showComposer: !formMessage && !showPlanningChoice,
@@ -484,7 +491,7 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
       />
       {studioOpen && planned && activeTrip && (
         <TripStudio trip={activeTrip} tripContext={tripContext(activeTrip)} graph={activeGraph}
-          document={studioDoc?.trip_id === activeTrip.id ? studioDoc : null} dark={theme === 'dark'}
+          document={liveDoc} dark={theme === 'dark'}
           isLoading={isLoading} loadingStage={loadingStage} day={studioDay} onSelectDay={setStudioDay}
           onBack={() => closeStudio()} onOpenBudget={() => setIsBudgetOpen(true)}
           onAddPlace={isLoading ? undefined : addPlace}
