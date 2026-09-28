@@ -68,8 +68,8 @@ Rejected:
 2. ✅ **Spatial S0:** map session makes the 3D and map views embeddable. *Done 2026-09-28.*
 3. ✅ **Session 2:** Trip Studio page + hand-off. *Checkpoint 1*. *Done 2026-09-28: `/trips/:id` studio, chat preview card with photo strip, GSAP Flip card→studio morph, chat drawer inside the studio.*
 4. ✅ **Spatial S1:** place photos. *Done 2026-09-28 (photo strip ready for Session 2's preview card).*
-5. ⏭️ **Session 3:** sketchbook engine. **Next.**
-6. **Session 4:** guide characters + motion. *Checkpoint 2*. **Spatial S2** ("Around here") runs alongside Sessions 3–4.
+5. ✅ **Session 3:** sketchbook engine. *Done 2026-09-29: Sketch tab in the studio (overview + a page per day), Rough.js pages, sticky notes, stamps, receipt, highlights.*
+6. ⏭️ **Session 4:** guide characters + motion. **Next.** *Checkpoint 2*. **Spatial S2** ("Around here") runs alongside Sessions 3–4.
 7. ✅ **Session 5:** weather, holidays, currency. *Done 2026-09-28 (built ahead of Sessions 3–4). `<TripConditions>` is mounted in the studio's Details window (by the map session); the sketch's weather doodles move to Session 3.*
 8. **Spatial S3:** season-aware recommendations. *Climate tips done early (2026-09-28); the forecast and agent prompts follow Session 5.*
 9. **Session 6:** exports. *Checkpoint 3*.
@@ -144,6 +144,23 @@ Each session is roughly one long working session: backend + frontend + tests + a
 #### Checkpoint 1 (after Sessions 1–2): review the brief and the studio flow with you before building the sketch.
 
 ### Session 3: Sketchbook engine
+**Status (2026-09-29): done.**
+- `frontend/src/components/sketch/`:
+  - `layout.ts`: `layoutSketch(doc)` (pure, deterministic; ids like `d3-i0-name`)
+  - `render.tsx`: Rough.js seeded by element id, perfect-freehand highlights, real SVG text with `<title>`/`<desc>` alternatives
+  - `SketchbookView.tsx`: follows the studio's selected day; ← → PageUp/PageDown Home End and swipe
+  - `doodles.ts`, `fixtures.ts`, `types.ts`
+- Mounted as the studio's **Sketch** tab, lazy loaded (52 kB JS).
+- Deviations from the plan below:
+  - Doodles are 25 hand-drawn 24×24 paths in `doodles.ts` (CC0, ours) rather than an SVG sprite, so Rough.js can wobble them.
+  - Fonts: Caveat + Yomogi (Japanese) self-hosted through `@fontsource` (OFL) instead of Excalifont, which isn't on npm. Text widths are calibrated to Caveat (measured in the browser).
+- Tests: 13 vitest tests, including Tokyo and Kyoto snapshots, no overlaps for 1–8 items a day, card text staying inside its card, 30-day trips, notes only from tips, and the receipt; 23 in total with the exporters.
+- Checked in the browser: a real trip plus the fixtures, light and dark, keyboard, and 375 px (no horizontal scroll).
+- **Open:**
+  - portrait day pages for phones (Session 7)
+  - an untimed dinner can land in the morning slot (the emptiest slot wins ties)
+  - the PDF (Session 6) renders these same pages
+
 **Goal:** The plan as hand-drawn pages.
 
 - **Layout** (`layoutSketch`, pure and unit-tested):
