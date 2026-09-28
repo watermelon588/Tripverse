@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CurrentTripContext } from './CurrentTrip';
 import { airDistanceKm, type Coordinates, type ItineraryGraph, type ItineraryNode, type NearbyPlace, type RoadMetric } from './itineraryGraph';
-import { expandLeg, formatMinutes, legFacts, type Prefs } from './spatialModel';
+import { expandLeg, formatMinutes, legFacts, stopMonth, type Prefs } from './spatialModel';
 import { Inspector, Journal, PrefsLine, RouteStrip, RouteTree, type Sel, type SelKind, type SpatialCtx } from './SpatialDetail';
 import type { GraphLayout } from './TripGraph3D';
 import type { MapSkin } from './GoogleTripMap';
 import { getNearbyPlaces, getRoadMetrics, getTripGeocodes } from '../../services/tripService';
 import { usePlaceMedia, type MediaTarget } from '../../services/placeMedia';
+import { useSeason, type SeasonTarget } from '../../services/seasonality';
 import { useStopCoordinates } from './stopLocations';
+import { useSpatialPanels, type PanelKey } from './useSpatialPanels';
 import { CloseIcon, RouteIcon } from '../home/v2/IconsV2';
 
 const TripGraph3D = React.lazy(() => import('./TripGraph3D').then((module) => ({ default: module.TripGraph3D })));
@@ -38,6 +40,8 @@ interface Props {
   graph?: ItineraryGraph | null;
   preferences?: Prefs | null;
   dark?: boolean;
+  /** Shows "Add to day" on Around-here places; the host sends it to the agent (COPILOT_OPS add). */
+  onAddPlace?: (name: string, day: number | null) => void;
 }
 
 const read = (key: string) => { try { return window.localStorage.getItem(key); } catch { return null; } };
@@ -54,10 +58,11 @@ const roadCache = new Map<string, RoadMetric>();
 const legKey = (a: Coordinates, b: Coordinates) => `${a.lat},${a.lon}>${b.lat},${b.lon}`;
 // Keyed by name, not list position, so adding a place in chat does not shift every other place's id.
 const placeId = (nodeId: string, name: string) => `draft-${nodeId}-${name.toLowerCase().replace(/\W+/g, '-')}`;
-export const SpatialWorkspace: React.FC<Props> = ({ isOpen, onClose, embedded = false, mode: modeProp, onModeChange, selectedDay, onSelectDay, trip, tripId, graph, preferences, dark = false }) => {
+export const SpatialWorkspace: React.FC<Props> = ({ isOpen, onClose, embedded = false, mode: modeProp, onModeChange, selectedDay, onSelectDay, trip, tripId, graph, preferences, dark = false, onAddPlace }) => {
   const [variant, setVariant] = useState<Variant>(() => VARIANTS.find((item) => item.id === read('tripverse-spatial-variant'))?.id || 'atlas');
   const [innerMode, setInnerMode] = useState<'graph' | 'map'>(() => read('tripverse-spatial-mode') === 'map' ? 'map' : 'graph');
   const mode = modeProp ?? innerMode;
+  const panels = useSpatialPanels(variant);
   const [sel, setSel] = useState<Sel | null>(null);
   const [expandedNode, setExpandedNode] = useState<string | null>(null);
   const [expandedEdge, setExpandedEdge] = useState<string | null>(null);
@@ -222,6 +227,15 @@ export const SpatialWorkspace: React.FC<Props> = ({ isOpen, onClose, embedded = 
   }, [graph, coordinates, nearby, expandedNode, planned]);
   const media = usePlaceMedia(mediaTargets);
 
+  // Season tips need a located stop and a date: the trip's start date plus the stop's day.
+  const seasonTargets = useMemo<SeasonTarget[]>(() => (graph?.nodes || []).flatMap((node) => {
+    const month = stopMonth(node, prefs.start_date);
+    const point = coordinates[node.id];
+    return month && point ? [{ id: node.id, lat: Number(point.lat.toFixed(2)), lon: Number(point.lon.toFixed(2)), month,
+      places: (node.nearby_places || []).map(({ name, category }) => ({ name, category })) }] : [];
+  }), [graph, coordinates, prefs.start_date]);
+  const season = useSeason(seasonTargets);
+
   const facts = useMemo(() => Object.fromEntries((graph?.edges || []).map((edge) => {
     const from = coordinates[edge.source]; const to = coordinates[edge.target];
     return [edge.id, legFacts(edge, roadMetrics[edge.id], from && to ? airDistanceKm(from, to) : null, prefs)];
@@ -234,9 +248,13 @@ export const SpatialWorkspace: React.FC<Props> = ({ isOpen, onClose, embedded = 
   }, [expandedEdge, graph, facts, nodesById, coordinates, roadMetrics]);
 
   if (!isOpen) return null;
+  const hide = (key: PanelKey, label: string) => <button type="button" className="tv-sv__hide" onClick={() => panels.toggle(key, false)}
+    aria-label={`Hide ${label.toLowerCase()}`} title={`Hide ${label.toLowerCase()}`}><CloseIcon width={12} height={12} /></button>;
+  const move = (key: PanelKey, label: string) => <button {...panels.gripProps(key, label.toLowerCase())}><i aria-hidden="true" /></button>;
+  const hiddenClasses = panels.list.filter(({ key }) => !panels.shown(key)).map(({ key }) => `hide-${key}`).join(' ');
   const spec = VARIANTS.find((item) => item.id === variant) || VARIANTS[0];
   const ctx: SpatialCtx | null = graph ? { graph, nodesById, facts, coordinates, prefs, nearby, nearbyLoading, nearbyError,
-    expandedNode, expandedEdge, expansion, sel, onSelect, collapse, media } : null;
+    expandedNode, expandedEdge, expansion, sel, onSelect, collapse, media, onAddPlace, season } : null;
   const totals = Object.values(facts).reduce((sum, f) => ({ km: sum.km + (f.km || 0), min: sum.min + (f.minutes || 0) }), { km: 0, min: 0 });
   const night = variant === 'atlas' || dark;
 
@@ -248,7 +266,7 @@ export const SpatialWorkspace: React.FC<Props> = ({ isOpen, onClose, embedded = 
         : hasGoogleMap
           ? <GoogleTripMap graph={graph} skin={dark ? 'night' : spec.skin} coordinates={coordinates} roadMetrics={roadMetrics} facts={facts} nearby={nearby}
             expandedNode={expandedNode} expandedEdge={expandedEdge} expansion={expansion} selected={sel?.id || null} onSelect={onSelect}
-            inset={variant === 'atlas' ? { right: 400, bottom: 110 } : undefined} planned={planned} media={media} />
+            inset={variant === 'atlas' ? { right: panels.shown('sheet') ? 400 : 0, bottom: panels.shown('strip') ? 110 : 0 } : undefined} planned={planned} media={media} />
           : <TripRouteMap graph={graph} coordinates={coordinates} roadMetrics={roadMetrics} nearby={nearby} focusedNode={expandedNode}
             selectedNode={sel?.kind === 'node' ? sel.id : null} selectedEdge={sel?.kind === 'edge' ? sel.id : null}
             onSelectNode={(id) => onSelect('node', id)} onSelectEdge={(id) => onSelect('edge', id)} onSelectNearby={(id) => onSelect('nearby', id)} />}
@@ -266,7 +284,7 @@ export const SpatialWorkspace: React.FC<Props> = ({ isOpen, onClose, embedded = 
 
   return <>
     {!embedded && <button type="button" className="tv-spatial__scrim" aria-label="Close spatial view" onClick={onClose} />}
-    <aside ref={panel} className={`tv-sv is-${variant} ${night ? 'is-night' : ''} ${embedded ? 'is-embedded' : ''}`} aria-label="Spatial trip workspace"
+    <aside ref={panel} className={`tv-sv is-${variant} ${night ? 'is-night' : ''} ${embedded ? 'is-embedded' : ''} ${hiddenClasses}`} aria-label="Spatial trip workspace"
       style={{ '--sv-w': `${width}px` } as React.CSSProperties}>
       {/* Drag writes the CSS variable directly; React state commits once on release. */}
       {!embedded && <div className="tv-sv__grip" role="separator" tabIndex={0} aria-orientation="vertical" aria-label="Resize route panel"
@@ -287,6 +305,10 @@ export const SpatialWorkspace: React.FC<Props> = ({ isOpen, onClose, embedded = 
             className={variant === item.id ? 'is-active' : ''} onClick={() => pickVariant(item.id)} title={item.note}>
             <em>{String.fromCharCode(65 + index)}</em>{item.name}</button>)}
         </div>
+        <div className="tv-sv__panels" role="group" aria-label="Show or hide panels">
+          {panels.list.map(({ key, label }) => <button key={key} type="button" data-panel={key} aria-pressed={panels.shown(key)}
+            className={panels.shown(key) ? 'is-active' : ''} onClick={() => panels.toggle(key)}>{label}</button>)}
+        </div>
         {modeProp === undefined && <div className="tv-sv__modes" role="group" aria-label="Route view">
           <button type="button" aria-pressed={mode === 'graph'} className={mode === 'graph' ? 'is-active' : ''} onClick={() => pickMode('graph')}>3D graph</button>
           <button type="button" aria-pressed={mode === 'map'} className={mode === 'map' ? 'is-active' : ''} onClick={() => pickMode('map')}>Map</button>
@@ -299,19 +321,21 @@ export const SpatialWorkspace: React.FC<Props> = ({ isOpen, onClose, embedded = 
         <p>When the planner writes a draft, its places and connections appear here during the same response.</p>
       </div> : variant === 'atlas' ? <div className="tv-sv__body">
         {stage}
-        <div className="tv-sv__title"><span>{trip?.days ? `${trip.days} days` : 'Route'}</span><h2>{trip?.destination || 'Your journey'}</h2>{summary}</div>
-        <div className="tv-sv__sheet" key={sel?.id || 'none'}><Inspector ctx={ctx} /></div>
-        <RouteStrip ctx={ctx} />
+        {panels.shown('title') && <div className="tv-sv__title" style={panels.offsetStyle('title')}>{move('title', 'Summary')}{hide('title', 'Summary')}
+          <span>{trip?.days ? `${trip.days} days` : 'Route'}</span><h2>{trip?.destination || 'Your journey'}</h2>{summary}</div>}
+        {panels.shown('sheet') && <div className="tv-sv__sheet" key={sel?.id || 'none'} style={panels.offsetStyle('sheet')}>
+          {move('sheet', 'Details')}{hide('sheet', 'Details')}<Inspector ctx={ctx} /></div>}
+        {panels.shown('strip') && <RouteStrip ctx={ctx} />}
       </div> : variant === 'outline' ? <div className="tv-sv__body">
-        <div className="tv-sv__rail">
+        {panels.shown('rail') && <div className="tv-sv__rail">{hide('rail', 'Outline')}
           <div className="tv-sv__title"><span>Route outline</span><h2>{trip?.destination || 'Your journey'}</h2>{summary}<PrefsLine prefs={prefs} /></div>
           <RouteTree ctx={ctx} />
-        </div>
+        </div>}
         {stage}
-        <div className="tv-sv__sheet" key={sel?.id || 'none'}><Inspector ctx={ctx} /></div>
+        {panels.shown('sheet') && <div className="tv-sv__sheet" key={sel?.id || 'none'}>{hide('sheet', 'Details')}<Inspector ctx={ctx} /></div>}
       </div> : <div className="tv-sv__body">
         <div className="tv-sv__lead">
-          <div className="tv-sv__title"><span>The journey, in order</span><h2>{trip?.destination || 'Your journey'} <em>as a journal.</em></h2>{summary}<PrefsLine prefs={prefs} /></div>
+          {panels.shown('title') && <div className="tv-sv__title">{hide('title', 'Summary')}<span>The journey, in order</span><h2>{trip?.destination || 'Your journey'} <em>as a journal.</em></h2>{summary}<PrefsLine prefs={prefs} /></div>}
           {stage}
         </div>
         <Journal ctx={ctx} />
