@@ -73,7 +73,7 @@ Rejected:
 7. ✅ **Session 5:** weather, holidays, currency. *Done 2026-09-28 (built ahead of Sessions 3–4). `<TripConditions>` is mounted in the studio's Details window (by the map session); the sketch's weather doodles move to Session 3.*
 8. **Spatial S3:** season-aware recommendations. *Climate tips done early (2026-09-28); the forecast and agent prompts follow Session 5.*
 9. **Session 6:** exports. *Checkpoint 3*.
-   - ✅ Calendar, Google Maps, GPX/KML, budget CSV and JSON exporters, plus the Export menu. *Done 2026-09-28.* It goes into the studio toolbar after Session 2 is committed.
+   - ✅ Calendar, Google Maps, GPX/KML, budget CSV and JSON exporters, plus the Export menu. *Done 2026-09-28; the menu sits next to Budget in the studio's top bar.*
    - PDF: not started. It's built from Session 3's sketch pages and plugs into the menu's `pdf` slot.
 10. **Session 7:** polish and the one-time docs pass. The docs pass also covers the Spatial features.
 
@@ -244,7 +244,8 @@ Session 6 (non-PDF exporters): Plan dot cleanup session; PDF: build-with-agent s
 - `components/studio/ExportMenu.tsx` + `styles/export-menu.css`: the PDF entry only shows when the `pdf` prop is passed; the calendar is disabled with a reason when there's no start date; per-day Google Maps links; status messages are announced to screen readers; Escape and clicking outside close it.
 - Backend `POST /api/exports/points` (`api/routes/exports.py`, `enrichment.locate_places`) finds each place near its base with Nominatim. Places more than 60 km from their base are dropped as namesakes. Lookups are cached; a 40 s budget returns partial results, and the next call finishes from cache.
 - Tests: vitest (`npm test`, 10 tests) and `tests/test_exports.py` (3); 152 backend tests pass. Live: 5 of 6 Kyoto/Osaka places located with correct coordinates ("Springfield" rejected); 9.7 s the first time, 0.1 s cached. Checked in the browser: every download, the error path, the state with no start date, and Escape.
-- **Open:** mount `<ExportMenu document={document} />` in the studio toolbar after the Session 2 commit; the PDF (`pdf` prop); importing the files into real Calendar and Organic Maps apps once (per Verify).
+- Mounted next to Budget in the studio's top bar. Checked in the studio at 1024 px and 390 px: the menu stays above the floating windows and doesn't overflow.
+- **Open:** the PDF (`pdf` prop); importing the files into real Calendar and Organic Maps apps once (per Verify).
 **Goal:** Take the trip anywhere.
 
 **Export** menu in the studio:

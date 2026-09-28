@@ -25,6 +25,7 @@ import { ChatIcon, ClockIcon, WalletIcon } from '../home/v2/IconsV2';
 import { EASE, prefersReducedMotion } from '../home/v2/motion';
 import { StudioPlan, dayDate, money } from './StudioPlan';
 import { TripConditions } from './TripConditions';
+import { ExportMenu } from './ExportMenu';
 import '../../styles/trip-studio.css';
 
 const SpatialWorkspace = React.lazy(() => import('../create/SpatialWorkspace').then((module) => ({ default: module.SpatialWorkspace })));
@@ -187,6 +188,7 @@ export function TripStudio({
         {isLoading && <span className="tv-studio__live" role="status"><i aria-hidden="true" />{guide.name}: {loadingStage}</span>}
         <ThemeToggle />
         <button type="button" className="tv-btn tv-btn--ghost tv-btn--sm" onClick={onOpenBudget}>Budget</button>
+        <ExportMenu document={document} />
       </header>
 
       <main className="tv-studio__stage" data-flip-id="trip-stage">

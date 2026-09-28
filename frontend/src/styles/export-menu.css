@@ -1,5 +1,8 @@
 /* ExportMenu: a toolbar button that opens a panel of one-click downloads. Tokens from tripverse-v2. */
-.tv-export { position: relative; flex: none; }
+/* The z-index sits on the wrapper: the studio's entrance animation leaves a transform on each toolbar item,
+   which makes the item its own stacking context. ponytail: 1000 clears the studio's FloatingWindows, which
+   count up from 2 per click; isolate the board (isolation: isolate) if windows ever need to rise past it. */
+.tv-export { position: relative; z-index: 1000; flex: none; }
 .tv-export__trigger { display: inline-flex; align-items: center; gap: .4rem; min-height: 34px; padding: .35rem .8rem; border: 1px solid var(--tv-line-strong);
   border-radius: var(--tv-r-sm, 8px); background: var(--tv-surface); color: var(--tv-ink); font: 500 .76rem var(--tv-sans); cursor: pointer;
   transition: background-color .15s ease, transform .12s var(--tv-ease, ease); }
@@ -8,7 +11,7 @@
 .tv-export__trigger:active { transform: scale(.97); }
 .tv-export__trigger:focus-visible, .tv-export__panel :is(button, a):focus-visible { outline: 2px solid var(--tv-ink); outline-offset: 2px; }
 
-.tv-export__panel { position: absolute; z-index: 40; top: calc(100% + 6px); right: 0; display: grid; gap: 2px; width: min(300px, calc(100vw - 32px));
+.tv-export__panel { position: absolute; z-index: 1; top: calc(100% + 6px); right: 0; display: grid; gap: 2px; width: min(300px, calc(100vw - 32px));
   padding: 6px; border: 1px solid var(--tv-line-strong); border-radius: var(--tv-r-md, 10px); background: var(--tv-surface);
   box-shadow: 0 12px 32px rgba(0, 0, 0, .12); transform-origin: top right; animation: tv-export-in .16s var(--tv-ease, ease-out); }
 .tv-export__panel > button { display: grid; gap: .1rem; width: 100%; padding: .55rem .65rem; border: 0; border-radius: var(--tv-r-sm, 6px);
