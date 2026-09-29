@@ -2,17 +2,33 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { RouteCurtain, type RouteCurtainHandle } from './components/common/RouteCurtain';
 import { HomeV2 } from './components/home/v2/HomeV2';
-import { Explore } from './pages/Explore';
-import { CreateTrip } from './pages/CreateTrip';
-import { LoginPage } from './pages/LoginPage';
-import { SignupPage } from './pages/SignupPage';
-import { ResetPasswordPage } from './pages/ResetPasswordPage';
-import { ProfilePage } from './pages/ProfilePage';
-import { TripLibrary } from './pages/TripLibrary';
-import { GuidePage } from './pages/GuidePage';
 import { useAuth } from './context/AuthContext';
 
-type ViewState = 'home' | 'explore' | 'create' | 'login' | 'signup' | 'reset-password' | 'profile' | 'trips' | 'guide';
+// Home is the landing page and ships in the main bundle. Every other page loads on demand,
+// so `/` doesn't pay for the planner, the studio or the chat's markdown renderer.
+// `transitionTo` calls the same loaders as the curtain rises, so the chunk is usually in before the swap.
+const LOADERS = {
+  explore: () => import('./pages/Explore').then((m) => ({ default: m.Explore })),
+  create: () => import('./pages/CreateTrip').then((m) => ({ default: m.CreateTrip })),
+  login: () => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })),
+  signup: () => import('./pages/SignupPage').then((m) => ({ default: m.SignupPage })),
+  'reset-password': () => import('./pages/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })),
+  profile: () => import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
+  trips: () => import('./pages/TripLibrary').then((m) => ({ default: m.TripLibrary })),
+  guide: () => import('./pages/GuidePage').then((m) => ({ default: m.GuidePage })),
+  credits: () => import('./pages/Credits').then((m) => ({ default: m.CreditsPage })),
+};
+const Explore = React.lazy(LOADERS.explore);
+const CreateTrip = React.lazy(LOADERS.create);
+const LoginPage = React.lazy(LOADERS.login);
+const SignupPage = React.lazy(LOADERS.signup);
+const ResetPasswordPage = React.lazy(LOADERS['reset-password']);
+const ProfilePage = React.lazy(LOADERS.profile);
+const TripLibrary = React.lazy(LOADERS.trips);
+const GuidePage = React.lazy(LOADERS.guide);
+const CreditsPage = React.lazy(LOADERS.credits);
+
+type ViewState = 'home' | keyof typeof LOADERS;
 
 const VIEW_LABELS: Record<ViewState, string> = {
   home: 'Home',
@@ -24,6 +40,7 @@ const VIEW_LABELS: Record<ViewState, string> = {
   profile: 'Account',
   trips: 'Your trips',
   guide: 'Guide',
+  credits: 'Credits',
 };
 
 const getViewFromPath = (): ViewState => {
@@ -38,6 +55,7 @@ const getViewFromPath = (): ViewState => {
   if (path === '/trips') return 'trips';
   if (path.startsWith('/trips/')) return 'create'; // Trip Studio lives inside the planner
   if (path === '/guide') return 'guide';
+  if (path === '/credits') return 'credits';
   return 'home';
 };
 
@@ -55,6 +73,7 @@ export const App: React.FC = () => {
       // The outgoing page's pins and triggers are gone; re-measure the new one.
       requestAnimationFrame(() => ScrollTrigger.refresh());
     };
+    if (next !== 'home') void LOADERS[next]();
     if (!curtain.current) return swap();
     curtain.current.play(VIEW_LABELS[next], swap);
   }, []);
@@ -88,82 +107,93 @@ export const App: React.FC = () => {
   return (
     <div className="min-h-screen antialiased">
       <RouteCurtain ref={curtain} />
-      {view === 'home' && (
-        <HomeV2
-          onStartPlanning={() => navigateTo('create')}
-          onNavigateExplore={() => navigateTo('explore')}
-          onNavigateLogin={() => navigateTo('login')}
-          onNavigateSignup={() => navigateTo('signup')}
-          onNavigateProfile={() => navigateTo('profile')}
-        />
-      )}
-      {view === 'explore' && (
-        <Explore
-          onStartPlanning={() => navigateTo('create')}
-          onNavigateHome={() => navigateTo('home')}
-          onNavigateProfile={() => navigateTo('profile')}
-          onNavigateTrips={() => navigateTo('trips')}
-        />
-      )}
-      {view === 'login' && (
-        <LoginPage
-          onNavigateSignup={() => navigateTo('signup')}
-          onNavigateHome={() => navigateTo('home')}
-          onSuccess={() => navigateTo('profile')}
-        />
-      )}
-      {view === 'signup' && (
-        <SignupPage
-          onNavigateLogin={() => navigateTo('login')}
-          onNavigateHome={() => navigateTo('home')}
-          onSuccess={() => navigateTo('profile')}
-        />
-      )}
-      {view === 'reset-password' && (
-        <ResetPasswordPage
-          onNavigateHome={() => navigateTo('home')}
-          onNavigateLogin={() => navigateTo('login')}
-          onSuccess={() => navigateTo('profile')}
-        />
-      )}
-      {view === 'profile' && !authLoading && user && (
-        <ProfilePage
-          onNavigateHome={() => navigateTo('home')}
-          onNavigateExplore={() => navigateTo('explore')}
-          onStartPlanning={() => navigateTo('create')}
-          onNavigateTrips={() => navigateTo('trips')}
-        />
-      )}
-      {view === 'trips' && (
-        <TripLibrary
-          onNavigateHome={() => navigateTo('home')}
-          onNavigateExplore={() => navigateTo('explore')}
-          onNavigateProfile={() => navigateTo('profile')}
-          onStartPlanning={() => navigateTo('create')}
-          onOpenTrip={(tripId) => {
-            localStorage.setItem('tripverse-active-session-id', `session-${tripId}`);
-            navigateTo('create');
-          }}
-        />
-      )}
-      {view === 'guide' && (
-        <GuidePage
-          onNavigateHome={() => navigateTo('home')}
-          onNavigateExplore={() => navigateTo('explore')}
-          onNavigateProfile={() => navigateTo('profile')}
-          onNavigateTrips={() => navigateTo('trips')}
-          onStartPlanning={() => navigateTo('create')}
-        />
-      )}
-      {view === 'create' && (
-        <CreateTrip
-          onNavigateHome={() => navigateTo('home')}
-          onNavigateExplore={() => navigateTo('explore')}
-          onNavigateProfile={() => navigateTo('profile')}
-          onNavigateLogin={() => navigateTo('login')}
-          onNavigateSignup={() => navigateTo('signup')}
-        />
-      )}
+      <React.Suspense fallback={null}>
+        {view === 'home' && (
+          <HomeV2
+            onStartPlanning={() => navigateTo('create')}
+            onNavigateExplore={() => navigateTo('explore')}
+            onNavigateLogin={() => navigateTo('login')}
+            onNavigateSignup={() => navigateTo('signup')}
+            onNavigateProfile={() => navigateTo('profile')}
+          />
+        )}
+        {view === 'explore' && (
+          <Explore
+            onStartPlanning={() => navigateTo('create')}
+            onNavigateHome={() => navigateTo('home')}
+            onNavigateProfile={() => navigateTo('profile')}
+            onNavigateTrips={() => navigateTo('trips')}
+          />
+        )}
+        {view === 'login' && (
+          <LoginPage
+            onNavigateSignup={() => navigateTo('signup')}
+            onNavigateHome={() => navigateTo('home')}
+            onSuccess={() => navigateTo('profile')}
+          />
+        )}
+        {view === 'signup' && (
+          <SignupPage
+            onNavigateLogin={() => navigateTo('login')}
+            onNavigateHome={() => navigateTo('home')}
+            onSuccess={() => navigateTo('profile')}
+          />
+        )}
+        {view === 'reset-password' && (
+          <ResetPasswordPage
+            onNavigateHome={() => navigateTo('home')}
+            onNavigateLogin={() => navigateTo('login')}
+            onSuccess={() => navigateTo('profile')}
+          />
+        )}
+        {view === 'profile' && !authLoading && user && (
+          <ProfilePage
+            onNavigateHome={() => navigateTo('home')}
+            onNavigateExplore={() => navigateTo('explore')}
+            onStartPlanning={() => navigateTo('create')}
+            onNavigateTrips={() => navigateTo('trips')}
+          />
+        )}
+        {view === 'trips' && (
+          <TripLibrary
+            onNavigateHome={() => navigateTo('home')}
+            onNavigateExplore={() => navigateTo('explore')}
+            onNavigateProfile={() => navigateTo('profile')}
+            onStartPlanning={() => navigateTo('create')}
+            onOpenTrip={(tripId) => {
+              localStorage.setItem('tripverse-active-session-id', `session-${tripId}`);
+              navigateTo('create');
+            }}
+          />
+        )}
+        {view === 'guide' && (
+          <GuidePage
+            onNavigateHome={() => navigateTo('home')}
+            onNavigateExplore={() => navigateTo('explore')}
+            onNavigateProfile={() => navigateTo('profile')}
+            onNavigateTrips={() => navigateTo('trips')}
+            onStartPlanning={() => navigateTo('create')}
+          />
+        )}
+        {view === 'credits' && (
+          <CreditsPage
+            onNavigateHome={() => navigateTo('home')}
+            onNavigateExplore={() => navigateTo('explore')}
+            onNavigateProfile={() => navigateTo('profile')}
+            onNavigateTrips={() => navigateTo('trips')}
+            onStartPlanning={() => navigateTo('create')}
+          />
+        )}
+        {view === 'create' && (
+          <CreateTrip
+            onNavigateHome={() => navigateTo('home')}
+            onNavigateExplore={() => navigateTo('explore')}
+            onNavigateProfile={() => navigateTo('profile')}
+            onNavigateLogin={() => navigateTo('login')}
+            onNavigateSignup={() => navigateTo('signup')}
+          />
+        )}
+      </React.Suspense>
     </div>
   );
 };

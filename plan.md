@@ -349,10 +349,10 @@ Session 6 (non-PDF exporters): Plan dot cleanup session; PDF: build-with-agent s
 ### Session 7: Polish, launch readiness and the docs pass
 **Goal:** Resume-ready quality, and the one-time documentation pass.
 
-- **Performance:** lazy chunks for the studio, 3D, sketch and PDF code; initial chat bundle no bigger than today; font subsetting.
+- **Performance:** lazy chunks for the studio, 3D, sketch and PDF code; initial chat bundle no bigger than today; font subsetting. *Route splitting done 2026-09-29:* every page except Home loads on demand from one `LOADERS` map in `App.tsx`, and `transitionTo` starts the download as the curtain rises. The main chunk went from 908 kB to 560 kB; the chat path is that plus a 279 kB `CreateTrip` chunk. Checked cold on every route, with the `/profile` guard and back/forward. **Open:** Supabase (about 800 kB of source, all of it in main because `AuthContext` needs it at boot), GSAP's full plugin set, and font subsetting; Lighthouse still to run.
 - **Accessibility:** keyboard paths through the studio tabs, day rail and export menu; sketch pages get text alternatives from the trip document; contrast in both themes.
 - **Mobile:** the studio as tabs with bottom sheets, and a swipe-to-flip sketchbook.
-- **Credits page:** every API, font, icon set and character credit in one place.
+- **Credits page:** every API, font, icon set and character credit in one place. ✅ *Done 2026-09-29:* `/credits` (lazy, 9 kB), linked from the home footer. The list lives in `frontend/src/lib/credits.ts`; photographer names and links are derived from the Unsplash and Pexels file names, and `credits.test.ts` fails when a photo used in `src/` isn't credited. Guide portraits are labelled as unlicensed placeholder fan art. **Open:** credit `media/1st.jpg`, `3rd.jpg`, `4th.jpg`, `hero-bg.jpg` and `hero-bg-transparent.png` once their sources are known; the Fontshare Satoshi font is loaded in `index.html` but unused.
 - **Commercial-readiness checklist** filled in (see below).
 - **Docs:** per your instruction, the `/guide` page is only updated now:
   - rewrite every flow

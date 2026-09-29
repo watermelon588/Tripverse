@@ -17,12 +17,15 @@ export interface AppBarProps {
   current?: 'explore' | 'profile' | 'create' | 'trips' | 'guide';
 }
 
-/** Open the guide from any surface; App's popstate listener runs the route transition. */
-export function openGuide() {
-  if (window.location.pathname === '/guide') return;
-  window.history.pushState({}, '', '/guide');
+/** Open a page from any surface; App's popstate listener runs the route transition. */
+function openPath(path: string) {
+  if (window.location.pathname === path) return;
+  window.history.pushState({}, '', path);
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
+
+export const openGuide = () => openPath('/guide');
+export const openCredits = () => openPath('/credits');
 
 export function AppBar({
   onNavigateHome,
