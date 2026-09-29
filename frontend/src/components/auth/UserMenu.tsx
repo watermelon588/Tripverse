@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { UserAvatar } from '../guide/UserAvatar';
 import { useAuth } from '../../context/AuthContext';
 import { LogOut, User as UserIcon } from 'lucide-react';
 
@@ -30,7 +31,6 @@ export const UserMenu: React.FC<UserMenuProps> = ({ onNavigateProfile }) => {
     user.email?.split('@')[0] ||
     'VOYAGER';
 
-  const initials = displayName.substring(0, 2).toUpperCase();
   const avatarUrl = user.user_metadata?.avatar_url;
 
   const handleProfileClick = () => {
@@ -52,11 +52,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({ onNavigateProfile }) => {
         style={{ transform: 'none' }}
       >
         <div className="w-5 h-5 bg-[#1F1E1E] text-white flex items-center justify-center text-[10px] font-black uppercase rounded-none shrink-0 overflow-hidden">
-          {avatarUrl ? (
-            <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover rounded-none" />
-          ) : (
-            initials
-          )}
+          <UserAvatar avatarUrl={avatarUrl} seed={user.id ?? user.email} size={20} name={displayName} />
         </div>
         <span className="text-xs font-black tracking-wider uppercase max-w-[120px] truncate font-body">
           {displayName}
@@ -70,11 +66,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({ onNavigateProfile }) => {
           <div className="p-3.5 bg-[#F9F9F9] border-b border-[#D9D9D9]">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 bg-[#1F1E1E] text-white flex items-center justify-center text-xs font-black uppercase rounded-none shrink-0 overflow-hidden">
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover rounded-none" />
-                ) : (
-                  initials
-                )}
+                <UserAvatar avatarUrl={avatarUrl} seed={user.id ?? user.email} size={32} name={displayName} />
               </div>
               <div className="overflow-hidden">
                 <p className="text-xs font-black uppercase tracking-wide truncate font-body">{displayName}</p>

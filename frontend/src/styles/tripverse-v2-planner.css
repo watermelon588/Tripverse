@@ -579,3 +579,11 @@
 .tv-copilot__notes { border: 1px solid var(--tv-line); background: var(--tv-surface); }
 .tv-copilot__notes summary { padding: .45rem .7rem; color: var(--tv-ink-soft); font: .66rem var(--tv-mono); cursor: pointer; }
 .tv-copilot__notes > div { padding: 0 .7rem .6rem; font-size: .8rem; }
+
+/* The selected stop on the flat map wears the guide's face instead of its number. */
+.tv-routemap__marker.has-guide { background-image: var(--guide); background-size: cover; background-position: center; color: transparent; width: 36px; height: 36px; transform: none; }
+
+/* Route curtain: the guide waits with the mark while the next page loads. */
+.tv-curtain__guide { width: 72px; height: 72px; border: 2px solid #111; border-radius: 50%; background: #fff; object-fit: cover; user-select: none; animation: tv-curtain-bob 900ms ease-in-out infinite; }
+@keyframes tv-curtain-bob { 50% { transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .tv-curtain__guide { animation: none; } }

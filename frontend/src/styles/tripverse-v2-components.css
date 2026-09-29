@@ -1223,3 +1223,6 @@
   font-size: 0.62rem;
   opacity: 0.6;
 }
+
+/* Hero: the guide cast sits under the actions. */
+.tv-bg__cast { margin-top: clamp(1.2rem, 2.4vw, 1.8rem); padding-top: clamp(1rem, 2vw, 1.4rem); border-top: 1px solid var(--tv-line); }

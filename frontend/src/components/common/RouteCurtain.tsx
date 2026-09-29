@@ -12,6 +12,7 @@ import { forwardRef, useImperativeHandle, useRef } from 'react';
 import gsap from 'gsap';
 
 import { Logo } from './Logo';
+import { companionGuide } from '../guide/guides';
 import { prefersReducedMotion } from '../home/v2/motion';
 
 export interface RouteCurtainHandle {
@@ -23,6 +24,7 @@ export const RouteCurtain = forwardRef<RouteCurtainHandle>(function RouteCurtain
   const panel = useRef<HTMLDivElement>(null);
   const mark = useRef<HTMLDivElement>(null);
   const labelRef = useRef<HTMLSpanElement>(null);
+  const guideRef = useRef<HTMLImageElement>(null);
   const running = useRef<gsap.core.Timeline | null>(null);
 
   useImperativeHandle(ref, () => ({
@@ -37,6 +39,7 @@ export const RouteCurtain = forwardRef<RouteCurtainHandle>(function RouteCurtain
       running.current?.progress(1);
 
       if (labelRef.current) labelRef.current.textContent = label;
+      if (guideRef.current) guideRef.current.src = companionGuide().image;
 
       const tl = gsap.timeline({
         onComplete: () => {
@@ -65,6 +68,7 @@ export const RouteCurtain = forwardRef<RouteCurtainHandle>(function RouteCurtain
   return (
     <div ref={panel} className="tv-curtain" aria-hidden="true">
       <div ref={mark} className="tv-curtain__mark">
+        <img ref={guideRef} className="tv-curtain__guide" src={companionGuide().image} alt="" draggable={false} />
         <Logo width={46} height={41} />
         <span ref={labelRef} className="tv-curtain__label" />
       </div>

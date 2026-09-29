@@ -56,6 +56,8 @@ const SKINS: Record<MapSkin, { bg: string; line: string; casing: string; accent:
 };
 
 interface Props {
+  /** The guide's portrait stands over the open stop's pin. */
+  guideImage?: string;
   graph: ItineraryGraph;
   skin: MapSkin;
   coordinates: Record<string, Coordinates>;
@@ -87,7 +89,7 @@ const esc = (text: string) => text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const NO_PLANNED: NonNullable<Props['planned']> = [];
 const NO_MEDIA: Record<string, PlaceMedia> = {};
 
-export function GoogleTripMap({ graph, skin, coordinates, roadMetrics, facts, nearby, expandedNode, expandedEdge, expansion, selected, onSelect, inset, planned = NO_PLANNED, media = NO_MEDIA }: Props) {
+export function GoogleTripMap({ guideImage, graph, skin, coordinates, roadMetrics, facts, nearby, expandedNode, expandedEdge, expansion, selected, onSelect, inset, planned = NO_PLANNED, media = NO_MEDIA }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const [maps, setMaps] = useState<MapsApi>(null);
@@ -205,9 +207,10 @@ export function GoogleTripMap({ graph, skin, coordinates, roadMetrics, facts, ne
       const number = String(index + 1).padStart(2, '0');
       pin(at, el(`${photo ? `<em class="has-photo" style="background-image:url(&quot;${esc(photo)}&quot;)"><b>${number}</b></em>` : `<em>${number}</em>`}<span>${esc(node.name)}</span>${node.day_start ? `<small>D${node.day_start}</small>` : ''}`,
         `tv-gm__stop ${on ? 'is-active' : ''} ${node.kind === 'origin' ? 'is-origin' : ''}`, () => onSelect('node', node.id)));
+      if (on && guideImage) pin(at, el(`<img src="${esc(guideImage)}" alt="" draggable="false">`, 'tv-gm__guide', () => onSelect('node', node.id)));
     });
     return () => overlays.forEach((overlay) => overlay.setMap(null));
-  }, [maps, graph, coordinates, roadMetrics, facts, nearby, planned, media, expandedNode, expandedEdge, expansion, selected, theme, onSelect]);
+  }, [maps, graph, coordinates, roadMetrics, facts, nearby, planned, media, expandedNode, expandedEdge, expansion, selected, theme, onSelect, guideImage]);
 
   // Camera: frame whatever is expanded, otherwise the whole route.
   useEffect(() => {

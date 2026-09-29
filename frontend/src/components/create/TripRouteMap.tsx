@@ -7,6 +7,8 @@ import { airDistanceKm, type Coordinates, type ItineraryGraph, type NearbyPlace,
 maplibregl.setWorkerUrl(mapWorkerUrl);
 
 interface Props {
+  /** The guide's portrait stands in for the selected stop's number. */
+  guideImage?: string;
   graph: ItineraryGraph;
   coordinates: Record<string, Coordinates>;
   roadMetrics: Record<string, RoadMetric>;
@@ -19,7 +21,7 @@ interface Props {
   onSelectNearby: (id: string) => void;
 }
 
-export function TripRouteMap({ graph, coordinates, roadMetrics, nearby, focusedNode, selectedNode, selectedEdge, onSelectNode, onSelectEdge, onSelectNearby }: Props) {
+export function TripRouteMap({ guideImage, graph, coordinates, roadMetrics, nearby, focusedNode, selectedNode, selectedEdge, onSelectNode, onSelectEdge, onSelectNearby }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Map<string, HTMLButtonElement>>(new Map());
@@ -127,12 +129,16 @@ export function TripRouteMap({ graph, coordinates, roadMetrics, nearby, focusedN
   }, [graph, coordinates, roadMetrics, nearby, focusedNode, onSelectNode, onSelectEdge, onSelectNearby, fitMode, longHaul]);
 
   useEffect(() => {
-    markersRef.current.forEach((marker, id) => marker.classList.toggle('is-selected', id === selectedNode));
+    markersRef.current.forEach((marker, id) => {
+      marker.classList.toggle('is-selected', id === selectedNode);
+      marker.classList.toggle('has-guide', !!guideImage && id === selectedNode);
+      if (guideImage) marker.style.setProperty('--guide', `url("${guideImage}")`);
+    });
     const point = selectedNode && coordinates[selectedNode];
     if (point && mapRef.current?.loaded()) {
       mapRef.current.easeTo({ center: [point.lon, point.lat], zoom: Math.max(mapRef.current.getZoom(), 8), duration: 450 });
     }
-  }, [selectedNode, coordinates]);
+  }, [selectedNode, coordinates, guideImage]);
 
   useEffect(() => {
     if (mapRef.current?.getLayer('trip-legs-line')) {

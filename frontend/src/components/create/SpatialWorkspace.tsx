@@ -12,6 +12,9 @@ import type { TripEnrichment } from '../../services/tripService';
 import { useStopCoordinates } from './stopLocations';
 import { useSpatialPanels, type PanelKey } from './useSpatialPanels';
 import { CloseIcon, RouteIcon } from '../home/v2/IconsV2';
+import { GuideCharacter } from '../guide/GuideCharacter';
+import { useGuide } from '../guide/GuideContext';
+import type { Guide } from '../guide/guides';
 
 const TripGraph3D = React.lazy(() => import('./TripGraph3D').then((module) => ({ default: module.TripGraph3D })));
 const TripRouteMap = React.lazy(() => import('./TripRouteMap').then((module) => ({ default: module.TripRouteMap })));
@@ -27,6 +30,8 @@ const VARIANTS: { id: Variant; name: string; note: string; layout: GraphLayout; 
 
 interface Props {
   isOpen: boolean;
+  /** Whose face rides the map, the 3D graph and the corner of the stage. Defaults to the chat's guide. */
+  guide?: Guide;
   onClose?: () => void;
   /** Fill the parent (Trip Studio) instead of docking beside the chat: no scrim, grip or close. */
   embedded?: boolean;
@@ -61,7 +66,10 @@ const roadCache = new Map<string, RoadMetric>();
 const legKey = (a: Coordinates, b: Coordinates) => `${a.lat},${a.lon}>${b.lat},${b.lon}`;
 // Keyed by name, not list position, so adding a place in chat does not shift every other place's id.
 const placeId = (nodeId: string, name: string) => `draft-${nodeId}-${name.toLowerCase().replace(/\W+/g, '-')}`;
-export const SpatialWorkspace: React.FC<Props> = ({ isOpen, onClose, embedded = false, mode: modeProp, onModeChange, selectedDay, onSelectDay, trip, tripId, graph, preferences, dark = false, onAddPlace, weather }) => {
+export const SpatialWorkspace: React.FC<Props> = ({ isOpen, guide: guideProp, onClose, embedded = false, mode: modeProp, onModeChange, selectedDay, onSelectDay, trip, tripId, graph, preferences, dark = false, onAddPlace, weather }) => {
+  const contextGuide = useGuide();
+  const guide = guideProp ?? contextGuide;
+  const [said, setSaid] = useState<string | null>(null);
   const [variant, setVariant] = useState<Variant>(() => VARIANTS.find((item) => item.id === read('tripverse-spatial-variant'))?.id || 'atlas');
   const [innerMode, setInnerMode] = useState<'graph' | 'map'>(() => read('tripverse-spatial-mode') === 'map' ? 'map' : 'graph');
   const mode = modeProp ?? innerMode;
@@ -283,18 +291,27 @@ export const SpatialWorkspace: React.FC<Props> = ({ isOpen, onClose, embedded = 
   const stage = graph && <div className="tv-sv__stage">
     <React.Suspense fallback={<div className="tv-spatial__loading">Loading route view…</div>}>
       {mode === 'graph'
-        ? <TripGraph3D graph={graph} layout={spec.layout} night={night} coordinates={coordinates} facts={facts} nearby={nearby}
+        ? <TripGraph3D guideImage={guide.image} graph={graph} layout={spec.layout} night={night} coordinates={coordinates} facts={facts} nearby={nearby}
           expandedNode={expandedNode} expandedEdge={expandedEdge} expansion={expansion} selected={sel?.id || null} onSelect={onSelect} />
         : hasGoogleMap
-          ? <GoogleTripMap graph={graph} skin={dark ? 'night' : spec.skin} coordinates={coordinates} roadMetrics={roadMetrics} facts={facts} nearby={nearby}
+          ? <GoogleTripMap guideImage={guide.image} graph={graph} skin={dark ? 'night' : spec.skin} coordinates={coordinates} roadMetrics={roadMetrics} facts={facts} nearby={nearby}
             expandedNode={expandedNode} expandedEdge={expandedEdge} expansion={expansion} selected={sel?.id || null} onSelect={onSelect}
             inset={variant === 'atlas' ? { right: panels.shown('sheet') ? 400 : 0, bottom: panels.shown('strip') ? 110 : 0 } : undefined} planned={planned} media={media} />
-          : <TripRouteMap graph={graph} coordinates={coordinates} roadMetrics={roadMetrics} nearby={nearby} focusedNode={expandedNode}
+          : <TripRouteMap guideImage={guide.image} graph={graph} coordinates={coordinates} roadMetrics={roadMetrics} nearby={nearby} focusedNode={expandedNode}
             selectedNode={sel?.kind === 'node' ? sel.id : null} selectedEdge={sel?.kind === 'edge' ? sel.id : null}
             onSelectNode={(id) => onSelect('node', id)} onSelectEdge={(id) => onSelect('edge', id)} onSelectNearby={(id) => onSelect('nearby', id)} />}
     </React.Suspense>
     {(expandedNode || expandedEdge) && <button type="button" className="tv-sv__collapse" onClick={collapse}>← Whole route <kbd>Esc</kbd></button>}
     <span className="tv-sv__status">{geocoding ? 'Locating stops…' : `${Object.keys(coordinates).length}/${graph.nodes.length} located`}</span>
+    <div className="tv-sv__guide">
+      {said && <p className="tv-say tv-sv__say" role="status">{said}</p>}
+      <GuideCharacter guide={guide} size={44} interactive mood={geocoding ? 'thinking' : 'idle'} label={`${guide.name}, your guide. Press for a note about this route.`}
+        onPoke={() => {
+          const at = expandedNode && nodesById[expandedNode];
+          setSaid(at ? `${at.name}: ask me for a café, a walk or a rainy-day swap.` : `${graph.nodes.length} stops, ${Math.round(totals.km) || '—'} km. Tap a stop and I’ll zoom in.`);
+          window.setTimeout(() => setSaid(null), 3800);
+        }} />
+    </div>
   </div>;
 
   const summary = <div className="tv-sv__summary">
