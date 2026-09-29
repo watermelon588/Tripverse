@@ -61,6 +61,8 @@ export function SidebarV2({
   }, [open, onClose]);
 
   useEffect(() => {
+    // Closed, the drawer only slides off-screen; inert keeps Tab out of its buttons (React 18 has no inert prop).
+    if (panelRef.current) panelRef.current.inert = !open;
     if (open) panelRef.current?.focus();
   }, [open]);
 

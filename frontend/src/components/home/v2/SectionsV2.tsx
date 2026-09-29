@@ -424,7 +424,8 @@ export function Destinations({ onNavigateExplore }: { onNavigateExplore?: () => 
         </header>
       </div>
 
-      <div className="tv-rail" role="list">
+      {/* Focusable so keyboard users can scroll the rail with the arrow keys (the cards have no controls). */}
+      <div className="tv-rail" role="list" tabIndex={0} aria-label="Destinations, scroll sideways">
         {DESTINATIONS.map((d, i) => (
           <article key={d.code} role="listitem" className={`tv-rail__card ${i % 3 === 1 ? 'tv-rail__card--tall' : ''}`}>
             <figure className="tv-figure tv-rail__figure">

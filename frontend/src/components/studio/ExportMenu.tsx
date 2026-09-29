@@ -28,16 +28,45 @@ export function ExportMenu({ document: doc, pdf }: Props) {
   const [status, setStatus] = useState('');
   const points = useRef<{ key: string; value: PlacePoints } | null>(null);
   const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const entries = () => [...(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]') ?? [])];
 
   useEffect(() => {
     if (!open) return;
+    entries()[0]?.focus(); // keyboard users land in the menu, not back on the page
     const close = (event: Event) => {
-      if (event instanceof KeyboardEvent ? event.key === 'Escape' : !root.current?.contains(event.target as Node)) setOpen(false);
+      if (event instanceof KeyboardEvent) {
+        if (event.key !== 'Escape') return;
+        setOpen(false);
+        trigger.current?.focus();
+      } else if (!root.current?.contains(event.target as Node)) setOpen(false);
     };
+    // Close when Tab moves focus elsewhere. A null target is focus dropping off an entry that just got
+    // disabled while an export runs; keep the menu open so its status stays visible.
+    const leave = (event: FocusEvent) => {
+      if (event.relatedTarget && !root.current?.contains(event.relatedTarget as Node)) setOpen(false);
+    };
+    const container = root.current;
     window.addEventListener('pointerdown', close);
     window.addEventListener('keydown', close);
-    return () => { window.removeEventListener('pointerdown', close); window.removeEventListener('keydown', close); };
+    container?.addEventListener('focusout', leave);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', close);
+      container?.removeEventListener('focusout', leave);
+    };
   }, [open]);
+
+  // Arrow keys, Home and End move between the entries; Tab still works as usual.
+  const onPanelKey = (event: React.KeyboardEvent) => {
+    const list = entries();
+    const index = list.indexOf(window.document.activeElement as HTMLElement);
+    const next = { ArrowDown: index + 1, ArrowUp: index - 1, Home: 0, End: list.length - 1 }[event.key];
+    if (next === undefined || !list.length) return;
+    event.preventDefault();
+    list[(next + list.length) % list.length].focus();
+  };
 
   if (!doc) return null;
   const base = fileBase(doc);
@@ -85,14 +114,14 @@ export function ExportMenu({ document: doc, pdf }: Props) {
 
   return (
     <div className="tv-export" ref={root}>
-      <button type="button" className="tv-export__trigger" aria-haspopup="true" aria-expanded={open} onClick={() => { setOpen((value) => !value); if (!busy) setStatus(''); }}>
+      <button type="button" ref={trigger} className="tv-export__trigger" aria-expanded={open} aria-controls="tv-export-panel" onClick={() => { setOpen((value) => !value); if (!busy) setStatus(''); }}>
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
         </svg>
         Export
       </button>
       {open && (
-        <div className="tv-export__panel" role="group" aria-label="Export this trip">
+        <div className="tv-export__panel" id="tv-export-panel" ref={panel} role="group" aria-label="Export this trip" onKeyDown={onPanelKey}>
           {pdf && <button type="button" disabled={disabled} onClick={() => run('PDF', pdf)}><strong>PDF</strong><small>Every page, ready to print or share</small></button>}
           <button type="button" disabled={disabled || !ics} onClick={() => run('Calendar', async () => { download(`${base}.ics`, ics!, 'text/calendar'); })}>
             <strong>Calendar (.ics)</strong>

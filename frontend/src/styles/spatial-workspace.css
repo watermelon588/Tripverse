@@ -361,7 +361,7 @@ button.tv-photostrip__tile:active { transform: scale(.97); }
 button.tv-photostrip__tile:focus-visible { outline: 2px solid var(--tv-ink); outline-offset: 2px; }
 @media (hover: hover) and (pointer: fine) { button.tv-photostrip__tile:hover img.is-loaded { transform: scale(1.04); } }
 .tv-photostrip__credit { margin: .3rem .1rem 0; font: .5rem/1.3 var(--tv-mono); color: var(--tv-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tv-photostrip__credit a { color: inherit; text-decoration: none; }
+.tv-photostrip__credit a { display: block; overflow: hidden; line-height: 24px; color: inherit; text-decoration: none; text-overflow: ellipsis; } /* 24 px tap target (WCAG 2.2) */
 .tv-photostrip__credit a:hover { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) { .tv-photostrip__tile img { transform: none; transition: opacity .2s ease; } }
 
