@@ -106,6 +106,8 @@ export const CreateSidebar: React.FC<CreateSidebarProps> = ({
         className={`tv-side ${isOpen ? 'is-open' : ''}`}
         aria-label="Trip planning sidebar"
         aria-hidden={!isOpen}
+        // A closed drawer stays in the DOM on small screens; inert keeps its buttons out of the tab order.
+        {...(isOpen ? {} : { inert: '' })}
       >
         <div className="tv-side__head tv-side__stagger">
           <button type="button" onClick={onNavigateHome} aria-label="TripVerse home">

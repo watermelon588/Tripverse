@@ -58,7 +58,7 @@
 .tv-sketch__say.is-on { opacity: 1; transform: none; }
 .tv-sketch__nav { display: flex; align-items: center; justify-content: center; gap: .75rem; }
 .tv-sketch__count { min-width: 11rem; text-align: center; font-size: .88rem; color: var(--tv-ink); }
-.tv-sketch__replay { justify-self: end; }
+.tv-sketch__actions { justify-self: end; display: flex; gap: .5rem; }
 
 /* The guide's pen while drawing. */
 .tv-sketch__pen { pointer-events: none; }

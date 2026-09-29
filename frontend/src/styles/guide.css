@@ -31,6 +31,7 @@
 .tv-guide__shot a { display: block; overflow: hidden; border: 1px solid var(--tv-line-strong); border-radius: var(--tv-r-md); background: var(--tv-surface); }
 .tv-guide__shot a:focus-visible { outline: 2px solid var(--tv-blue-fg); outline-offset: 3px; }
 .tv-guide__shot img { display: block; width: 100%; height: auto; }
+.tv-guide__shot--portrait a { max-width: 320px; }
 .tv-guide__shot figcaption { max-width: 72ch; margin-top: .7rem; color: var(--tv-muted); font-size: .85rem; line-height: 1.6; }
 
 .tv-guide__table { overflow-x: auto; margin: 1rem 0 1.4rem; border: 1px solid var(--tv-line); }

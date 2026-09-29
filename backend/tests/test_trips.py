@@ -475,3 +475,56 @@ def test_follow_up_questions_are_answered_even_when_the_intent_label_is_wrong():
     assert _is_question("thanks!", "casual_conversation")
     assert not _is_question("Can you add Arashiyama bamboo grove on day 2 morning?", "update_trip")
     assert not _is_question("Swap day 2's afternoon for Okochi-Sanso", None)
+
+
+@pytest.mark.asyncio
+async def test_a_revision_keeps_the_day_plan_when_extraction_fails(client: AsyncClient):
+    """Both LLM providers busy during extraction must not wipe the studio's days (seen live: a Gemini 503)."""
+    from unittest.mock import patch
+    from sqlalchemy import select
+    from app.models.trip import ConversationMessage, ConversationSession
+    from app.services.budget import latest_itinerary_payload
+    from app.services.llm.service import llm_service
+    from conftest import TestingSessionLocal
+
+    headers = {"X-Guest-ID": str(uuid.uuid4())}
+    trip_id = await _plan_one_shot(client, headers)
+    plan = [{"day": d, "base": "Kyoto", "items": [{"name": f"Place {d}", "category": "sight", "time_of_day": None, "option": False}]}
+            for d in (1, 2, 3)]
+    async with TestingSessionLocal() as db:  # a known good day plan on the latest itinerary message
+        rows = (await db.execute(select(ConversationMessage).join(ConversationSession)
+                                 .where(ConversationSession.trip_id == uuid.UUID(trip_id)))).scalars().all()
+        latest = next(row for row in sorted(rows, key=lambda row: row.created_at, reverse=True)
+                      if (row.payload or {}).get("kind") == "ITINERARY_GRAPH")
+        latest.payload = {**latest.payload, "day_plan": plan}
+        await db.commit()
+
+    async def fake_stream(prompt, system_instruction=None, **_):
+        yield "| Day 1 | Kyoto | **Fushimi Inari** |\n| Day 2 | Kyoto | **Okochi-Sanso** |"
+
+    async def busy(*_, **__):
+        raise RuntimeError("503 UNAVAILABLE")
+
+    async def fake_understand(state):
+        return {"intent": "update_trip"}
+
+    with patch.object(llm_service, "generate_stream", new=fake_stream), patch.object(llm_service, "generate", new=busy), \
+            patch("app.agents.trip_planner.nodes.understand_user_msg_node.understand_user_message", new=fake_understand):
+        await _stream(trip_id, headers, "Swap day 2's afternoon for Okochi-Sanso")
+    async with TestingSessionLocal() as db:
+        assert (await latest_itinerary_payload(db, uuid.UUID(trip_id)))["day_plan"] == plan
+
+
+@pytest.mark.asyncio
+async def test_extraction_without_days_gives_no_day_plan():
+    from unittest.mock import patch
+    from app.agents.trip_planner.nodes.extract_itinerary_node import extract_itinerary
+    from app.services.llm.service import llm_service
+
+    async def busy(*_, **__):
+        raise RuntimeError("503 UNAVAILABLE")
+
+    with patch.object(llm_service, "generate", new=busy):
+        result = await extract_itinerary({"assistant_response": "| Day 1 | Kyoto | **Fushimi Inari** |",
+                                          "destination": "Kyoto", "duration_days": 2, "origin": "Delhi"})
+    assert result["itinerary_graph"] and result["day_plan"] is None

@@ -9,7 +9,7 @@ import getStroke from 'perfect-freehand';
 
 import { DOODLES } from './doodles';
 import { hash } from './layout';
-import { PAGE, type Point, type SketchElement, type SketchPage, type Tone } from './types';
+import { type Point, type SketchElement, type SketchPage, type Tone } from './types';
 
 const gen = rough.generator();
 const INK = 'S', FILL = 'F'; // placeholders, swapped for theme tokens at render time
@@ -141,7 +141,7 @@ export const SketchPageSvg = React.forwardRef<SVGSVGElement, { page: SketchPage;
   function SketchPageSvg({ page, className, penImage }, ref) {
     const titleId = `sk-${page.id}-title`, descId = `sk-${page.id}-desc`;
     return (
-      <svg ref={ref} className={className} viewBox={`0 0 ${PAGE.w} ${PAGE.h}`} role="img" aria-labelledby={`${titleId} ${descId}`}
+      <svg ref={ref} className={className} viewBox={`0 0 ${page.w} ${page.h}`} role="img" aria-labelledby={`${titleId} ${descId}`}
         preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
         <title id={titleId}>{page.title}</title>
         <desc id={descId}>{page.alt}</desc>
@@ -155,9 +155,9 @@ export const SketchPageSvg = React.forwardRef<SVGSVGElement, { page: SketchPage;
             <feComponentTransfer><feFuncA type="linear" slope="0.07" /></feComponentTransfer>
           </filter>
         </defs>
-        <rect width={PAGE.w} height={PAGE.h} className="tv-sketch__paper" />
-        <rect width={PAGE.w} height={PAGE.h} fill="url(#sk-dots)" />
-        <rect width={PAGE.w} height={PAGE.h} filter="url(#sk-grain)" className="tv-sketch__grain" />
+        <rect width={page.w} height={page.h} className="tv-sketch__paper" />
+        <rect width={page.w} height={page.h} fill="url(#sk-dots)" />
+        <rect width={page.w} height={page.h} filter="url(#sk-grain)" className="tv-sketch__grain" />
         <g className="tv-sketch__ink">
           {page.elements.map((el) => <g key={el.id} data-el={el.id} data-kind={el.kind}><Element el={el} /></g>)}
         </g>

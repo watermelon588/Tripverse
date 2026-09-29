@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import type { TripDocument } from '../../services/tripService';
 import { base, item, kyoto, tokyo } from './fixtures';
-import { CARD, dayTitle, layoutSketch, slotItems, textWidth, wrap } from './layout';
-import { PAGE, type SketchElement } from './types';
+import { FRAMES, dayTitle, layoutSketch, slotItems, textWidth, wrap, type Orientation } from './layout';
+import type { SketchElement, SketchPage } from './types';
+
+const ORIENTATIONS: Orientation[] = ['landscape', 'portrait'];
 
 type Rect = { x: number; y: number; w: number; h: number };
+
+/** Every left-aligned line of text fits across the page (by the same width estimate the layout uses). */
+function expectTextOnPage(page: SketchPage) {
+  page.elements.forEach((el) => {
+    if (el.kind !== 'text' || (el.anchor ?? 'start') !== 'start') return;
+    el.lines.forEach((line) => expect(el.x + textWidth(line, el.size), `${page.id} ${el.id}`).toBeLessThanOrEqual(page.w - 8));
+  });
+}
 const rectOf = (el: SketchElement): Rect | null => (el.kind === 'box' || el.kind === 'note' ? { x: el.x, y: el.y, w: el.w, h: el.h } : null);
 const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
@@ -27,19 +37,19 @@ describe('layoutSketch', () => {
     expect(dayTitle(3, null)).toBe('Day 3');
   });
 
-  it('never overlaps cards or notes, 1–8 items a day, and stays on the page', () => {
+  it.each(ORIENTATIONS)('never overlaps cards or notes, 1–8 items a day, and stays on the page (%s)', (orientation) => {
     const times = ['morning', 'afternoon', 'evening', null] as const;
     for (let count = 1; count <= 8; count++) {
       for (let shift = 0; shift < 4; shift++) {
         const items = Array.from({ length: count }, (_, i) => item(`Place number ${i} with a fairly long name indeed`, { area: 'Higashiyama district near the river', duration_hours: 2, est_cost: 1500,
           time_of_day: times[(i + shift) % 4], tip: i % 2 ? 'A tip that is long enough to wrap over several lines of the note' : null,
         }));
-        const [, page] = layoutSketch(base({ days: [{ day: 1, date: '2026-10-12', base: 'Kyoto', est_cost: null, hours: null, items }] }));
+        const [, page] = layoutSketch(base({ days: [{ day: 1, date: '2026-10-12', base: 'Kyoto', est_cost: null, hours: null, items }] }), orientation);
         const rects = page.elements.map(rectOf).filter(Boolean) as Rect[];
         rects.forEach((a, i) => rects.slice(i + 1).forEach((b) => expect(overlaps(a, b)).toBe(false)));
         rects.forEach((r) => {
-          expect(r.x).toBeGreaterThanOrEqual(0); expect(r.x + r.w).toBeLessThanOrEqual(PAGE.w);
-          expect(r.y + r.h).toBeLessThanOrEqual(PAGE.h);
+          expect(r.x).toBeGreaterThanOrEqual(0); expect(r.x + r.w).toBeLessThanOrEqual(page.w);
+          expect(r.y + r.h).toBeLessThanOrEqual(page.h);
         });
         // Card text (three-line names and their meta) ends inside the card.
         page.elements.forEach((el) => {
@@ -52,27 +62,38 @@ describe('layoutSketch', () => {
         const more = page.elements.filter((el) => el.kind === 'text' && el.lines[0].startsWith('+'))
           .reduce((sum, el) => sum + Number((el as { lines: string[] }).lines[0].match(/\d+/)![0]), 0);
         expect(shownCards + more).toBe(count);
+        expectTextOnPage(page);
       }
     }
+  });
+
+  it('gives both orientations the same elements, so live drawing works in either', () => {
+    const ids = (pages: SketchPage[]) => pages.map((page) => page.elements.map((el) => el.id));
+    expect(ids(layoutSketch(tokyo, 'portrait'))).toEqual(ids(layoutSketch(tokyo)));
+    expect(layoutSketch(tokyo, 'portrait').map((page) => [page.w, page.h])).toEqual(Array(5).fill([794, 1123]));
+    layoutSketch(tokyo, 'portrait').forEach(expectTextOnPage);
+    // Portrait has no room beside the subtitle: the holiday gets its own, untruncated line.
+    expect(layoutSketch(tokyo, 'portrait')[1].elements.find((el) => el.id === 'd1-holiday')).toMatchObject({ x: 78, y: 154, lines: ['Sports Day (holiday)'] });
   });
 
   it('says "+N more" when a slot is too busy', () => {
     const items = Array.from({ length: 5 }, (_, i) => item(`Stop ${i}`, { time_of_day: 'morning' }));
     const [, page] = layoutSketch(base({ days: [{ day: 1, date: null, base: 'X', est_cost: null, hours: null, items }] }));
     expect(page.elements.some((el) => el.kind === 'text' && el.lines[0] === '+2 more')).toBe(true);
-    expect(page.elements.filter((el) => el.kind === 'box')).toHaveLength(CARD.perColumn);
+    expect(page.elements.filter((el) => el.kind === 'box')).toHaveLength(FRAMES.landscape.card.perSlot);
   });
 
-  it('handles a 30-day trip', () => {
+  it.each(ORIENTATIONS)('handles a 30-day trip (%s)', (orientation) => {
     const days = Array.from({ length: 30 }, (_, i) => ({
       day: i + 1, date: null, base: `City ${Math.floor(i / 2)}`, est_cost: null, hours: null, items: [item('A'), item('B')],
     }));
-    const pages = layoutSketch(base({ days, duration_days: 30 }));
+    const pages = layoutSketch(base({ days, duration_days: 30 }), orientation);
     expect(pages).toHaveLength(31);
     // 15 stops fit on three rows: no overflow note, and every bubble is on the page.
     const bubbles = pages[0].elements.filter((el) => el.kind === 'ellipse');
     expect(bubbles).toHaveLength(15);
-    bubbles.forEach((el) => el.kind === 'ellipse' && expect(el.cx + el.w / 2).toBeLessThanOrEqual(PAGE.w));
+    bubbles.forEach((el) => el.kind === 'ellipse' && expect(el.cx + el.w / 2).toBeLessThanOrEqual(pages[0].w));
+    bubbles.forEach((el) => el.kind === 'ellipse' && expect(el.cy + el.h / 2).toBeLessThan(FRAMES[orientation].stamps.top));
   });
 
   it('only writes notes and stamps from the document', () => {

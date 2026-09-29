@@ -665,9 +665,13 @@ class ConversationService:
                     "places_to_visit": trip.places_to_visit or [],
                 })
                 itinerary_graph = graph_result.get("itinerary_graph")
+                day_plan = graph_result.get("day_plan")
+                if day_plan is None and previous_plan:
+                    # Extraction failed on a revision: keep the last good day plan rather than losing it.
+                    from app.services.budget import latest_itinerary_payload
+                    day_plan =(await latest_itinerary_payload(db, trip.id) or {}).get("day_plan")
                 if itinerary_graph:
-                    ui_action = {"kind": "ITINERARY_GRAPH", "graph": itinerary_graph,
-                                 "day_plan": graph_result.get("day_plan")}
+                    ui_action = {"kind": "ITINERARY_GRAPH", "graph": itinerary_graph, "day_plan": day_plan}
                     yield f"data: {json.dumps({'type': 'graph', 'graph': itinerary_graph, 'final': True})}\n\n"
         else:
             trip.onboarding_status = OnboardingStatus.IN_PROGRESS

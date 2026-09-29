@@ -8,6 +8,7 @@ from app.models.enums import (
 )
 from app.models.trip import ConversationMessage, ConversationSession, Trip
 from app.models.budget import BudgetItem, BudgetPlan
+from app.models.sketch_note import SketchNote
 
 __all__ = [
     "TripStatus",
@@ -21,4 +22,5 @@ __all__ = [
     "ConversationMessage",
     "BudgetPlan",
     "BudgetItem",
+    "SketchNote",
 ]

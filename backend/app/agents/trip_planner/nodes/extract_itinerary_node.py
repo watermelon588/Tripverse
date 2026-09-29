@@ -355,7 +355,9 @@ async def extract_itinerary(state: TripPlanningState) -> dict:
         duration_days=state.get("duration_days") or 1, candidates=state.get("candidates"),
         requested_places=state.get("places_to_visit"), extracted=extracted,
     )
-    return {"itinerary_graph": graph, "day_plan": normalize_day_plan(
-        (extracted or {}).get("days") if isinstance(extracted, dict) else None,
-        state.get("duration_days") or 1, graph, state.get("destination") or "Trip",
-    )}
+    days = extracted.get("days") if isinstance(extracted, dict) else None
+    # No day plan when the model gave none (e.g. both LLM providers were busy): a list of empty
+    # days would be saved over a good plan. Callers keep the previous one or fall back to the graph.
+    day_plan = normalize_day_plan(days, state.get("duration_days") or 1, graph, state.get("destination") or "Trip") \
+        if isinstance(days, list) and days else None
+    return {"itinerary_graph": graph, "day_plan": day_plan}
