@@ -130,7 +130,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 
   return (
     <GuideContext.Provider value={guideById(guideId)}>
-    <div className={`tv-chat ${variant === 'drawer' ? 'tv-chat--drawer' : ''}`} ref={root}>
+    {/* The chat page's main landmark; in the studio drawer it isn't one, since the studio has its own <main>. */}
+    <div className={`tv-chat ${variant === 'drawer' ? 'tv-chat--drawer' : ''}`} ref={root} role={variant === 'page' ? 'main' : undefined}>
       <header className="tv-chat__bar">
         {variant === 'page' && <button
           type="button"
@@ -164,7 +165,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         </button>}
 
         {variant === 'page' && onOpenStudio && (
-          <button type="button" className="tv-btn tv-btn--sm tv-btn--ghost" onClick={onOpenStudio}>
+          <button type="button" className="tv-btn tv-btn--sm tv-btn--ghost" onClick={onOpenStudio} aria-label="Open studio">
             <LayersIcon width={14} height={14} />
             <span className="tv-hide-mobile">Open studio</span>
           </button>

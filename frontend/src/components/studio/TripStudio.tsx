@@ -28,7 +28,7 @@ import { TripConditions } from './TripConditions';
 import { ExportMenu } from './ExportMenu';
 import { AroundHere } from '../create/AroundHere';
 import { useDayCovers } from './dayCovers';
-import { creditLine } from '../../services/placeMedia';
+import { creditLine, sizedImage } from '../../services/placeMedia';
 import '../../styles/day-covers.css';
 import '../../styles/trip-studio.css';
 
@@ -271,7 +271,7 @@ export function TripStudio({
                       <button type="button" aria-current={day === entry.day ? 'page' : undefined} onClick={() => onSelectDay(entry.day)}
                         className={covers[entry.day] ? 'has-cover' : undefined}>
                         {covers[entry.day] && <span className="tv-daycover">
-                          <img src={covers[entry.day].image} alt="" title={creditLine(covers[entry.day])} loading="lazy" decoding="async"
+                          <img src={sizedImage(covers[entry.day].image, 120)} alt="" title={creditLine(covers[entry.day])} loading="lazy" decoding="async"
                             onLoad={(event) => event.currentTarget.classList.add('is-loaded')}
                             ref={(img) => { if (img?.complete && img.naturalWidth) img.classList.add('is-loaded'); }} />
                         </span>}

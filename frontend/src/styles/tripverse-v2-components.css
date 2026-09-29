@@ -689,6 +689,7 @@
 }
 
 .tv2 .tv-rail::-webkit-scrollbar { display: none; }
+.tv2 .tv-rail:focus-visible { outline: 2px solid var(--tv-ink); outline-offset: -2px; }
 
 .tv2 .tv-rail__card {
   flex: 0 0 clamp(240px, 26vw, 330px);

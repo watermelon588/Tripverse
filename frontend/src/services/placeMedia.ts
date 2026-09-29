@@ -60,5 +60,9 @@ export function usePlaceMedia(targets: MediaTarget[]): Record<string, PlaceMedia
   })), [targets.map((t) => t.id).join(';'), signature, tick]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
+/** The same Commons thumbnail at another width (thumb URLs end in /<width>px-<file>). Use a standard
+ *  Wikimedia step (120, 250, 330, 500, 960) for small views so they don't download the 960 px image. */
+export const sizedImage = (url: string, width: number) => url.replace(/\/\d+px-([^/]+)$/, `/${width}px-$1`);
+
 export const creditLine = (media: PlaceMedia) =>
   ['Photo: Wikimedia Commons', media.credit.author, media.credit.license].filter(Boolean).join(' · ');
