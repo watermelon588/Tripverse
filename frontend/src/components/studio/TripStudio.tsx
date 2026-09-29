@@ -247,7 +247,7 @@ export function TripStudio({
               <React.Suspense fallback={<p className="tv-plan__empty">Loading the {tab === 'map' ? 'map' : '3D view'}…</p>}>
                 <SpatialWorkspace isOpen embedded mode={tab} onModeChange={(mode) => pickTab(mode)}
                   selectedDay={day} onSelectDay={onSelectDay} trip={tripContext} tripId={trip.id}
-                  graph={graph} preferences={trip.planning_preferences} dark={dark} onAddPlace={onAddPlace} />
+                  graph={graph} preferences={trip.planning_preferences} dark={dark} onAddPlace={onAddPlace} weather={document?.enrichment?.weather} />
               </React.Suspense>
             )}
           </div>
