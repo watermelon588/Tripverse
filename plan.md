@@ -74,7 +74,7 @@ Rejected:
 8. **Spatial S3:** season-aware recommendations. *Climate tips done early (2026-09-28); the forecast and agent prompts follow Session 5.*
 9. **Session 6:** exports. *Checkpoint 3*.
    - ✅ Calendar, Google Maps, GPX/KML, budget CSV and JSON exporters, plus the Export menu. *Done 2026-09-28; the menu sits next to Budget in the studio's top bar.*
-   - PDF: not started. It's built from Session 3's sketch pages and plugs into the menu's `pdf` slot.
+   - ✅ PDF, one click. *Done 2026-09-29: cover, the sketch pages as vectors, the day-by-day plan, the budget and the credits.*
 10. **Session 7:** polish and the one-time docs pass. The docs pass also covers the Spatial features.
 
 Sessions 1–7 are owned by the build-with-agent session. The Spatial sessions are owned by the map session, and their details are at the end of this file. Where one touches the other's files, message first.
@@ -295,7 +295,28 @@ Session 6 (non-PDF exporters): Plan dot cleanup session; PDF: build-with-agent s
 - Backend `POST /api/exports/points` (`api/routes/exports.py`, `enrichment.locate_places`) finds each place near its base with Nominatim. Places more than 60 km from their base are dropped as namesakes. Lookups are cached; a 40 s budget returns partial results, and the next call finishes from cache.
 - Tests: vitest (`npm test`, 10 tests) and `tests/test_exports.py` (3); 152 backend tests pass. Live: 5 of 6 Kyoto/Osaka places located with correct coordinates ("Springfield" rejected); 9.7 s the first time, 0.1 s cached. Checked in the browser: every download, the error path, the state with no start date, and Escape.
 - Mounted next to Budget in the studio's top bar. Checked in the studio at 1024 px and 390 px: the menu stays above the floating windows and doesn't overflow.
-- **Open:** the PDF (`pdf` prop); importing the files into real Calendar and Organic Maps apps once (per Verify).
+- **PDF (2026-09-29, build-with-agent session):** `lib/exporters/pdf.ts`, `pdfPlan.ts` and `pdfFonts.ts`, lazy loaded from the Export menu (a 486 kB chunk plus the font files).
+  - A4 landscape pages:
+    - a cover: the guide's portrait, destination, dates, travelers
+    - the sketch pages, rendered by the app's own `SketchPageSvg` and converted by svg2pdf, so they stay vectors with the theme colours baked in
+    - "Day by day": time-of-day groups, tips and linked sources, weather and holidays
+    - Budget: totals, costs by day, exchange rates
+    - Credits: the trip's enrichment sources, the community sites, the fonts and libraries
+  - Fonts:
+    - Helvetica for WinAnsi text
+    - Caveat for other Latin text, and for the sketches
+    - Yomogi for Japanese, embedded only when the trip has Japanese text
+    - The TTFs come from `@expo-google-fonts` (OFL); jsPDF subsets them.
+  - Checked:
+    - 7 vitest tests (`pdfPlan.test.ts`)
+    - Headless Chrome through the real Export menu: a 403 KB, 10-page PDF in 1.4 s, then "PDF downloaded."
+    - The Tokyo fixture PDF: text extraction finds selectable text on every page, including 嵐山 竹林の小径 and スポーツの日, and the pages render correctly.
+  - The avoid stamps use × instead of ✗, which Caveat lacks. Receipts show "not costed yet" instead of ¥0.
+- **Open:**
+  - Letter size (A4 only for now)
+  - the paper-grain filter is left out of print
+  - importing the files into real Calendar and Organic Maps apps once (per Verify)
+  - opening the PDF in Acrobat/Preview by hand
 **Goal:** Take the trip anywhere.
 
 **Export** menu in the studio:

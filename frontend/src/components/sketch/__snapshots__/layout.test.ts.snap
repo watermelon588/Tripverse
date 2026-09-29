@@ -750,8 +750,8 @@ exports[`layoutSketch > matches the Tokyo and Kyoto fixtures > tokyo 1`] = `
       {
         "id": "ov-stamp-2",
         "kind": "stamp",
-        "rotate": 4.1,
-        "text": "no museums ✗",
+        "rotate": -5,
+        "text": "no museums ×",
         "tone": "red",
         "w": 138,
         "x": 350,

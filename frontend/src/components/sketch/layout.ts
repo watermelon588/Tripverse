@@ -190,7 +190,7 @@ function overviewPage(doc: TripDocument): SketchPage {
   // Preference stamps: what they love, and what to keep out.
   const stamps = [
     ...doc.interests.map((text) => ({ text: `loves ${text}`, tone: 'green' as const })),
-    ...doc.avoid.map((text) => ({ text: `no ${text} ✗`, tone: 'red' as const })),
+    ...doc.avoid.map((text) => ({ text: `no ${text} ×`, tone: 'red' as const })),
   ].slice(0, 8);
   let sx = M, sy = 590;
   stamps.forEach((stamp, index) => {
@@ -207,7 +207,7 @@ function overviewPage(doc: TripDocument): SketchPage {
   const route = stops.map((stop) => stop.name).join(' → ');
   const alt = [
     `${title}${sub ? `, ${sub}` : ''}.`, route && `Route: ${route}.`,
-    stamps.length ? `Preferences: ${stamps.map((stamp) => stamp.text.replace(' ✗', '')).join(', ')}.` : '',
+    stamps.length ? `Preferences: ${stamps.map((stamp) => stamp.text.replace(' ×', '')).join(', ')}.` : '',
   ].filter(Boolean).join(' ');
   return { id: 'overview', kind: 'overview', day: null, title, alt, elements: els };
 }
@@ -240,7 +240,7 @@ function receipt(doc: TripDocument): SketchElement[] {
   const over = target != null && sum > target;
   const total = money(sum, currency);
   els.push({ id: 'rc-total-l', kind: 'text', x: x + 18, y: ty + 6, lines: ['Total'], size: 24, tone: 'ink', bold: true });
-  els.push({ id: 'rc-total-v', kind: 'text', x: x + w - 18, y: ty + 6, lines: [total], size: 24, tone: over ? 'red' : 'ink', anchor: 'end', bold: true });
+  els.push({ id: 'rc-total-v', kind: 'text', x: x + w - 18, y: ty + 6, lines: [sum ? total : 'not costed yet'], size: sum ? 24 : 20, tone: over ? 'red' : sum ? 'ink' : 'muted', anchor: 'end', bold: !!sum });
   if (over) {
     const tw = textWidth(total, 24);
     els.push({ id: 'rc-circle', kind: 'ellipse', cx: x + w - 18 - tw / 2, cy: ty - 2, w: tw + 30, h: 42, tone: 'red' });

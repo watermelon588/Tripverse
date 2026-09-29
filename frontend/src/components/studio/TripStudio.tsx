@@ -197,7 +197,8 @@ export function TripStudio({
         {isLoading && <span className="tv-studio__live" role="status"><i aria-hidden="true" />{guide.name}: {loadingStage}</span>}
         <ThemeToggle />
         <button type="button" className="tv-btn tv-btn--ghost tv-btn--sm" onClick={onOpenBudget}>Budget</button>
-        <ExportMenu document={document} />
+        <ExportMenu document={document}
+          pdf={document ? () => import('../../lib/exporters/pdf').then(({ tripPdf }) => tripPdf(document, guide)) : undefined} />
       </header>
 
       <main className="tv-studio__stage" data-flip-id="trip-stage">
