@@ -83,7 +83,7 @@ describe('layoutSketch', () => {
     notes.forEach((note) => note.kind === 'note' && expect(tips.some((tip) => tip.startsWith(note.lines.join(' ').replace(/…$/, '')))).toBe(true));
     expect(notes.map((note) => note.kind === 'note' && note.tag)).toEqual(['reddit', 'quora', null]);
     const stamps = pages[0].elements.filter((el) => el.kind === 'stamp').map((el) => el.kind === 'stamp' && el.text);
-    expect(stamps).toEqual(['loves food', 'loves temples', 'no museums ✗']);
+    expect(stamps).toEqual(['loves food', 'loves temples', 'no museums ×']);
   });
 
   it('draws typical-month weather from its mean and rain', () => {
