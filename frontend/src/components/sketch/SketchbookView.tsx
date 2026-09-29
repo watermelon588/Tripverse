@@ -19,12 +19,17 @@ import type { TripDocument } from '../../services/tripService';
 import { GuideCharacter, type GuideMood } from '../guide/GuideCharacter';
 import type { Guide } from '../guide/guides';
 import { prefersReducedMotion } from '../home/v2/motion';
-import { layoutSketch } from './layout';
+import { layoutSketch, type Orientation } from './layout';
 import { describeChange, diffPages } from './live';
 import { drawPage } from './motion';
 import { SketchPageSvg } from './render';
 import type { SketchPage } from './types';
+import { SketchNotesLayer } from './annotate/SketchNotesLayer';
+import { useSketchNotes } from './annotate/notes';
 import '../../styles/sketch.css';
+
+// Excalidraw is large: it loads only when the traveler opens the editor.
+const SketchEditor = React.lazy(() => import('./annotate/SketchEditor'));
 
 const FIRST_DRAW_SECONDS = 3.2;
 const SAY_MS = 5000;
@@ -39,13 +44,27 @@ interface Props {
   stage?: string;
 }
 
+// Phones held upright get portrait pages; everything else gets the A4 landscape sheet.
+const UPRIGHT = '(max-width: 700px) and (orientation: portrait)';
+function useOrientation(): Orientation {
+  const [upright, setUpright] = useState(() => window.matchMedia(UPRIGHT).matches);
+  useEffect(() => {
+    const list = window.matchMedia(UPRIGHT);
+    const update = () => setUpright(list.matches);
+    list.addEventListener('change', update);
+    return () => list.removeEventListener('change', update);
+  }, []);
+  return upright ? 'portrait' : 'landscape';
+}
+
 const overBy = (page: SketchPage | undefined) => {
   const el = page?.elements.find((entry) => entry.id === 'rc-over');
   return el?.kind === 'text' ? el.lines[0] : null;
 };
 
 export function SketchbookView({ document, day, onSelectDay, guide, busy = false, stage }: Props) {
-  const pages = useMemo(() => layoutSketch(document), [document]);
+  const orientation = useOrientation();
+  const pages = useMemo(() => layoutSketch(document, orientation), [document, orientation]);
   const index = Math.max(0, pages.findIndex((page) => page.day === day));
   const page = pages[index];
   const svg = useRef<SVGSVGElement>(null);
@@ -59,6 +78,8 @@ export function SketchbookView({ document, day, onSelectDay, guide, busy = false
   const [drawing, setDrawing] = useState(false);
   const [moment, setMoment] = useState<{ mood: GuideMood; say: string } | null>(null);
   const [replay, setReplay] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const notes = useSketchNotes(document.trip_id);
 
   // Diff every new layout against the last one and queue what's new (before the draw effect below).
   useLayoutEffect(() => {
@@ -134,6 +155,7 @@ export function SketchbookView({ document, day, onSelectDay, guide, busy = false
   const say = moment?.say ?? (busy && stage ? `${stage}…` : null);
 
   return (
+    <>
     <section className="tv-sketch" aria-roledescription="sketchbook" aria-label="Trip sketchbook" tabIndex={0} onKeyDown={onKeyDown}
       onPointerDown={(event) => { if (event.pointerType !== 'mouse') swipe.current = { x: event.clientX, y: event.clientY }; }}
       onPointerUp={(event) => {
@@ -146,6 +168,7 @@ export function SketchbookView({ document, day, onSelectDay, guide, busy = false
       onPointerCancel={() => { swipe.current = null; }}>
       <div className="tv-sketch__stage">
         <SketchPageSvg ref={svg} key={page.id} page={page} penImage={guide.image} className="tv-sketch__page" />
+        <SketchNotesLayer tripId={document.trip_id} page={page} />
       </div>
       <div className="tv-sketch__bar">
         <div className="tv-sketch__guide">
@@ -159,11 +182,21 @@ export function SketchbookView({ document, day, onSelectDay, guide, busy = false
           </span>
           <button type="button" className="tv-btn tv-btn--ghost tv-btn--sm" onClick={() => go(index + 1)} disabled={index === pages.length - 1} aria-label="Next page">→</button>
         </nav>
-        <button type="button" className="tv-btn tv-btn--ghost tv-btn--sm tv-sketch__replay" disabled={drawing}
-          onClick={() => { drawn.current.delete(page.id); setReplay((count) => count + 1); }}>
-          Redraw
-        </button>
+        <div className="tv-sketch__actions">
+          <button type="button" className="tv-btn tv-btn--ghost tv-btn--sm" disabled={drawing}
+            onClick={() => { drawn.current.delete(page.id); setReplay((count) => count + 1); }}>
+            Redraw
+          </button>
+          {page.w > page.h && <button type="button" className="tv-btn tv-btn--ghost tv-btn--sm" onClick={() => setEditing(true)}>
+            {notes[page.id] ? 'Edit drawing' : 'Draw'}
+          </button>}
+        </div>
       </div>
     </section>
+    {/* Outside the section: its arrow-key and swipe handlers would turn pages while drawing. */}
+    {editing && <React.Suspense fallback={null}>
+      <SketchEditor tripId={document.trip_id} page={page} scene={notes[page.id]} onClose={() => setEditing(false)} />
+    </React.Suspense>}
+    </>
   );
 }

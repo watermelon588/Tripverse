@@ -9,7 +9,7 @@ import type { TripDocument, TripDocumentItem } from '../../services/tripService'
 import { categoryDoodle, modeDoodle, type DoodleName } from './doodles';
 import { PAGE, type Point, type SketchElement, type SketchPage } from './types';
 
-const { w: W, h: H, margin: M } = PAGE;
+const M = PAGE.margin;
 
 // ---- text helpers ---------------------------------------------------------
 
@@ -92,9 +92,61 @@ const isMustSee = (name: string, mustSee: string[]) => {
 
 // ---- overview page ------------------------------------------------------------
 
-const STOPS_PER_ROW = 5;
-const MAX_ROWS = 3;
 const BUBBLE = { w: 156, h: 78 };
+
+// ---- page geometry --------------------------------------------------------------
+
+export type Orientation = 'landscape' | 'portrait';
+
+/**
+ * Where everything sits on a page. Landscape is the A4 sheet used by the studio and the
+ * PDF; portrait is for phones held upright, with the time slots stacked as rows and the
+ * sticky notes along the bottom. Both give every element the same id.
+ */
+interface Frame {
+  w: number; h: number; stacked: boolean;
+  stopsPerRow: number; maxRows: number; routeTop: number; routeBottom: number;
+  stamps: { top: number; right: number; bottom: number };
+  receipt: { x: number; y: number; w: number; bottom: number };
+  card: { w: number; h: number; perSlot: number };
+  slot: (c: number) => Point;             // top-left of a slot's header (doodle, then label)
+  cardAt: (c: number, row: number) => Point;
+  more: (c: number) => { x: number; y: number; anchor: 'middle' | 'end' };
+  notes: { at: (i: number) => Point; w: number; h: number; lines: number; max: number };
+  weather: { x: number; w: number };
+  subWidth: number; holidayEnd: number; empty: Point;
+  /** Portrait has no room beside the subtitle, so a holiday gets its own line under it. */
+  holidayBelow: boolean;
+}
+
+export const FRAMES: Record<Orientation, Frame> = {
+  landscape: {
+    w: PAGE.w, h: PAGE.h, stacked: false,
+    stopsPerRow: 5, maxRows: 3, routeTop: 190, routeBottom: 520,
+    stamps: { top: 590, right: 760, bottom: 720 },
+    receipt: { x: 790, y: 560, w: PAGE.w - M - 790, bottom: PAGE.h - 24 },
+    card: { w: 225, h: 150, perSlot: 3 },
+    slot: (c) => [M + c * 265, 146],
+    cardAt: (c, row) => [M + c * 265, 196 + row * 180],
+    more: (c) => ({ x: M + c * 265 + 225 / 2, y: 196 + 3 * 180 + 16, anchor: 'middle' }),
+    notes: { at: (i) => [858, 176 + i * 184], w: 217, h: 150, lines: 4, max: 3 },
+    weather: { x: 858, w: 217 },
+    subWidth: 560, holidayEnd: 780, empty: [M + (265 * 3 - 40) / 2, 420], holidayBelow: false,
+  },
+  portrait: {
+    w: PAGE.h, h: PAGE.w, stacked: true,
+    stopsPerRow: 3, maxRows: 5, routeTop: 190, routeBottom: 760,
+    stamps: { top: 810, right: PAGE.h - M - 290, bottom: 1080 },
+    receipt: { x: PAGE.h - M - 260, y: 800, w: 260, bottom: PAGE.w - 24 },
+    card: { w: 200, h: 150, perSlot: 3 },
+    slot: (c) => [M, 170 + c * 270],
+    cardAt: (c, row) => [M + row * 249, 210 + c * 270],
+    more: (c) => ({ x: PAGE.h - M, y: 192 + c * 270, anchor: 'end' }),
+    notes: { at: (i) => [M + i * 249, 950], w: 200, h: 136, lines: 3, max: 3 },
+    weather: { x: PAGE.h - M - 200, w: 200 },
+    subWidth: 440, holidayEnd: 540, empty: [PAGE.h / 2, 560], holidayBelow: true,
+  },
+};
 
 interface Stop { name: string; days: number[] }
 
@@ -116,8 +168,9 @@ function legBetween(doc: TripDocument, a: string, b: string) {
   return doc.legs.find((leg) => (norm(leg.source) === x && norm(leg.target) === y) || (norm(leg.source) === y && norm(leg.target) === x)) ?? null;
 }
 
-function overviewPage(doc: TripDocument): SketchPage {
+function overviewPage(doc: TripDocument, f: Frame): SketchPage {
   const els: SketchElement[] = [];
+  const W = f.w;
   const title = doc.destination || 'Your trip';
   const dates = doc.start_date
     ? `${dateLabel(doc.start_date, { day: 'numeric', month: 'short' })} – ${dateLabel(doc.end_date || doc.start_date, { day: 'numeric', month: 'short', year: 'numeric' })}`
@@ -133,9 +186,10 @@ function overviewPage(doc: TripDocument): SketchPage {
 
   // The route: city bubbles snaking across up to three rows.
   const stops = tripStops(doc);
-  const shown = stops.slice(0, STOPS_PER_ROW * MAX_ROWS);
+  const STOPS_PER_ROW = f.stopsPerRow;
+  const shown = stops.slice(0, STOPS_PER_ROW * f.maxRows);
   const rows = Math.max(1, Math.ceil(shown.length / STOPS_PER_ROW));
-  const top = 190, bottom = 520;
+  const top = f.routeTop, bottom = f.routeBottom;
   const rowGap = (bottom - top) / rows;
   const left = M + BUBBLE.w / 2 + 20, right = W - M - BUBBLE.w / 2 - 20;
   const centers: Point[] = shown.map((_, index) => {
@@ -192,30 +246,31 @@ function overviewPage(doc: TripDocument): SketchPage {
     ...doc.interests.map((text) => ({ text: `loves ${text}`, tone: 'green' as const })),
     ...doc.avoid.map((text) => ({ text: `no ${text} ×`, tone: 'red' as const })),
   ].slice(0, 8);
-  let sx = M, sy = 590;
+  let sx = M, sy = f.stamps.top;
   stamps.forEach((stamp, index) => {
     const text = wrap(stamp.text, 260, 22, 1)[0];
     const w = Math.round(textWidth(text, 22) + 32);
-    if (sx + w > 760) { sx = M; sy += 64; }
-    if (sy > 720) return;
+    if (sx + w > f.stamps.right) { sx = M; sy += 64; }
+    if (sy > f.stamps.bottom) return;
     els.push({ id: `ov-stamp-${index}`, kind: 'stamp', x: sx, y: sy, w, text, tone: stamp.tone, rotate: Math.round(tilt(`stamp${index}${text}`, 5) * 10) / 10 });
     sx += w + 18;
   });
 
-  els.push(...receipt(doc));
+  els.push(...receipt(doc, f));
 
   const route = stops.map((stop) => stop.name).join(' → ');
   const alt = [
     `${title}${sub ? `, ${sub}` : ''}.`, route && `Route: ${route}.`,
     stamps.length ? `Preferences: ${stamps.map((stamp) => stamp.text.replace(' ×', '')).join(', ')}.` : '',
   ].filter(Boolean).join(' ');
-  return { id: 'overview', kind: 'overview', day: null, title, alt, elements: els };
+  return { id: 'overview', kind: 'overview', day: null, title, alt, w: f.w, h: f.h, elements: els };
 }
 
 /** The budget as a till receipt; the total is circled in red when it's over the target. */
-function receipt(doc: TripDocument): SketchElement[] {
+function receipt(doc: TripDocument, f: Frame): SketchElement[] {
   const { currency, target, planned, entered, projected } = doc.budget;
-  const x = 790, y = 560, w = W - M - x, lineH = 28, bottom = H - 24;
+  const { x, y, w, bottom } = f.receipt;
+  const lineH = 28;
   const rows: [string, string][] = [];
   if (planned != null) rows.push(['Planned', money(planned, currency)]);
   if (entered) rows.push(['Spent so far', money(entered, currency)]);
@@ -253,8 +308,6 @@ function receipt(doc: TripDocument): SketchElement[] {
 
 export const SLOTS = ['morning', 'afternoon', 'evening'] as const;
 const SLOT_DOODLE: Record<(typeof SLOTS)[number], DoodleName> = { morning: 'sun', afternoon: 'partly', evening: 'moon' };
-export const CARD = { w: 225, h: 150, pitch: 180, top: 196, perColumn: 3, colPitch: 265 } as const;
-const NOTES = { x: 858, w: 217, h: 150, pitch: 184, top: 176, max: 3 } as const;
 
 /** Items into morning/afternoon/evening; untimed ones go to whichever slot is emptiest. */
 export function slotItems(items: TripDocumentItem[]) {
@@ -285,7 +338,8 @@ export function itemIds(prefix: string, items: TripDocumentItem[]) {
   });
 }
 
-function dayPage(doc: TripDocument, day: TripDocument['days'][number]): SketchPage {
+function dayPage(doc: TripDocument, day: TripDocument['days'][number], f: Frame): SketchPage {
+  const CARD = f.card, NOTES = f.notes;
   const p = `d${day.day}`;
   const els: SketchElement[] = [];
   const title = dayTitle(day.day, day.date);
@@ -297,11 +351,11 @@ function dayPage(doc: TripDocument, day: TripDocument['days'][number]): SketchPa
     day.hours ? `about ${Math.round(day.hours)} h of plans` : null,
     day.est_cost ? `about ${money(day.est_cost, doc.budget.currency)}` : null,
   ].filter(Boolean).join(' · ');
-  els.push({ id: `${p}-sub`, kind: 'text', x: M, y: 124, lines: [wrap(sub, 560, 23, 1)[0] ?? ''], size: 23, tone: 'muted' });
+  els.push({ id: `${p}-sub`, kind: 'text', x: M, y: 124, lines: [wrap(sub, f.subWidth, 23, 1)[0] ?? ''], size: 23, tone: 'muted' });
   if (holiday) {
-    const hx = M + Math.min(560, textWidth(sub, 23)) + 28;
-    els.push({ id: `${p}-holiday-flag`, kind: 'doodle', name: 'flag', x: hx, y: 104, size: 24, tone: 'red' });
-    els.push({ id: `${p}-holiday`, kind: 'text', x: hx + 30, y: 124, lines: [wrap(`${holiday.name} (holiday)`, 780 - hx, 21, 1)[0]], size: 21, tone: 'red' });
+    const [hx, hy] = f.holidayBelow ? [M, 154] : [M + Math.min(f.subWidth, textWidth(sub, 23)) + 28, 124];
+    els.push({ id: `${p}-holiday-flag`, kind: 'doodle', name: 'flag', x: hx, y: hy - 20, size: 24, tone: 'red' });
+    els.push({ id: `${p}-holiday`, kind: 'text', x: hx + 30, y: hy, lines: [wrap(`${holiday.name} (holiday)`, f.holidayEnd - hx, 21, 1)[0]], size: 21, tone: 'red' });
   }
 
   // Weather in the top-right corner, always with its "forecast" or "typical" label.
@@ -313,22 +367,22 @@ function dayPage(doc: TripDocument, day: TripDocument['days'][number]): SketchPa
   const sky: DoodleName | null = weather?.condition
     ?? (weather?.rain_mm == null ? null : weather.rain_mm >= 3 ? 'rain' : weather.rain_mm >= 1 ? 'partly' : 'sun');
   if (weather && (sky || temps)) {
-    if (sky) els.push({ id: `${p}-wx`, kind: 'doodle', name: sky, x: NOTES.x, y: 44, size: 44, tone: 'accent' });
-    if (temps) els.push({ id: `${p}-wx-t`, kind: 'text', x: NOTES.x + 56, y: 72, lines: [temps], size: 26, tone: 'ink', bold: true });
+    if (sky) els.push({ id: `${p}-wx`, kind: 'doodle', name: sky, x: f.weather.x, y: 44, size: 44, tone: 'accent' });
+    if (temps) els.push({ id: `${p}-wx-t`, kind: 'text', x: f.weather.x + 56, y: 72, lines: [temps], size: 26, tone: 'ink', bold: true });
     const label = [weather.label, weather.badge?.text].filter(Boolean).join(' · ');
-    els.push({ id: `${p}-wx-l`, kind: 'text', x: NOTES.x, y: 122, lines: wrap(label, NOTES.w, 18, 2), size: 18, tone: 'muted' });
+    els.push({ id: `${p}-wx-l`, kind: 'text', x: f.weather.x, y: 122, lines: wrap(label, f.weather.w, 18, 2), size: 18, tone: 'muted' });
   }
 
   const columns = slotItems(day.items);
   const ids = itemIds(p, day.items);
   const mustSee = doc.must_see;
-  const visible: { id: string; x: number; y: number; item: TripDocumentItem }[] = [];
+  const visible: { id: string; x: number; y: number; slot: number; item: TripDocumentItem }[] = [];
   columns.forEach((column, c) => {
-    const x = M + c * CARD.colPitch;
-    els.push({ id: `${p}-slot-${c}`, kind: 'doodle', name: SLOT_DOODLE[SLOTS[c]], x, y: 146, size: 26, tone: 'muted' });
-    els.push({ id: `${p}-slot-${c}-t`, kind: 'text', x: x + 34, y: 168, lines: [SLOTS[c][0].toUpperCase() + SLOTS[c].slice(1)], size: 24, tone: 'muted', bold: true });
-    column.slice(0, CARD.perColumn).forEach(({ item, index }, row) => {
-      const y = CARD.top + row * CARD.pitch;
+    const [hx, hy] = f.slot(c);
+    els.push({ id: `${p}-slot-${c}`, kind: 'doodle', name: SLOT_DOODLE[SLOTS[c]], x: hx, y: hy, size: 26, tone: 'muted' });
+    els.push({ id: `${p}-slot-${c}-t`, kind: 'text', x: hx + 34, y: hy + 22, lines: [SLOTS[c][0].toUpperCase() + SLOTS[c].slice(1)], size: 24, tone: 'muted', bold: true });
+    column.slice(0, CARD.perSlot).forEach(({ item, index }, row) => {
+      const [x, y] = f.cardAt(c, row);
       const id = ids[index];
       els.push({ id, kind: 'box', x, y, w: CARD.w, h: CARD.h, tone: item.option ? 'muted' : 'ink', dashed: item.option, label: item.name });
       els.push({ id: `${id}-icon`, kind: 'doodle', name: categoryDoodle(item.category), x: x + 12, y: y + 14, size: 34, tone: 'accent' });
@@ -343,11 +397,12 @@ function dayPage(doc: TripDocument, day: TripDocument['days'][number]): SketchPa
         item.est_cost ? money(item.est_cost, doc.budget.currency) : item.est_cost === 0 ? 'free' : null,
       ].filter(Boolean).join(' · ');
       if (meta) els.push({ id: `${id}-meta`, kind: 'text', x: x + 14, y: y + 38 + name.length * 27 + 14, lines: wrap(meta, CARD.w - 28, 18, name.length > 2 ? 1 : 2), size: 18, tone: 'muted' });
-      visible.push({ id, x, y, item });
+      visible.push({ id, x, y, slot: c, item });
     });
-    const hidden = column.length - CARD.perColumn;
+    const hidden = column.length - CARD.perSlot;
     if (hidden > 0) {
-      els.push({ id: `${p}-more-${c}`, kind: 'text', x: x + CARD.w / 2, y: CARD.top + CARD.perColumn * CARD.pitch + 16, lines: [`+${hidden} more`], size: 22, tone: 'accent', anchor: 'middle' });
+      const more = f.more(c);
+      els.push({ id: `${p}-more-${c}`, kind: 'text', x: more.x, y: more.y, lines: [`+${hidden} more`], size: 22, tone: 'accent', anchor: more.anchor });
     }
   });
 
@@ -356,8 +411,18 @@ function dayPage(doc: TripDocument, day: TripDocument['days'][number]): SketchPa
   for (let index = 1; index < visible.length; index++) {
     const [a, b] = [visible[index - 1], visible[index]];
     const id = `${p}-a${index}`;
-    if (a.x === b.x) {
-      els.push({ id, kind: 'path', points: [[a.x + CARD.w / 2, a.y + CARD.h + 4], [b.x + CARD.w / 2, b.y - 4]], tone: 'muted', arrow: true });
+    if (a.slot === b.slot) {
+      // Within a slot: down the column (landscape) or along the row (portrait).
+      els.push({ id, kind: 'path', tone: 'muted', arrow: true, points: f.stacked
+        ? [[a.x + CARD.w + 4, a.y + CARD.h / 2], [b.x - 4, b.y + CARD.h / 2]]
+        : [[a.x + CARD.w / 2, a.y + CARD.h + 4], [b.x + CARD.w / 2, b.y - 4]] });
+    } else if (f.stacked) {
+      // Down to the next slot's row, landing clear of its header label.
+      const from: Point = [a.x + CARD.w / 2, a.y + CARD.h + 4];
+      const to: Point = [b.x + CARD.w - 30, b.y - 4];
+      const mid: Point = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
+      els.push({ id, kind: 'path', points: [from, mid, to], tone: 'muted', arrow: true, curve: true });
+      els.push({ id: `${id}-mode`, kind: 'doodle', name: hop, x: mid[0] - 11, y: mid[1] - 11, size: 22, tone: 'muted' });
     } else {
       const from: Point = [a.x + CARD.w + 4, a.y + CARD.h / 2];
       const to: Point = [b.x - 4, b.y + CARD.h / 2];
@@ -371,15 +436,15 @@ function dayPage(doc: TripDocument, day: TripDocument['days'][number]): SketchPa
 
   // Margin sticky notes: each item's own traveler tip, tagged with where it came from.
   visible.filter(({ item }) => item.tip).slice(0, NOTES.max).forEach(({ id, item }, index) => {
-    const y = NOTES.top + index * NOTES.pitch;
+    const [x, y] = NOTES.at(index);
     els.push({
-      id: `${id}-note`, kind: 'note', x: NOTES.x, y, w: NOTES.w, h: NOTES.h, rotate: Math.round(tilt(id, 2.5) * 10) / 10,
-      title: wrap(item.name, NOTES.w - 24, 18, 1)[0], lines: wrap(item.tip!, NOTES.w - 24, 19, 4), tag: sourceTag(item.source_url),
+      id: `${id}-note`, kind: 'note', x, y, w: NOTES.w, h: NOTES.h, rotate: Math.round(tilt(id, 2.5) * 10) / 10,
+      title: wrap(item.name, NOTES.w - 24, 18, 1)[0], lines: wrap(item.tip!, NOTES.w - 24, 19, NOTES.lines), tag: sourceTag(item.source_url),
     });
   });
 
   if (!day.items.length) {
-    els.push({ id: `${p}-empty`, kind: 'text', x: M + (CARD.colPitch * 3 - 40) / 2, y: 420, lines: ['A free day: nothing planned yet.'], size: 26, tone: 'muted', anchor: 'middle' });
+    els.push({ id: `${p}-empty`, kind: 'text', x: f.empty[0], y: f.empty[1], lines: ['A free day: nothing planned yet.'], size: 26, tone: 'muted', anchor: 'middle' });
   }
 
   const alt = [
@@ -388,9 +453,10 @@ function dayPage(doc: TripDocument, day: TripDocument['days'][number]): SketchPa
     holiday ? `${holiday.name} is a public holiday.` : '',
     weather ? `Weather ${weather.label}.` : '',
   ].filter(Boolean).join(' ');
-  return { id: p, kind: 'day', day: day.day, title, alt, elements: els };
+  return { id: p, kind: 'day', day: day.day, title, alt, w: f.w, h: f.h, elements: els };
 }
 
-export function layoutSketch(doc: TripDocument): SketchPage[] {
-  return [overviewPage(doc), ...doc.days.map((day) => dayPage(doc, day))];
+export function layoutSketch(doc: TripDocument, orientation: Orientation = 'landscape'): SketchPage[] {
+  const frame = FRAMES[orientation];
+  return [overviewPage(doc, frame), ...doc.days.map((day) => dayPage(doc, day, frame))];
 }

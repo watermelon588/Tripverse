@@ -55,6 +55,19 @@ function sessionItem(trip: TripModelResponse): ChatSessionItem {
   };
 }
 
+
+// The last studio document, so reopening a trip paints at once while the fresh one loads
+// (the document takes 1-3 s against the remote database). One entry, so it never grows.
+const STUDIO_DOC_KEY = 'tripverse-studio-doc';
+function cachedStudioDoc(tripId: string): TripDocument | null {
+  try {
+    const doc = JSON.parse(localStorage.getItem(STUDIO_DOC_KEY) || 'null') as TripDocument | null;
+    return doc?.trip_id === tripId ? doc : null;
+  } catch {
+    return null;
+  }
+}
+
 export const CreateTrip: React.FC<CreateTripProps> = ({
   onNavigateHome, onNavigateExplore, onNavigateProfile,
 }) => {
@@ -65,7 +78,8 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
   const [tripsMap, setTripsMap] = useState<Record<string, TripModelResponse>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadingStage, setLoadingStage] = useState('Preparing your trip');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  // Below 1024 px the sidebar is a drawer over the chat, so it starts closed there.
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [studioOpen, setStudioOpen] = useState(() => studioTripFromPath() !== null);
   const [studioDay, setStudioDay] = useState<number | null>(null);
@@ -380,7 +394,11 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
 
   // The studio document, with the agent's streamed plan folded in so the sketch updates mid-reply.
   const liveDoc = useMemo(
-    () => (activeTrip && studioDoc?.trip_id === activeTrip.id ? withCopilot(studioDoc, activeCopilot) : null),
+    () => {
+      if (!activeTrip) return null;
+      const doc = studioDoc?.trip_id === activeTrip.id ? studioDoc : cachedStudioDoc(activeTrip.id);
+      return doc ? withCopilot(doc, activeCopilot) : null;
+    },
     [activeTrip, studioDoc, activeCopilot],
   );
   const planned = Boolean(activeTrip && activeTrip.onboarding_status === 'COMPLETE' && activeTrip.status !== 'DRAFT' && activeGraph);
@@ -390,7 +408,11 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
   useEffect(() => {
     if (!studioOpen || !activeTrip || isLoading) return;
     let alive = true;
-    void getTripDocument(activeTrip.id).then((doc) => { if (alive) setStudioDoc(doc); })
+    void getTripDocument(activeTrip.id).then((doc) => {
+      if (!alive) return;
+      setStudioDoc(doc);
+      try { localStorage.setItem(STUDIO_DOC_KEY, JSON.stringify(doc)); } catch { /* cache only */ }
+    })
       .catch((error) => console.warn('Could not load the trip document', error));
     return () => { alive = false; };
   }, [studioOpen, activeTrip?.id, isLoading, budgetRevision, activeMessages.length]);

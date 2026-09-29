@@ -4,7 +4,7 @@
  * Shift + arrows resize. Controlled: the owner keeps each window's rect and open state.
  * With `sheet` (narrow screens) it stops floating and becomes a bottom sheet.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CloseIcon } from '../home/v2/IconsV2';
 import '../../styles/floating-window.css';
 
@@ -34,9 +34,13 @@ const snap = (rect: Rect, board: Size): Rect => ({
 /** Live content size of the element windows float in. */
 export function useBoardSize(ref: React.RefObject<HTMLElement | null>): Size | null {
   const [size, setSize] = useState<Size | null>(null);
-  useEffect(() => {
+  // Measure before the first paint, so docked windows reserve their strip from the start
+  // instead of the canvas jumping sideways a frame later (a 0.18 layout shift).
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
+    const box = el.getBoundingClientRect();
+    setSize({ w: Math.round(box.width), h: Math.round(box.height) });
     const observer = new ResizeObserver(([entry]) => setSize({ w: Math.round(entry.contentRect.width), h: Math.round(entry.contentRect.height) }));
     observer.observe(el);
     return () => observer.disconnect();

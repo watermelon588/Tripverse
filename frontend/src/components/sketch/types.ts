@@ -29,6 +29,9 @@ export interface SketchPage {
   title: string;
   /** Text alternative for the whole page, from the trip document only. */
   alt: string;
+  /** Page size in px: A4 landscape, or the same sheet upright for phones. */
+  w: number;
+  h: number;
   elements: SketchElement[];
 }
 

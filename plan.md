@@ -350,14 +350,51 @@ Session 6 (non-PDF exporters): Plan dot cleanup session; PDF: build-with-agent s
 **Goal:** Resume-ready quality, and the one-time documentation pass.
 
 - **Performance:** lazy chunks for the studio, 3D, sketch and PDF code; initial chat bundle no bigger than today; font subsetting. *Route splitting done 2026-09-29:* every page except Home loads on demand from one `LOADERS` map in `App.tsx`, and `transitionTo` starts the download as the curtain rises. The main chunk went from 908 kB to 560 kB; the chat path is that plus a 279 kB `CreateTrip` chunk. Checked cold on every route, with the `/profile` guard and back/forward. **Open:** Supabase (about 800 kB of source, all of it in main because `AuthContext` needs it at boot), GSAP's full plugin set, and font subsetting; Lighthouse still to run.
-- **Accessibility:** keyboard paths through the studio tabs, day rail and export menu; sketch pages get text alternatives from the trip document; contrast in both themes.
-- **Mobile:** the studio as tabs with bottom sheets, and a swipe-to-flip sketchbook.
+- **Accessibility:** keyboard paths through the studio tabs, day rail and export menu; sketch pages get text alternatives from the trip document; contrast in both themes. ✅ *Done 2026-09-29 (Session 5/6 session), audited with axe-core (WCAG 2.1 A/AA) on every route of the production build, plus the build session's Lighthouse findings:*
+  - Contrast: `--tv-muted` #787774 → #666562 and `--tv-faint` #9b9a97 → #72716e (light), `--tv-faint` #6f6d69 → #86847f (dark). All at least 4.5:1 on every canvas and tint; the route curtain label uses the token. The 35–44 contrast failures per page are now 0.
+  - Keyboard: the Export menu focuses its first entry when opened, moves with ↑ ↓ Home End, and returns focus to its trigger on Esc; Tab away closes it. The studio tabs (roving tabindex), the day rail and the sketch pages were already reachable.
+  - Chat: `role="main"` on the chat page (not in the studio drawer), a name on the icon-only "Open studio" button, markdown headings exposed as levels 2 and 3 under the page's h1, history rows as a real button with Delete beside it rather than nested, and a 24 px photo-credit target.
+  - Home: the closed mobile drawer is `inert`, and the destinations rail is focusable so it scrolls from the keyboard.
+  - Also: day covers and library thumbnails request 120 px Wikimedia thumbs instead of 960 px (about 5 KB instead of 214 KB each), per the build session's Lighthouse run.
+  - Open: a Lighthouse re-run on the new build (owned by the Lighthouse/perf sessions); `.tv-invert` text over photos isn't auditable automatically.
+- **Mobile:** the studio as tabs with bottom sheets, and a swipe-to-flip sketchbook. ✅ *Done 2026-09-29 (build-with-agent session):*
+  - Portrait sketch pages for phones held upright (`layoutSketch(doc, 'portrait')`, 794×1123): time slots stack as rows, notes run along the bottom, the holiday gets its own line, and the overview's route uses 3 stops per row.
+  - Every element keeps the same id in both orientations, so live drawing and the page cache don't care. The PDF stays landscape.
+  - Tests cover the no-overlap, on-page and card-text checks for both orientations, plus id parity. The landscape snapshots were unchanged apart from the new `w`/`h` fields.
+  - Checked at 390 px: portrait pages, no horizontal scroll, swipe and keys.
+  - The chat sidebar now starts closed below 1024 px, where it's a drawer that used to cover the chat on every phone visit. A closed drawer is `inert`.
+- **Lighthouse (build-with-agent session, 2026-09-29):** Lighthouse 13 on the production build, cold HTTP cache, with the demo guest seeded in localStorage (a returning visitor).
+  - Before (warm cache, first pass): chat mobile 91 / desktop 98, studio mobile 86 / desktop 90 (CLS 0.184).
+  - Fixes:
+    - `useBoardSize` measures before first paint (studio CLS 0.184 → 0)
+    - the last studio document is cached (the studio paints without waiting 1–3 s for `/document`)
+    - the chat drawer starts closed on phones (chat mobile CLS 0.08 → 0.003)
+    - the welcome paragraph, which is the chat's LCP element, fades in with the eyebrow instead of after the headline
+    - 120 px day-cover thumbnails (Session 5/6 session)
+  - Cold-cache now: accessibility 100 on chat and studio, mobile and desktop. Performance on desktop: chat 96, studio 94. On mobile, chat 62 and studio 65, held back by first paint (3.1–3.7 s: render-blocking third-party font stylesheets and the main chunk). The credits session is moving the fonts to self-hosted and measured perf 85 with them out of the critical path.
+  - Best Practices is 77 wherever Wikimedia photos load (their third-party cookies).
+  - **Open:** the credits session measured self-hosted fonts at mobile perf ~81 (89 with Supabase off the main chunk) but ended before landing either change. Both are still to do; then re-run Lighthouse (the cold-cache script is described above).
 - **Credits page:** every API, font, icon set and character credit in one place. ✅ *Done 2026-09-29:* `/credits` (lazy, 9 kB), linked from the home footer. The list lives in `frontend/src/lib/credits.ts`; photographer names and links are derived from the Unsplash and Pexels file names, and `credits.test.ts` fails when a photo used in `src/` isn't credited. Guide portraits are labelled as unlicensed placeholder fan art. **Open:** credit `media/1st.jpg`, `3rd.jpg`, `4th.jpg`, `hero-bg.jpg` and `hero-bg-transparent.png` once their sources are known; the Fontshare Satoshi font is loaded in `index.html` but unused.
-- **Commercial-readiness checklist** filled in (see below).
+- **Commercial-readiness checklist** filled in (see below). ✅ *Done 2026-09-29:* every external host the code calls, split into "must change before selling" (character art, the DuckDuckGo HTML fallback, Open-Meteo's non-commercial geocoder, public Nominatim at scale, the openrouteservice and Google quotas, LLM tiers, LangSmith, uncredited photos) and "fine, keep the attribution".
 - **Docs:** per your instruction, the `/guide` page is only updated now:
   - rewrite every flow
   - extend `frontend/scripts/capture_guide.py` with studio, sketch, character and export shots
   - re-shoot, and re-read each screenshot so its caption matches
+  ✅ *Done 2026-09-29 (build-with-agent session):*
+  - `/guide` has 16 sections, adding the Trip Studio, the sketchbook, Map & 3D, Export & PDF, building with your guide, "How it all connects" and "On your phone". The FAQ and What's new are updated.
+  - Screenshots: 27 of them, all fresh from two real trips (Kyoto one-shot, Tokyo with Beni). Every caption was written after looking at its screenshot.
+  - `capture_guide.py` now drives:
+    - the brief v2 and the guide picker
+    - the studio tabs, a mid-draw sketch frame, Export and the studio Budget
+    - a live change drawn with the chat open
+    - a 390 px phone page
+  - The script waits for buttons to be enabled (disabled ones drop clicks) and gives map tiles longer to load. The old shots are deleted.
+  - **Found and fixed during the shoot:** when the extraction LLM call failed (a Gemini 503), a one-shot revision saved empty days over a good day plan, emptying the studio, the sketch and the exports. `extract_itinerary` now returns `day_plan=None` when the model gave no days, and a revision keeps the previous plan (2 tests).
+  - Capture lessons (also in memory):
+    - any file change under `frontend/` reloads the page mid-run
+    - so does Vite's first-time dependency optimisation (e.g. Excalidraw)
+    - ask other sessions for a quiet window
+  - **Open:** re-shoot after the mascot session's changes land (it's putting the guide characters across the app: hero, map views and avatars). One command, about 20 min.
 
 **Acceptance criteria:**
 - Lighthouse performance and accessibility of at least 90 on chat and studio.
@@ -367,17 +404,43 @@ Session 6 (non-PDF exporters): Plan dot cleanup session; PDF: build-with-agent s
 
 ## Commercial readiness (keep in mind, act before any launch)
 
-| Item | Status now | Before selling it |
+_Filled in during Session 7 (2026-09-29) from every external host the code calls. This is a checklist, not legal advice: confirm each service's current terms before charging money._
+
+**Must change before selling it**
+
+| Item | Where | Status now | Before selling it |
+|---|---|---|---|
+| **Guide character art**: recognisable anime characters (e.g. Hatsune Miku, Frieren, Oshi no Ko, Chainsaw Man, Bocchi); at least one is fan art signed "@lulalang" | `frontend/public/pfp/`, `components/guide/guides.ts` | Labelled as placeholder art on `/credits` and in the PDF credits | **Replace with original or commissioned art** (or licensed characters). Swapping is an asset change in `guides.ts`; keep a two-frame "thinking" pair if you want Aoi's flip-book. |
+| **DuckDuckGo HTML scraping**: the search fallback when Tavily fails, sent with a browser User-Agent | `planning/tools/web_search.py` | Works, but scraping the HTML endpoint is outside DuckDuckGo's terms | **Remove it**, or replace it with a licensed search API (Tavily paid tier, Brave Search API, Bing). |
+| **Open-Meteo geocoding**: the browser locates stops for the map | `components/create/stopLocations.ts` | The free API is for non-commercial use | Buy the commercial Open-Meteo plan, or route lookups through the backend's Nominatim/ORS path. |
+| **Nominatim (OpenStreetMap)**: place lookups for exports and enrichment | `services/enrichment.py`, `api/routes/exports.py` | Cached, rate-limited and identified with a User-Agent, which the public usage policy allows for light use | At real traffic, use a hosted geocoder (paid) or your own Nominatim. Keep "© OpenStreetMap contributors". |
+| **openrouteservice**: route geometry and geocoding fallback | `services/route_metrics.py`, `services/place_geocoding.py` | Free key (daily quota) | A paid plan, or self-host ORS. |
+| **Google Maps JS, Routes and Places APIs** | `GoogleTripMap.tsx`, `route_metrics.py`, `google_places.py` | Personal API key; pay-as-you-go | Billing alerts and quotas, restricted keys, and Google's terms: Places content may only be cached briefly and must be shown with Google attribution or on a Google map. |
+| **LLM usage (Groq primary, Gemini fallback)** | `services/llm/` | Free tiers; 429s seen in testing | Paid tiers, per-user rate limits and spend monitoring. |
+| **LangSmith tracing** | backend env | Free quota exhausted | Turn it off, or move to a paid plan. |
+| **Unknown photo sources**: `media/1st.jpg`, `3rd.jpg`, `4th.jpg`, `hero-bg.jpg`, `hero-bg-transparent.png` | home page | Not credited (source unknown) | Find the source and licence, or replace them. |
+
+**Fine for commercial use, keep the attribution**
+
+| Item | Licence / terms | Where it's credited |
 |---|---|---|
-| **Guide character art**: the PFP images are recognisable anime characters (e.g. Hatsune Miku, Frieren, Oshi no Ko, Chainsaw Man, Bocchi) and at least one is third-party fan art signed "@lulalang" | Fine for a personal portfolio demo | **Replace with original or commissioned art** (or properly licensed characters). The code keeps characters in one config file (`guides.ts`), so swapping them is an asset change. |
-| Weather | MET Norway (commercial OK, attribution) | Keep the attribution. |
-| Groq and Gemini LLM usage | Free tiers hit rate limits in testing | A paid tier or quota monitoring. |
-| Fonts and icons | OFL / CC0 | Credits page (Session 7). |
-| Traveler-tip sources (Reddit, Quora, TripAdvisor via web search) | Paraphrased tips plus links | Review each site's terms for commercial reuse; keep paraphrasing, never bulk-copy. |
-| LangSmith | Tracing on, but the free quota is exhausted | Turn it off or move to a paid plan. |
+| MET Norway forecasts | CC BY 4.0 / NLOD; identify with a User-Agent | Trip details, sketch weather, PDF credits (`enrichment.sources`) |
+| NASA POWER climatology | Free; attribution requested | Same |
+| Nager.Date public holidays | Free API, MIT code | Same |
+| Frankfurter (ECB reference rates) | Free, ECB data | Same |
+| Wikipedia, Wikivoyage, Wikidata text | CC BY-SA 4.0 (share-alike if text is reproduced) | Place panels link back; keep excerpts short |
+| Wikimedia Commons photos (day covers, place photos) | Per-image licence (CC BY / BY-SA / PD) | Author and licence per photo; also sets third-party cookies (Lighthouse Best Practices 77) |
+| OpenFreeMap tiles | Free, OSM data (ODbL) | "© OpenStreetMap contributors" on the map |
+| Unsplash / Pexels home photos | Their free licences (commercial OK) | `/credits` |
+| Fonts: Caveat, Yomogi, Lato, Geist, Instrument Serif, Jockey One (OFL); Satoshi (Fontshare, unused) | OFL-1.1 / Fontshare licence | `/credits`, PDF credits |
+| Code: React, GSAP (free standard licence), Three.js, MapLibre, Rough.js, perfect-freehand, jsPDF, svg2pdf.js | MIT or equivalent | `/credits` |
+| Doodle icons | Drawn for TripVerse (CC0) | `/credits` |
+| Traveler tips (Reddit, Quora, TripAdvisor via web search) | Paraphrased, linked to the source post | Linked beside each tip; review each site's terms, never bulk-copy |
+| Supabase (auth and Postgres) | Free tier | Move to a paid plan before real traffic (the free tier pauses idle projects) |
 
 ## Future (not in these sessions)
 
+- ✅ *Built 2026-09-29 by the Session 5/6 session: a **Draw** button on landscape sketch pages opens a lazy Excalidraw editor over the page; your strokes are saved per trip and page (`/api/trips/{id}/sketch-notes`, owner only) and drawn over the live page. Not yet in the PDF, and not on portrait (phone) pages.* Original idea:
 - **Draw on the sketch yourself:** open any page in [Excalidraw](https://docs.excalidraw.com/docs/@excalidraw/excalidraw/api/excalidraw-element-skeleton) (MIT, lazy-loaded). The `SketchScene` maps to element skeletons; save the user's annotations per trip and redraw them over the generated sketch; export with `exportToSvg` / `exportToBlob`.
 - **Share links:** a read-only public studio link for a trip ("send the plan to your uncle").
 - **Real co-planning:** two people in one trip chat, with each person's preferences merged by the agent.
@@ -416,7 +479,7 @@ Building resumed on 2026-09-28 with Spatial S2. `[x]` = done and verified; `[ ]`
 - [x] Controlled `mode` + `onModeChange`
 - [x] `selectedDay` + `onSelectDay`, with no feedback loop and no reset from streamed graphs
 - [x] Layout decision: keep all three
-- [ ] Delete the preview harness once Session 2 mounts the views
+- [x] Delete the preview harness once Session 2 mounts the views (Session 5/6 session, 2026-09-29): `frontend/spatial-preview.html` and `frontend/src/dev/` removed; nothing referenced them. `.claude/launch.json` is kept, because it now holds the dev, production-preview, backend and audit server configs.
 
 **Spatial S1: Place photos**
 - [x] Backend `POST /api/places/media`: free licences only, 20 km check, SQLite cache, guests allowed, anonymous refused, 6 tests
@@ -480,7 +543,7 @@ Building resumed on 2026-09-28 with Spatial S2. `[x]` = done and verified; `[ ]`
 - **Streaming fix:** forms hide while a response streams, the finished message no longer remounts (so its entrance animation doesn't replay), tokens are batched per animation frame, and auto-scroll only follows when you're at the bottom.
 - **Live map pins:** every stop's planned places are pinned, and a newly added place pulses and is panned into view.
 - **Fixes:** long legs with no stated mode are treated as flights; road metrics are cached across streamed preview graphs; single-stop framing is capped at zoom 14.
-- **Clean-up still owed:** delete the preview harness (`frontend/spatial-preview.html`, `frontend/src/dev/`, `.claude/launch.json`) once the layout is chosen, plus the dead `.tv-spatial__*` rules in `tripverse-v2-planner.css`.
+- **Clean-up:** done 2026-09-29. The preview harness is deleted (`.claude/launch.json` is kept for the dev servers), and the remaining `.tv-spatial__*` rules (`__loading`, `__empty`) are all used by `SpatialWorkspace`.
 
 ### Research: free data for places and seasons (tested live on 2026-09-28)
 

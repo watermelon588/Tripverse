@@ -60,7 +60,9 @@ export const ChatWelcome: React.FC<ChatWelcomeProps> = ({ onSelectPrompt }) => {
 
       if (split) tl.from(split.lines, { yPercent: 115, duration: 1, stagger: 0.08 }, '-=0.4');
 
-      tl.from('.tv-welcome__lead', { y: 14, opacity: 0, duration: 0.7 }, '-=0.6')
+      // The lead paragraph is the page's largest text (its LCP), so it rises with the eyebrow
+      // instead of waiting ~1.3 s for the headline; Chrome doesn't count it while at opacity 0.
+      tl.from('.tv-welcome__lead', { y: 14, opacity: 0, duration: 0.7 }, 0.25)
         .from('.tv-welcome__label', { y: 10, opacity: 0, duration: 0.5 }, '-=0.45')
         .from('.tv-welcome__card', {
           y: 22,
