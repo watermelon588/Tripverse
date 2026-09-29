@@ -16,6 +16,9 @@ import gsap from 'gsap';
 
 import { AGENT_STEPS, ITINERARY_ROWS, img } from '../content';
 import { ArrowUpRightIcon, GraphIcon, PinIcon, WalletIcon, ClockIcon } from '../IconsV2';
+import { GuideCast } from '../../../guide/GuideCast';
+import { GuideCharacter } from '../../../guide/GuideCharacter';
+import { companionGuide } from '../../../guide/guides';
 import { EASE, countUp, parallaxImage, prefersReducedMotion, splitLines } from '../motion';
 
 export interface HeroProps {
@@ -117,6 +120,9 @@ export function HeroBento({ onStartPlanning, onNavigateExplore }: HeroProps) {
                 <span>Explore built trips</span>
               </button>
             </div>
+            <div className="tv-bg__cast">
+              <GuideCast size={46} />
+            </div>
           </div>
 
           {/* Tall photo */}
@@ -133,7 +139,7 @@ export function HeroBento({ onStartPlanning, onNavigateExplore }: HeroProps) {
           {/* Live trace */}
           <div className="tv-bg__cell tv-bg__cell--trace">
             <div className="tv-bg__cell-head">
-              <GraphIcon width={18} height={18} />
+              <GuideCharacter guide={companionGuide()} size={30} mood="thinking" interactive label="Your guide, thinking" />
               <span className="tv-label">Reasoning now</span>
             </div>
             <ul className="tv-trace tv-trace--compact">

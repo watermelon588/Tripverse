@@ -4,6 +4,7 @@
  * Brand, a new-trip action, the active trip, past sessions, and account
  * links. Resizable by drag on desktop; an overlay drawer below 1024px.
  */
+import { UserAvatar } from '../guide/UserAvatar';
 import React, { useRef } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
@@ -149,7 +150,7 @@ export const CreateSidebar: React.FC<CreateSidebarProps> = ({
           {onNavigateProfile && (
             <button type="button" className="tv-side__account" onClick={onNavigateProfile}>
               <span className="tv-msg2__you">
-                {avatarUrl ? <img src={avatarUrl} alt="" /> : (user?.email ?? 'G').slice(0, 1).toUpperCase()}
+                <UserAvatar avatarUrl={avatarUrl} seed={user?.id ?? user?.email ?? 'guest'} size={34} />
               </span>
               <span className="tv-side__account-text">
                 <span className="tv-side__account-name">{user ? 'Account' : 'Guest'}</span>

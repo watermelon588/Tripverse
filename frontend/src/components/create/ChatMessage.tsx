@@ -6,6 +6,7 @@
  * tagged chips with icons — the previous emoji badges are out; the system
  * bans emoji.
  */
+import { UserAvatar } from '../guide/UserAvatar';
 import React, { useRef } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
@@ -84,11 +85,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
       <div className="tv-msg2__avatar">
         {isUser ? (
           <span className="tv-msg2__you">
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="" />
-            ) : (
-              (user?.email ?? 'Y').slice(0, 1).toUpperCase()
-            )}
+            <UserAvatar avatarUrl={avatarUrl} seed={user?.id ?? user?.email} size={34} />
           </span>
         ) : (
           <AssistantAvatar size={34} alt="" />

@@ -32,6 +32,9 @@ interface Props {
   /** Accessible name; leave empty when a visible label already names the guide. */
   label?: string;
   className?: string;
+  /** Leans toward the cursor, lifts on hover, and celebrates when poked. */
+  interactive?: boolean;
+  onPoke?: () => void;
 }
 
 function moodTween(body: HTMLElement, badge: HTMLElement | null, mood: GuideMood, still: boolean) {
@@ -61,10 +64,12 @@ function moodTween(body: HTMLElement, badge: HTMLElement | null, mood: GuideMood
   }
 }
 
-export function GuideCharacter({ guide, size, mood = 'idle', still = false, label, className = '' }: Props) {
+export function GuideCharacter({ guide, size, mood = 'idle', still = false, label, className = '', interactive = false, onPoke }: Props) {
   const root = useRef<HTMLSpanElement>(null);
   const frames = mood === 'thinking' ? guide.thinkingFrames : undefined;
   const [frame, setFrame] = useState(0);
+  const [poked, setPoked] = useState(false);
+  const shownMood: GuideMood = poked ? 'celebrating' : mood;
 
   useEffect(() => {
     if (!frames || prefersReducedMotion()) return;
@@ -75,13 +80,43 @@ export function GuideCharacter({ guide, size, mood = 'idle', still = false, labe
   useGSAP(() => {
     if (prefersReducedMotion() || !root.current) return;
     const body = root.current.querySelector<HTMLElement>('.tv-guide__body')!;
-    moodTween(body, root.current.querySelector<HTMLElement>('.tv-guide__badge'), mood, still);
-  }, { scope: root, dependencies: [mood, still, guide.id], revertOnUpdate: true });
+    moodTween(body, root.current.querySelector<HTMLElement>('.tv-guide__badge'), shownMood, still);
+  }, { scope: root, dependencies: [shownMood, still, guide.id], revertOnUpdate: true });
 
-  const badge = BADGE[mood];
+  // Lean toward the cursor from anywhere on the page. Written straight to the element: no re-render per move.
+  useEffect(() => {
+    if (!interactive || prefersReducedMotion() || !window.matchMedia('(pointer: fine)').matches) return;
+    const lean = gsap.quickTo(root.current, 'x', { duration: 0.5, ease: 'power3.out' });
+    const lift = gsap.quickTo(root.current, 'y', { duration: 0.5, ease: 'power3.out' });
+    const onMove = (e: PointerEvent) => {
+      const r = root.current?.getBoundingClientRect();
+      if (!r) return;
+      const dx = e.clientX - (r.left + r.width / 2);
+      const dy = e.clientY - (r.top + r.height / 2);
+      const d = Math.hypot(dx, dy) || 1;
+      const k = Math.min(1, d / 320) * Math.max(2, size * 0.06);
+      lean((dx / d) * k);
+      lift((dy / d) * k);
+    };
+    window.addEventListener('pointermove', onMove, { passive: true });
+    return () => window.removeEventListener('pointermove', onMove);
+  }, [interactive, size]);
+
+  useEffect(() => {
+    if (!poked) return;
+    const t = window.setTimeout(() => setPoked(false), 1300);
+    return () => window.clearTimeout(t);
+  }, [poked]);
+
+  const poke = () => { setPoked(true); onPoke?.(); };
+  const badge = BADGE[shownMood];
   return (
-    <span ref={root} className={`tv-guide is-${mood} ${frames ? 'has-frames' : ''} ${className}`}
-      style={{ '--guide-size': `${size}px` } as React.CSSProperties} role={label ? 'img' : undefined} aria-label={label}>
+    <span ref={root} className={`tv-guide is-${shownMood} ${frames ? 'has-frames' : ''} ${interactive ? 'is-interactive' : ''} ${className}`}
+      style={{ '--guide-size': `${size}px` } as React.CSSProperties}
+      {...(interactive
+        ? { role: 'button', tabIndex: 0, 'aria-label': label ?? `${guide.name}, say hi`, onClick: poke,
+            onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); poke(); } } }
+        : { role: label ? 'img' : undefined, 'aria-label': label })}>
       <span className="tv-guide__body">
         <img className="tv-guide__img" src={frames ? frames[frame] : guide.image} alt="" draggable={false} />
       </span>

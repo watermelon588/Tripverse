@@ -5,6 +5,7 @@
  * photographic hero and invert its ink; on scroll it resolves into the solid
  * bone bar used by the document-style heroes.
  */
+import { UserAvatar } from '../../guide/UserAvatar';
 import { useAuth } from '../../../context/AuthContext';
 import { LogoMark, MenuIcon, ArrowUpRightIcon } from './IconsV2';
 
@@ -100,7 +101,7 @@ export function NavbarV2({
               title={user.email ?? 'Account'}
             >
               <span className="tv-nav__avatar" aria-hidden="true">
-                {(user.email ?? 'T').slice(0, 1).toUpperCase()}
+                <UserAvatar avatarUrl={user.user_metadata?.avatar_url} seed={user.id ?? user.email} size={26} />
               </span>
               <span className="tv-nav__account-label">Account</span>
             </button>

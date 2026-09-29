@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { Companion } from './components/guide/Companion';
 import { RouteCurtain, type RouteCurtainHandle } from './components/common/RouteCurtain';
 import { HomeV2 } from './components/home/v2/HomeV2';
 import { useAuth } from './context/AuthContext';
@@ -194,6 +195,7 @@ export const App: React.FC = () => {
           />
         )}
       </React.Suspense>
+      <Companion view={view} />
     </div>
   );
 };
