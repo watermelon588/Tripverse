@@ -424,7 +424,7 @@ Building resumed on 2026-09-28 with Spatial S2. `[x]` = done and verified; `[ ]`
 - [x] Photos in the detail panels, Nearby, route strip, Journal timeline and map photo pins
 - [x] `<TripPhotoStrip>` for the chat preview card, plus the shared `useStopCoordinates` hook
 - [x] Mount the strip in `TripPreviewCard` (build-with-the-agent session, in Session 2)
-- [ ] Day covers in the studio's day rail (after Session 2)
+- [x] Day covers in the studio's day rail (Session 5/6 session, 2026-09-29, after the map session ended): `studio/dayCovers.ts` finds each day's first planned place (options skipped) near its base from `enrichment.places`, falling back to the city's photo. Each thumbnail's credit is in its hover title, with a "Photos: Wikimedia Commons" line under the list. Live: Fushimi Inari-taisha, Kinkaku-ji, and Osaka for a day with no places; an unlocated base gets no photo.
 - [x] Photos on trip library cards: a thumbnail per row and a credited cover in the detail panel, looked up by destination name (done 2026-09-28)
 
 **Spatial S2: "Around here"**

@@ -27,6 +27,9 @@ import { StudioPlan, dayDate, money } from './StudioPlan';
 import { TripConditions } from './TripConditions';
 import { ExportMenu } from './ExportMenu';
 import { AroundHere } from '../create/AroundHere';
+import { useDayCovers } from './dayCovers';
+import { creditLine } from '../../services/placeMedia';
+import '../../styles/day-covers.css';
 import '../../styles/trip-studio.css';
 
 const SpatialWorkspace = React.lazy(() => import('../create/SpatialWorkspace').then((module) => ({ default: module.SpatialWorkspace })));
@@ -113,6 +116,7 @@ export function TripStudio({
   const guide = guideById(trip.planning_preferences?.guide);
   const days = document?.days ?? [];
   const budget = document?.budget;
+  const covers = useDayCovers(document);
   // The selected day's base city, located by the enrichment: what "Around here" in Trip details centres on.
   const dayBase = days.find((entry) => entry.day === day)?.base;
   const nearby = dayBase ? document?.enrichment?.places?.find((place) => place.name === dayBase) : undefined;
@@ -264,7 +268,13 @@ export function TripStudio({
                   </li>
                   {days.map((entry) => (
                     <li key={entry.day}>
-                      <button type="button" aria-current={day === entry.day ? 'page' : undefined} onClick={() => onSelectDay(entry.day)}>
+                      <button type="button" aria-current={day === entry.day ? 'page' : undefined} onClick={() => onSelectDay(entry.day)}
+                        className={covers[entry.day] ? 'has-cover' : undefined}>
+                        {covers[entry.day] && <span className="tv-daycover">
+                          <img src={covers[entry.day].image} alt="" title={creditLine(covers[entry.day])} loading="lazy" decoding="async"
+                            onLoad={(event) => event.currentTarget.classList.add('is-loaded')}
+                            ref={(img) => { if (img?.complete && img.naturalWidth) img.classList.add('is-loaded'); }} />
+                        </span>}
                         <span className="tv-label">DAY {entry.day}{entry.date ? ` · ${dayDate(entry.date)?.toUpperCase()}` : ''}</span>
                         <strong>{entry.base}</strong>
                         <small>{entry.items.length ? `${entry.items.length} place${entry.items.length === 1 ? '' : 's'}` : 'Open day'}</small>
@@ -272,6 +282,9 @@ export function TripStudio({
                     </li>
                   ))}
                 </ol>
+                {Object.keys(covers).length > 0 && (
+                  <p className="tv-studio__days-credit">Photos: Wikimedia Commons. Hover a photo for its author and licence.</p>
+                )}
               </nav>
             </FloatingWindow>
           )}
