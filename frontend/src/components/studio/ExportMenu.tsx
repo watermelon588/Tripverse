@@ -17,8 +17,9 @@ import '../../styles/export-menu.css';
 
 interface Props {
   document: TripDocument | null;
-  /** One-click PDF, wired by the PDF export; the entry only shows when provided. */
-  pdf?: () => void;
+  /** One-click PDF, wired by the PDF export; the entry only shows when provided. The menu shows
+   *  "Preparing PDF…" until it settles, and a rejection's message as the status. */
+  pdf?: () => Promise<void>;
 }
 
 export function ExportMenu({ document: doc, pdf }: Props) {
@@ -92,7 +93,7 @@ export function ExportMenu({ document: doc, pdf }: Props) {
       </button>
       {open && (
         <div className="tv-export__panel" role="group" aria-label="Export this trip">
-          {pdf && <button type="button" disabled={disabled} onClick={pdf}><strong>PDF</strong><small>Every page, ready to print or share</small></button>}
+          {pdf && <button type="button" disabled={disabled} onClick={() => run('PDF', pdf)}><strong>PDF</strong><small>Every page, ready to print or share</small></button>}
           <button type="button" disabled={disabled || !ics} onClick={() => run('Calendar', async () => { download(`${base}.ics`, ics!, 'text/calendar'); })}>
             <strong>Calendar (.ics)</strong>
             <small>{ics ? 'Google, Apple or Outlook Calendar' : 'Add a start date to the trip brief to get a calendar'}</small>
