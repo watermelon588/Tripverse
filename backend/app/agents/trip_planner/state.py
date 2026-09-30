@@ -42,3 +42,8 @@ class TripPlanningState(TypedDict, total=False):
     currency: str | None
     budget_target: float | None
     focus_day: int | None
+    budget_amount: float | None  # a budget stated in chat, with its currency when clear
+    budget_currency: str | None
+    recent: list[dict[str, Any]] | None  # the last exchange, for resolving "it" and "yes"
+    known_places: list[str] | None  # a revision's previous day-plan names, reused by the extractor
+    changes: list[dict[str, Any]] | None  # this turn's receipt: what actually changed in the plan
