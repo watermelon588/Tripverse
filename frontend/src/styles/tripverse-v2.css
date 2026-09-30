@@ -28,8 +28,9 @@
   /* ---- Ink -------------------------------------------------------------- */
   --tv-ink: #111111;
   --tv-ink-soft: #2f3437;
-  --tv-muted: #787774;
-  --tv-faint: #9b9a97;
+  /* WCAG AA for small text (4.5:1) on every canvas and tint: muted 5.1–5.8:1, faint 4.5–4.9:1. */
+  --tv-muted: #666562;
+  --tv-faint: #72716e;
 
   /* ---- Structure -------------------------------------------------------- */
   --tv-line: #eaeaea;

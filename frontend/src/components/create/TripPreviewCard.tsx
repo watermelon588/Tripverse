@@ -43,7 +43,7 @@ export function TripPreviewCard({ tripId, destination, days, startDate, guideId,
       </div>
       <TripPhotoStrip graph={graph} destination={destination ?? undefined} tripId={tripId} onSelectStop={openStop} />
       <div className="tv-trip-card__actions">
-        <span>Plan, map and 3D view, all in one place with {guide.name}.</span>
+        <span>Plan, map and 3D view are in the studio. To change anything, just tell {guide.name}: it saves as you go.</span>
         <button type="button" className="tv-btn tv-btn--primary tv-btn--sm" onClick={() => onOpen(null)}>
           Open studio <span aria-hidden="true">→</span>
         </button>

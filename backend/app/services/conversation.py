@@ -23,7 +23,7 @@ from sqlalchemy import select
 
 from app.models.trip import ConversationMessage, ConversationSession
 from app.repositories.conversation import ConversationRepository
-from app.repositories.message import MessageRepository
+from app.repositories.message import TURN_ORDER, MessageRepository
 from app.repositories.trip import TripRepository
 from app.schemas.trip import (
     ConversationMessageListResponse,
@@ -61,16 +61,43 @@ def _start_date(preferences: dict | None) -> date | None:
         return None
 
 
-_CHANGE_WORDS = re.compile(r"\b(add|swap|move|replace|remove|change|include|skip|drop|make|switch|shift|put|"
-                           r"extend|shorten|cut|plan|rearrange|instead)\b", re.I)
+_EDIT = re.compile(r"\b(add|swap|move|replace|remove|delete|change|include|skip|drop|make|switch|shift|put|"
+                   r"extend|shorten|cut|rearrange|reorder|instead)\b", re.I)
+# A yes to an offer ("Want me to move it to day 1?"), or "it's final / save it / update the studio".
+_AGREE = re.compile(r"^\W*(yes|yeah|yep|yup|sure|ok(ay)?|please|do it|do that|go ahead|go for it|sounds good|"
+                    r"let'?s do (it|that)|perfect|great|confirm(ed)?|apply|finali[sz]e|lock it in|save it|"
+                    r"that'?s (final|it)|update (the )?(studio|plan|itinerary))\b", re.I)
+# "5 days", "a 10-day trip", "two weeks": a trip length. "day 5" is a day of the trip, not a length.
+_TRIP_LENGTH = re.compile(r"\b(\d+|a|one|two|three|four|five|six|seven|eight|nine|ten)\s*-?\s*(days?|nights?|weeks?)\b"
+                          r"|\bfortnight\b|\bmonth\b", re.I)
 
 
-def _is_question(message: str, intent: str | None) -> bool:
-    """Answer rather than rewrite the plan. The intent label comes from a small model (or the
-    fallback provider), so a question with no change verb is treated as a question either way."""
-    if intent in ("trip_question", "casual_conversation"):
-        return True
-    return message.strip().endswith("?") and not _CHANGE_WORDS.search(message)
+# Asking for advice ("should I…?", "is there anything you'd shift?") rather than for a change. "Can you…?",
+# "what if we…?", "how about…?" and "why not…?" are requests, so they aren't in here.
+_ADVICE = re.compile(r"^\W*(should|shall i|is(?! it possible)|are|does|do you think|which|where|when|what(?! if)|how(?! about)|why(?! not))\b",
+                     re.I)
+
+
+def _follow_up_mode(message: str, intent: str | None, offered: bool) -> str:
+    """What a message about an existing one-shot plan does: "revise" rewrites it, "answer" only replies.
+
+    An edit verb edits, whatever the intent label says (the label comes from a small model and often
+    calls "can you move X?" a question), unless the message asks for advice: that gets an answer with
+    one concrete offer, and a yes applies it. A yes edits only when your last reply offered a change;
+    with nothing pending, "finalize it" is answered: every change is already saved.
+    """
+    last = re.split(r"(?<=[.!])\s+", message.strip())[-1]
+    if _EDIT.search(message) and not (last.endswith("?") and _ADVICE.match(last)):
+        return "revise"
+    if _AGREE.match(message):
+        return "revise" if offered else "answer"
+    if intent in ("trip_question", "casual_conversation") or message.rstrip().endswith("?"):
+        return "answer"
+    return "revise"
+
+
+def _money(amount: float) -> str:
+    return f"{amount:,.0f}" if float(amount).is_integer() else f"{amount:,.2f}"
 
 
 class ConversationService:
@@ -109,19 +136,31 @@ class ConversationService:
             from app.services.budget import apply_agent_budget
             await apply_agent_budget(db, trip, copilot.get("budget"), copilot["currency"])
 
-    async def _latest_plan_text(self, db: AsyncSession, trip_id: uuid.UUID) -> str | None:
-        """The itinerary text the map currently shows, for revising it in place."""
+    async def _history(self, db: AsyncSession, trip_id: uuid.UUID) -> dict:
+        """What was said before this message, read before it's saved.
+
+        plan: the itinerary text the studio shows, for revising it in place. last_reply: your last
+        message when it wasn't that itinerary (an answer or an offer), so "yes" has something to point
+        at. recent: the last four messages, oldest first, for resolving "it" in build-with-agent turns.
+        """
         result = await db.execute(
             select(ConversationMessage)
             .join(ConversationSession, ConversationMessage.session_id == ConversationSession.id)
-            .where(ConversationSession.trip_id == trip_id, ConversationMessage.role == MessageRole.ASSISTANT)
-            .order_by(ConversationMessage.created_at.desc(), ConversationMessage.id.desc())
+            .where(ConversationSession.trip_id == trip_id)
+            .order_by(ConversationMessage.created_at.desc(), TURN_ORDER.desc())
         )
-        return next((message.content for message in result.scalars()
-                     if (message.payload or {}).get("kind") == "ITINERARY_GRAPH" and message.content), None)
+        rows = [message for message in result.scalars() if message.content]
+        is_plan = lambda message: (message.payload or {}).get("kind") == "ITINERARY_GRAPH"  # noqa: E731
+        last = next((message for message in rows if message.role == MessageRole.ASSISTANT), None)
+        return {
+            "plan": next((m.content for m in rows if m.role == MessageRole.ASSISTANT and is_plan(m)), None),
+            "last_reply": last.content if last and not is_plan(last) else None,
+            "recent": [{"role": "you" if m.role == MessageRole.ASSISTANT else "traveler",
+                        "text": " ".join(m.content.split())[:600]} for m in rows[:4]][::-1],
+        }
 
     async def _stream_copilot_turn(self, db: AsyncSession, trip, session, request: SendMessageRequest,
-                                   identity: Optional[RequestIdentity], context: dict):
+                                   identity: Optional[RequestIdentity], context: dict, recent: list[dict]):
         """One build-with-agent turn: live stages, then the map and day panel, then the reply as it's written."""
         import json
         from app.agents.trip_planner.copilot.graph import (
@@ -139,7 +178,7 @@ class ConversationService:
             "ui_action": request.payload if request.message_type == MessageType.UI_ACTION else None,
             "destination": trip.destination, "duration_days": trip.duration_days, "origin": trip.origin_text,
             "planning_preferences": trip.planning_preferences or {}, "places_to_visit": trip.places_to_visit or [],
-            "user_name": identity.user_name if identity else None, **context,
+            "user_name": identity.user_name if identity else None, "recent": recent, **context,
         }
         result: dict = {}
         async for kind, value in stream_build_with_agent(state):
@@ -175,7 +214,8 @@ class ConversationService:
         await self._persist_copilot(db, trip, {"copilot": copilot})
         assistant_msg = await self.message_repo.create_message(
             db, session_id=session.id, role=MessageRole.ASSISTANT, message_type=MessageType.TEXT,
-            content=text.strip(), payload=self._graph_payload({"itinerary_graph": graph, "copilot": copilot}),
+            content=text.strip(),
+            payload=self._graph_payload({"itinerary_graph": graph, "copilot": copilot, "changes": result.get("changes")}),
         )
         await db.commit()
         await db.refresh(trip)
@@ -189,7 +229,7 @@ class ConversationService:
         if not result.get("itinerary_graph"):
             return None
         payload = {"kind": "ITINERARY_GRAPH", "graph": result["itinerary_graph"]}
-        for key in ("copilot", "day_plan"):
+        for key in ("copilot", "day_plan", "changes"):
             if result.get(key):
                 payload[key] = result[key]
         return payload
@@ -393,6 +433,8 @@ class ConversationService:
 
         # 2. Get or create active session
         session = await self.conversation_repo.get_or_create_active_session(db, trip.id)
+        # Read before this message is saved: the plan to revise and the exchange "it" and "yes" refer to.
+        history = await self._history(db, trip.id) if trip.status != TripStatus.DRAFT else {}
 
         # 3. Save User message
         await self.message_repo.create_message(
@@ -415,7 +457,8 @@ class ConversationService:
         starting_build = ((request.payload or {}).get("action") == "START_BUILD_WITH_AGENT"
                           and trip.onboarding_status == OnboardingStatus.COMPLETE)
         if (copilot_context["copilot"] or starting_build) and not generating_full_draft:
-            async for event in self._stream_copilot_turn(db, trip, session, request, identity, copilot_context):
+            async for event in self._stream_copilot_turn(db, trip, session, request, identity, copilot_context,
+                                                         history.get("recent") or []):
                 yield event
             return
         if trip.status == TripStatus.DRAFT and not generating_full_draft:
@@ -519,7 +562,22 @@ class ConversationService:
         # intent-parsing call so the draft can enter the real token stream.
         basics_before = (trip.destination, trip.duration_days, trip.origin_text)
         understood_updates = {} if generating_full_draft else await understand_user_message(current_state)
+        message = request.content or ""
+        if history.get("plan") and understood_updates.get("duration_days") and not _TRIP_LENGTH.search(message):
+            # "Move X to day 2" read as a 2-day trip would cut the trip and redraft it from scratch.
+            understood_updates.pop("duration_days")
         current_state.update(understood_updates)
+
+        # What this turn changed, shown under the reply (a budget now; the day plan's diff after a revision).
+        changes: list[dict] = []
+        if understood_updates.get("budget_amount") and trip.onboarding_status == OnboardingStatus.COMPLETE:
+            from app.services.budget import apply_agent_budget
+            amount, currency = understood_updates["budget_amount"], understood_updates.get("budget_currency") or trip.currency
+            if await apply_agent_budget(db, trip, amount, currency):
+                changes.append({"status": "done", "text": f"Budget target set to {_money(amount)} {trip.currency}"})
+            else:
+                changes.append({"status": "skipped", "text": f"Kept the budget in {trip.currency}: costs are already "
+                                                             f"entered in {trip.currency}, and amounts are never converted"})
 
         if current_state.get("user_name") and identity and not identity.user_name:
             identity.user_name = current_state["user_name"]
@@ -538,8 +596,13 @@ class ConversationService:
         # A follow-up on an existing one-shot plan revises it (or answers) instead of starting over.
         previous_plan = None
         if is_complete and not generating_full_draft and basics_before == (trip.destination, trip.duration_days, trip.origin_text):
-            previous_plan = await self._latest_plan_text(db, trip.id)
-        answering = bool(previous_plan) and _is_question(request.content or "", understood_updates.get("intent"))
+            previous_plan = history.get("plan")
+        last_reply = history.get("last_reply")
+        mode = _follow_up_mode(message, understood_updates.get("intent"), offered="?" in (last_reply or "")) \
+            if previous_plan else "draft"
+        if mode == "revise" and changes and not _EDIT.search(message):
+            mode = "answer"  # a budget on its own is saved, not a reason to rewrite the plan
+        answering = mode == "answer"
 
         # 6. Emit metadata event immediately
         yield f"data: {json.dumps({'type': 'metadata', 'destination': trip.destination, 'duration_days': trip.duration_days, 'origin': trip.origin_text, 'onboarding_complete': is_complete, 'missing_fields': validation.get('missing_fields', []), 'user_name': current_state.get('user_name')})}\n\n"
@@ -575,8 +638,9 @@ class ConversationService:
             if previous_plan:
                 yield f"data: {json.dumps({'type': 'stage', 'label': 'Thinking about that' if answering else 'Updating your itinerary'})}\n\n"
                 plan_prompt = build_followup_prompt(
-                    previous_plan, request.content or "", trip.destination, trip.duration_days,
-                    trip.origin_text, trip.planning_preferences or {},
+                    previous_plan, message, trip.destination, trip.duration_days,
+                    trip.origin_text, trip.planning_preferences or {}, last_reply=last_reply,
+                    saved=[change["text"] for change in changes if change["status"] == "done"],
                 )
                 system_instruction = ANSWER_SYSTEM_INSTRUCTION if answering else REVISION_SYSTEM_INSTRUCTION
             else:
@@ -656,18 +720,31 @@ class ConversationService:
             logger.info("🔥 STREAM PLAN COMPLETED (mode=%s)", "answer" if answering else "revise" if previous_plan else "draft")
             if not answering:
                 # A final, evidence-backed graph before persisting keeps the map in sync with this reply.
-                from app.agents.trip_planner.nodes.extract_itinerary_node import extract_itinerary
+                from app.agents.trip_planner.nodes.extract_itinerary_node import day_plan_changes, extract_itinerary
+                from app.services.budget import latest_itinerary_payload
 
+                # The day plan the studio shows now: the extractor reuses its names, and the receipt diffs against it.
+                before = (await latest_itinerary_payload(db, trip.id) or {}).get("day_plan") if previous_plan else None
                 graph_result = await extract_itinerary({
                     **current_state,
                     "assistant_response": accumulated_text,
                     "candidates": candidates,
                     "places_to_visit": trip.places_to_visit or [],
+                    "known_places": [item["name"] for day in before or [] for item in day["items"]],
                 })
                 itinerary_graph = graph_result.get("itinerary_graph")
+                day_plan = graph_result.get("day_plan")
+                if previous_plan:
+                    if day_plan is None:
+                        # Extraction failed on a revision: keep the last good day plan rather than losing it.
+                        day_plan = before
+                        changes.append({"status": "skipped", "text": "Couldn't read the new day-by-day plan, so the "
+                                                                     "studio still shows the previous one. Try again?"})
+                    elif before:
+                        changes += day_plan_changes(before, day_plan) or [
+                            {"status": "skipped", "text": "The day-by-day plan didn't change"}]
                 if itinerary_graph:
-                    ui_action = {"kind": "ITINERARY_GRAPH", "graph": itinerary_graph,
-                                 "day_plan": graph_result.get("day_plan")}
+                    ui_action = {"kind": "ITINERARY_GRAPH", "graph": itinerary_graph, "day_plan": day_plan}
                     yield f"data: {json.dumps({'type': 'graph', 'graph': itinerary_graph, 'final': True})}\n\n"
         else:
             trip.onboarding_status = OnboardingStatus.IN_PROGRESS
@@ -692,6 +769,8 @@ class ConversationService:
 
         if not accumulated_text.strip():
             accumulated_text = "I'm ready to help plan your trip! Where are you thinking of going?"
+        if changes:
+            ui_action = {**(ui_action or {}), "changes": changes}
 
         # 8. Save assistant message and commit to database
         assistant_msg = await self.message_repo.create_message(

@@ -19,6 +19,12 @@ elif database_url.startswith("postgres://"):
 engine_kwargs = {"echo": False}
 if "sqlite" in database_url:
     engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    # The hosted database drops connections that sit idle, and the first request after a pause then failed
+    # with "connection is closed" (a 500 the browser reports as a CORS error). Checking a pooled connection
+    # before use replaces a dead one. ponytail: one ~200 ms ping per request; pool_recycle is free but only
+    # covers idle drops, so switch to it if the ping ever matters more than the rare stale connection.
+    engine_kwargs["pool_pre_ping"] = True
 
 engine = create_async_engine(database_url, **engine_kwargs)
 

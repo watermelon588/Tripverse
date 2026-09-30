@@ -58,6 +58,14 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = React.memo(
                   {children}
                 </a>
               ),
+              // Replies sit under the page's h1: their top headings are level 2 for screen readers, whatever
+              // the model wrote. Tags stay the same, so the styling doesn't change.
+              h1: ({ children }) => <h1 aria-level={2}>{children}</h1>,
+              h2: ({ children }) => <h2 aria-level={2}>{children}</h2>,
+              h3: ({ children }) => <h3 aria-level={2}>{children}</h3>,
+              h4: ({ children }) => <h4 aria-level={3}>{children}</h4>,
+              h5: ({ children }) => <h5 aria-level={3}>{children}</h5>,
+              h6: ({ children }) => <h6 aria-level={3}>{children}</h6>,
               table: ({ children }) => (
                 <div className="tv-md__table">
                   <table>{children}</table>

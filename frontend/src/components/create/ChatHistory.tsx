@@ -49,27 +49,20 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
             const active = s.id === activeSessionId;
             return (
               <li key={s.id}>
+                {/* The row is clickable for the mouse; keyboard and screen readers get the real button inside,
+                    with Delete as its sibling rather than nested in it. Its click bubbles to the row once. */}
                 <div
-                  role="button"
-                  tabIndex={0}
-                  aria-current={active ? 'true' : undefined}
                   className={`tv-hist__item ${active ? 'is-active' : ''}`}
                   onClick={() => onSelectSession(s.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onSelectSession(s.id);
-                    }
-                  }}
                 >
-                  <span className="tv-hist__text">
+                  <button type="button" className="tv-hist__text" aria-current={active ? 'true' : undefined}>
                     <span className="tv-hist__title">{s.title}</span>
                     {s.preview && <span className="tv-hist__preview">{s.preview}</span>}
                     <span className="tv-meta tv-hist__meta">
                       {s.timestamp}
                       {s.messageCount !== undefined && ` · ${s.messageCount} messages`}
                     </span>
-                  </span>
+                  </button>
 
                   {onDeleteSession && (
                     <button

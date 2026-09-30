@@ -9,7 +9,7 @@ import getStroke from 'perfect-freehand';
 
 import { DOODLES } from './doodles';
 import { hash } from './layout';
-import { PAGE, type Point, type SketchElement, type SketchPage, type Tone } from './types';
+import { type Point, type SketchElement, type SketchPage, type Tone } from './types';
 
 const gen = rough.generator();
 const INK = 'S', FILL = 'F'; // placeholders, swapped for theme tokens at render time
@@ -23,16 +23,22 @@ const FILL_TONE: Record<Tone, string> = {
 
 const seedOf = (id: string) => (hash(id) % 2147483646) + 1;
 
-/** Rough.js drawable → SVG paths, with the stroke/fill placeholders mapped to a tone. */
-function Rough({ drawable, tone, width = 2 }: { drawable: ReturnType<typeof gen.path>; tone: Tone; width?: number }) {
+/**
+ * Rough.js drawable → SVG paths, with the stroke/fill placeholders mapped to a tone.
+ * Outlines are tagged data-ink (the motion inks them stroke by stroke) and fills data-fill.
+ * toPaths drops strokeLineDash, so dashes are applied here.
+ */
+function Rough({ drawable, tone, width = 2, dash }: { drawable: ReturnType<typeof gen.path>; tone: Tone; width?: number; dash?: string }) {
   return (
     <>
       {gen.toPaths(drawable).map((info, index) => {
         const hachure = info.stroke === FILL;
         const solid = info.fill === FILL;
+        const outline = !hachure && !solid;
         return (
           <path key={index} d={info.d} fill={solid ? undefined : 'none'} strokeWidth={hachure ? 1.2 : width}
-            strokeLinecap="round" strokeLinejoin="round"
+            strokeLinecap="round" strokeLinejoin="round" strokeDasharray={outline ? dash : undefined}
+            data-ink={outline && !dash ? '' : undefined} data-fill={outline ? undefined : ''}
             style={{ stroke: solid ? 'none' : hachure ? FILL_TONE[tone] : TONE[tone], fill: solid ? FILL_TONE[tone] : undefined }} />
         );
       })}
@@ -74,18 +80,18 @@ function Element({ el }: { el: SketchElement }) {
     case 'highlight':
       return <Highlight el={el} />;
     case 'box':
-      return <Rough tone={el.tone} drawable={gen.rectangle(el.x, el.y, el.w, el.h, {
-        seed, roughness: 1.1, bowing: 1.5, stroke: INK, strokeLineDash: el.dashed ? [8, 8] : undefined,
+      return <Rough tone={el.tone} dash={el.dashed ? '9 8' : undefined} drawable={gen.rectangle(el.x, el.y, el.w, el.h, {
+        seed, roughness: 1.1, bowing: 1.5, stroke: INK, disableMultiStroke: el.dashed,
       })} />;
     case 'ellipse':
       return <Rough tone={el.tone} width={el.fill ? 2 : 2.4} drawable={gen.ellipse(el.cx, el.cy, el.w, el.h, {
         seed, roughness: 1.4, stroke: INK, fill: el.fill ? FILL : undefined, fillStyle: 'hachure', hachureGap: 7, hachureAngle: -41,
       })} />;
     case 'path': {
-      const options = { seed, roughness: 1, bowing: 2, stroke: INK, strokeLineDash: el.dashed ? [10, 9] : undefined };
+      const options = { seed, roughness: 1, bowing: 2, stroke: INK, disableMultiStroke: el.dashed };
       return (
         <g>
-          <Rough tone={el.tone} drawable={el.curve ? gen.curve(el.points, options) : gen.linearPath(el.points, options)} />
+          <Rough tone={el.tone} dash={el.dashed ? '10 9' : undefined} drawable={el.curve ? gen.curve(el.points, options) : gen.linearPath(el.points, options)} />
           {el.arrow && <Rough tone={el.tone} drawable={arrowHead(el.points, el.id)} />}
         </g>
       );
@@ -119,29 +125,44 @@ function Element({ el }: { el: SketchElement }) {
   }
 }
 
-export function SketchPageSvg({ page, className }: { page: SketchPage; className?: string }) {
-  const titleId = `sk-${page.id}-title`, descId = `sk-${page.id}-desc`;
+/** The guide's pen: tip at (0, 0), with the guide's portrait holding it. */
+function Pen({ image }: { image: string }) {
   return (
-    <svg className={className} viewBox={`0 0 ${PAGE.w} ${PAGE.h}`} role="img" aria-labelledby={`${titleId} ${descId}`}
-      preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
-      <title id={titleId}>{page.title}</title>
-      <desc id={descId}>{page.alt}</desc>
-      <defs>
-        <pattern id="sk-dots" width="24" height="24" patternUnits="userSpaceOnUse">
-          <circle cx="12" cy="12" r="1.1" className="tv-sketch__dot" />
-        </pattern>
-        <filter id="sk-grain" x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="noise" />
-          <feColorMatrix in="noise" type="saturate" values="0" />
-          <feComponentTransfer><feFuncA type="linear" slope="0.07" /></feComponentTransfer>
-        </filter>
-      </defs>
-      <rect width={PAGE.w} height={PAGE.h} className="tv-sketch__paper" />
-      <rect width={PAGE.w} height={PAGE.h} fill="url(#sk-dots)" />
-      <rect width={PAGE.w} height={PAGE.h} filter="url(#sk-grain)" className="tv-sketch__grain" />
-      <g className="tv-sketch__ink">
-        {page.elements.map((el) => <Element key={el.id} el={el} />)}
-      </g>
-    </svg>
+    <g className="tv-sketch__pen" opacity={0} aria-hidden="true">
+      <clipPath id="sk-pen-face"><circle cx={34} cy={-40} r={18} /></clipPath>
+      <path d="M0 0l4-13 17-17 9 9-17 17z M4-13l9 9" className="tv-sketch__pen-body" />
+      <circle cx={34} cy={-40} r={19} className="tv-sketch__pen-ring" />
+      <image href={image} x={16} y={-58} width={36} height={36} clipPath="url(#sk-pen-face)" preserveAspectRatio="xMidYMid slice" />
+    </g>
   );
 }
+
+export const SketchPageSvg = React.forwardRef<SVGSVGElement, { page: SketchPage; className?: string; penImage?: string }>(
+  function SketchPageSvg({ page, className, penImage }, ref) {
+    const titleId = `sk-${page.id}-title`, descId = `sk-${page.id}-desc`;
+    return (
+      <svg ref={ref} className={className} viewBox={`0 0 ${page.w} ${page.h}`} role="img" aria-labelledby={`${titleId} ${descId}`}
+        preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+        <title id={titleId}>{page.title}</title>
+        <desc id={descId}>{page.alt}</desc>
+        <defs>
+          <pattern id="sk-dots" width="24" height="24" patternUnits="userSpaceOnUse">
+            <circle cx="12" cy="12" r="1.1" className="tv-sketch__dot" />
+          </pattern>
+          <filter id="sk-grain" x="0" y="0" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="noise" />
+            <feColorMatrix in="noise" type="saturate" values="0" />
+            <feComponentTransfer><feFuncA type="linear" slope="0.07" /></feComponentTransfer>
+          </filter>
+        </defs>
+        <rect width={page.w} height={page.h} className="tv-sketch__paper" />
+        <rect width={page.w} height={page.h} fill="url(#sk-dots)" />
+        <rect width={page.w} height={page.h} filter="url(#sk-grain)" className="tv-sketch__grain" />
+        <g className="tv-sketch__ink">
+          {page.elements.map((el) => <g key={el.id} data-el={el.id} data-kind={el.kind}><Element el={el} /></g>)}
+        </g>
+        {penImage && <Pen image={penImage} />}
+      </svg>
+    );
+  },
+);

@@ -77,8 +77,12 @@ You are TripVerse, revising a traveler's itinerary while chatting with them.
   them ("Done: Fushimi Inari moves to the morning of day 2, and Okochi-Sanso takes its afternoon slot.").
 - Then give the complete updated itinerary in the same structure and formatting as the current one.
 - Apply the request faithfully. Keep every other day, base and activity as it was unless the change needs it.
+- If they agree to something you proposed in YOUR LAST MESSAGE ("yes", "do it", "go ahead", "finalize it"),
+  apply exactly that proposal.
 - If the request doesn't work (not enough time, too far, it clashes with their preferences), say so plainly
   and make the closest sensible change instead.
+- Every day stays in the same day-by-day format with its day number, so the change shows up in their Trip Studio.
+- The update is saved to their Trip Studio as soon as you finish: don't ask them to confirm or finalize it.
 - Never invent prices, schedules, availability or bookings; flag details to verify.
 - Markdown only: no raw HTML, no code fences. Never mention internal systems.
 """
@@ -86,7 +90,11 @@ You are TripVerse, revising a traveler's itinerary while chatting with them.
 ANSWER_SYSTEM_INSTRUCTION = """
 You are TripVerse, chatting with a traveler about the itinerary you planned together.
 Answer their message directly and naturally in 1-5 sentences, grounded in their itinerary where it helps.
-Don't rewrite or repeat the itinerary. If they seem to want a change, offer to make it ("Want me to swap it in?").
+Don't rewrite or repeat the itinerary. If they seem to want a change, offer one specific change as a yes/no
+question ("Want me to move Okochi-Sanso to day 1?"): a "yes" applies it.
+If JUST SAVED lists something, confirm it in a few words first.
+If they say the plan is final, or ask to save it or update the studio: every change is saved to their Trip Studio
+the moment it's made, so tell them it's already saved and they can open the studio to see it.
 Never invent prices, schedules or bookings. Markdown only, no headings. Never mention internal systems.
 """
 
@@ -98,13 +106,21 @@ def build_followup_prompt(
     duration_days: int | None,
     origin: str | None,
     planning_preferences: dict[str, Any] | None,
+    last_reply: str | None = None,
+    saved: list[str] | None = None,
 ) -> str:
-    """Prompt for revising or discussing an existing itinerary without re-researching the trip."""
+    """Prompt for revising or discussing an existing itinerary without re-researching the trip.
+
+    last_reply: your previous message when it wasn't the itinerary itself (an answer or an offer),
+    so "yes" and "do that" have something to point at. saved: what this turn already stored.
+    """
     return (
         f"TRIP: {duration_days} days in {destination}, travelling from {origin or 'not specified'}\n"
         f"PREFERENCES: {json.dumps(planning_preferences or {}, ensure_ascii=False)}\n\n"
         f"CURRENT ITINERARY:\n{previous_plan[:16000]}\n\n"
-        f"TRAVELER'S MESSAGE:\n{message}"
+        + (f"YOUR LAST MESSAGE:\n{last_reply[:3000]}\n\n" if last_reply else "")
+        + (f"JUST SAVED: {'; '.join(saved)}\n\n" if saved else "")
+        + f"TRAVELER'S MESSAGE:\n{message}"
     )
 
 

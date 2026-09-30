@@ -1,10 +1,14 @@
 import uuid
 from typing import List, Optional
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import MessageRole, MessageType
-from app.models.trip import ConversationMessage
+from app.models.trip import ConversationMessage, utc_now
+
+# Within one timestamp your message comes before the reply. Rows written in one flush could share a
+# timestamp (a coarse clock), and reloading the chat then showed some replies above their question.
+TURN_ORDER = case((ConversationMessage.role == MessageRole.USER, 0), else_=1)
 
 
 class MessageRepository:
@@ -26,6 +30,7 @@ class MessageRepository:
             message_type=message_type,
             content=content,
             payload=payload,
+            created_at=utc_now(),  # when it was said, not when the turn's single flush ran
         )
         db.add(msg)
         return msg
@@ -37,7 +42,7 @@ class MessageRepository:
         stmt = (
             select(ConversationMessage)
             .where(ConversationMessage.session_id == session_id)
-            .order_by(ConversationMessage.created_at.asc())
+            .order_by(ConversationMessage.created_at.asc(), TURN_ORDER)
         )
         result = await db.execute(stmt)
         return list(result.scalars().all())

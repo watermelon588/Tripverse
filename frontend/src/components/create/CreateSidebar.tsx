@@ -4,6 +4,7 @@
  * Brand, a new-trip action, the active trip, past sessions, and account
  * links. Resizable by drag on desktop; an overlay drawer below 1024px.
  */
+import { UserAvatar } from '../guide/UserAvatar';
 import React, { useRef } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
@@ -106,6 +107,8 @@ export const CreateSidebar: React.FC<CreateSidebarProps> = ({
         className={`tv-side ${isOpen ? 'is-open' : ''}`}
         aria-label="Trip planning sidebar"
         aria-hidden={!isOpen}
+        // A closed drawer stays in the DOM on small screens; inert keeps its buttons out of the tab order.
+        {...(isOpen ? {} : { inert: '' })}
       >
         <div className="tv-side__head tv-side__stagger">
           <button type="button" onClick={onNavigateHome} aria-label="TripVerse home">
@@ -147,7 +150,7 @@ export const CreateSidebar: React.FC<CreateSidebarProps> = ({
           {onNavigateProfile && (
             <button type="button" className="tv-side__account" onClick={onNavigateProfile}>
               <span className="tv-msg2__you">
-                {avatarUrl ? <img src={avatarUrl} alt="" /> : (user?.email ?? 'G').slice(0, 1).toUpperCase()}
+                <UserAvatar avatarUrl={avatarUrl} seed={user?.id ?? user?.email ?? 'guest'} size={34} />
               </span>
               <span className="tv-side__account-text">
                 <span className="tv-side__account-name">{user ? 'Account' : 'Guest'}</span>
@@ -160,7 +163,7 @@ export const CreateSidebar: React.FC<CreateSidebarProps> = ({
           {onNavigateExplore && (
             <button type="button" className="tv-btn tv-btn--ghost tv-btn--sm" style={{ width: '100%' }} onClick={onNavigateExplore}>
               <CompassIcon width={14} height={14} />
-              <span>Explore routes</span>
+              <span>Explore destinations</span>
             </button>
           )}
           <button type="button" className="tv-btn tv-btn--ghost tv-btn--sm" style={{ width: '100%' }} onClick={openGuide}>

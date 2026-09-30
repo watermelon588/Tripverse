@@ -10,6 +10,7 @@ import type { CopilotOp, CopilotState } from '../components/create/CopilotPanel'
 import type { OnboardingValues } from '../components/create/TripOnboardingForm';
 import { graphFromLegacyText, type ItineraryGraph } from '../components/create/itineraryGraph';
 import { TripPreviewCard } from '../components/create/TripPreviewCard';
+import { withCopilot } from '../components/sketch/live';
 import { TripStudio } from '../components/studio/TripStudio';
 import { prefersReducedMotion } from '../components/home/v2/motion';
 import { useTheme } from '../context/ThemeContext';
@@ -54,6 +55,19 @@ function sessionItem(trip: TripModelResponse): ChatSessionItem {
   };
 }
 
+
+// The last studio document, so reopening a trip paints at once while the fresh one loads
+// (the document takes 1-3 s against the remote database). One entry, so it never grows.
+const STUDIO_DOC_KEY = 'tripverse-studio-doc';
+function cachedStudioDoc(tripId: string): TripDocument | null {
+  try {
+    const doc = JSON.parse(localStorage.getItem(STUDIO_DOC_KEY) || 'null') as TripDocument | null;
+    return doc?.trip_id === tripId ? doc : null;
+  } catch {
+    return null;
+  }
+}
+
 export const CreateTrip: React.FC<CreateTripProps> = ({
   onNavigateHome, onNavigateExplore, onNavigateProfile,
 }) => {
@@ -64,7 +78,8 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
   const [tripsMap, setTripsMap] = useState<Record<string, TripModelResponse>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadingStage, setLoadingStage] = useState('Preparing your trip');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  // Below 1024 px the sidebar is a drawer over the chat, so it starts closed there.
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [studioOpen, setStudioOpen] = useState(() => studioTripFromPath() !== null);
   const [studioDay, setStudioDay] = useState<number | null>(null);
@@ -155,7 +170,9 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
     const tripId = activeSessionId ? tripsMap[activeSessionId]?.id : undefined;
     if (!tripId) return;
     const card = document.querySelector('.tv-chat [data-flip-id="trip-stage"]');
-    if (card && !prefersReducedMotion()) studioFlip.current = Flip.getState(card);
+    const box = card?.getBoundingClientRect();
+    // The card sits where the plan was made, so it may be scrolled away: morph only from a card on screen.
+    if (card && box && box.bottom > 0 && box.top < window.innerHeight && !prefersReducedMotion()) studioFlip.current = Flip.getState(card);
     setStudioDay(day);
     setIsBudgetOpen(false);
     setStudioOpen(true);
@@ -377,6 +394,15 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
       : null;
   }, [activeMessages, activeTrip, backfilledGraphs]);
 
+  // The studio document, with the agent's streamed plan folded in so the sketch updates mid-reply.
+  const liveDoc = useMemo(
+    () => {
+      if (!activeTrip) return null;
+      const doc = studioDoc?.trip_id === activeTrip.id ? studioDoc : cachedStudioDoc(activeTrip.id);
+      return doc ? withCopilot(doc, activeCopilot) : null;
+    },
+    [activeTrip, studioDoc, activeCopilot],
+  );
   const planned = Boolean(activeTrip && activeTrip.onboarding_status === 'COMPLETE' && activeTrip.status !== 'DRAFT' && activeGraph);
   useEffect(() => {
     if (studioOpen && !planned && !isLoading && activeTrip) closeStudio();
@@ -384,7 +410,11 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
   useEffect(() => {
     if (!studioOpen || !activeTrip || isLoading) return;
     let alive = true;
-    void getTripDocument(activeTrip.id).then((doc) => { if (alive) setStudioDoc(doc); })
+    void getTripDocument(activeTrip.id).then((doc) => {
+      if (!alive) return;
+      setStudioDoc(doc);
+      try { localStorage.setItem(STUDIO_DOC_KEY, JSON.stringify(doc)); } catch { /* cache only */ }
+    })
       .catch((error) => console.warn('Could not load the trip document', error));
     return () => { alive = false; };
   }, [studioOpen, activeTrip?.id, isLoading, budgetRevision, activeMessages.length]);
@@ -412,6 +442,7 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
     onSelectPrompt: (prompt: string) => { void sendMessage(prompt); },
     isLoading,
     loadingStage,
+    guideId: activeTrip?.planning_preferences?.guide,
     onResetChat: () => { void startNewTrip(); },
     onboardingValues: formMessage ? onboardingValues : null,
     showComposer: !formMessage && !showPlanningChoice,
@@ -440,6 +471,18 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
         + (values.places_to_visit.length ? ', visiting ' + values.places_to_visit.join(', ') : '');
       void sendMessage(summary, undefined, values);
     },
+  };
+
+  // "Add to day N" from Around here. Build-with-the-agent trips take a structured add (budget and day
+  // checks run in the engine); one-shot plans get the same request as a chat message, which revises the draft.
+  const addPlace = (name: string, day: number | null) => {
+    if (activeCopilot) {
+      const target = day ?? copilotDay ?? activeCopilot.current_day;
+      void sendMessage(`Add ${name} to day ${target}`, undefined, undefined,
+        { action: 'COPILOT_OPS', ops: [{ op: 'add', name, day: target }], copilot_day: target });
+    } else {
+      void sendMessage(day ? `Please add ${name} to day ${day}.` : `Please add ${name} to the plan.`);
+    }
   };
 
   return (
@@ -472,9 +515,10 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
       />
       {studioOpen && planned && activeTrip && (
         <TripStudio trip={activeTrip} tripContext={tripContext(activeTrip)} graph={activeGraph}
-          document={studioDoc?.trip_id === activeTrip.id ? studioDoc : null} dark={theme === 'dark'}
+          document={liveDoc} dark={theme === 'dark'}
           isLoading={isLoading} loadingStage={loadingStage} day={studioDay} onSelectDay={setStudioDay}
           onBack={() => closeStudio()} onOpenBudget={() => setIsBudgetOpen(true)}
+          onAddPlace={isLoading ? undefined : addPlace}
           chat={<ChatWorkspace key={`drawer-${activeSessionId}`} {...chatProps} variant="drawer" />} />
       )}
       {isBudgetOpen && activeTrip && <React.Suspense fallback={null}>

@@ -361,7 +361,7 @@ button.tv-photostrip__tile:active { transform: scale(.97); }
 button.tv-photostrip__tile:focus-visible { outline: 2px solid var(--tv-ink); outline-offset: 2px; }
 @media (hover: hover) and (pointer: fine) { button.tv-photostrip__tile:hover img.is-loaded { transform: scale(1.04); } }
 .tv-photostrip__credit { margin: .3rem .1rem 0; font: .5rem/1.3 var(--tv-mono); color: var(--tv-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tv-photostrip__credit a { color: inherit; text-decoration: none; }
+.tv-photostrip__credit a { display: block; overflow: hidden; line-height: 24px; color: inherit; text-decoration: none; text-overflow: ellipsis; } /* 24 px tap target (WCAG 2.2) */
 .tv-photostrip__credit a:hover { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) { .tv-photostrip__tile img { transform: none; transition: opacity .2s ease; } }
 
@@ -493,3 +493,16 @@ button.tv-photostrip__tile:focus-visible { outline: 2px solid var(--tv-ink); out
 @keyframes tv-sv-enter { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes tv-sv-rise { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes tv-sv-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* The guide inside the spatial views: a corner portrait, a face on the open stop, a walker on the open leg. */
+.tv-sv__guide { position: absolute; z-index: 5; left: .9rem; bottom: .9rem; display: flex; align-items: flex-end; }
+.tv-sv.is-atlas .tv-sv__guide { bottom: 7.4rem; }
+.tv-sv__guide .tv-guide__body { background: var(--tv-surface, #fff); box-shadow: 0 4px 14px rgba(0, 0, 0, .18); }
+.tv-sv__say { left: 0; bottom: calc(100% + .5rem); width: max-content; }
+.tv-g3__guide { display: block; width: 34px; height: 34px; border: 2px solid #fff; border-radius: 50%; background: #fff; object-fit: cover; box-shadow: 0 3px 12px rgba(0, 0, 0, .35); user-select: none; }
+.tv-g3__guide.is-bounce { animation: tv-g3-bounce 1.6s ease-in-out infinite; }
+.tv-g3__guide.is-walking { width: 30px; height: 30px; animation: tv-g3-bounce .7s ease-in-out infinite; }
+@keyframes tv-g3-bounce { 50% { transform: translateY(-5px); } }
+.tv-gm__guide { position: absolute; transform: translate(-50%, calc(-100% - 20px)); padding: 0; border: 0; background: none; pointer-events: none; }
+.tv-gm__guide img { display: block; width: 40px; height: 40px; border: 2px solid #fff; border-radius: 50%; object-fit: cover; box-shadow: 0 3px 12px rgba(0, 0, 0, .35); animation: tv-g3-bounce 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .tv-g3__guide, .tv-gm__guide img { animation: none !important; } }

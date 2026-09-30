@@ -26,6 +26,10 @@ import { EASE, prefersReducedMotion } from '../home/v2/motion';
 import { StudioPlan, dayDate, money } from './StudioPlan';
 import { TripConditions } from './TripConditions';
 import { ExportMenu } from './ExportMenu';
+import { AroundHere } from '../create/AroundHere';
+import { useDayCovers } from './dayCovers';
+import { creditLine, sizedImage } from '../../services/placeMedia';
+import '../../styles/day-covers.css';
 import '../../styles/trip-studio.css';
 
 const SpatialWorkspace = React.lazy(() => import('../create/SpatialWorkspace').then((module) => ({ default: module.SpatialWorkspace })));
@@ -92,11 +96,13 @@ interface Props {
   onSelectDay: (day: number | null) => void;
   onBack: () => void;
   onOpenBudget: () => void;
+  /** "Add to day N" in Around here; left out while a reply is streaming, which hides the button. */
+  onAddPlace?: (name: string, day: number | null) => void;
   chat: React.ReactNode;
 }
 
 export function TripStudio({
-  trip, tripContext, graph, document, dark, isLoading, loadingStage, day, onSelectDay, onBack, onOpenBudget, chat,
+  trip, tripContext, graph, document, dark, isLoading, loadingStage, day, onSelectDay, onBack, onOpenBudget, onAddPlace, chat,
 }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -110,6 +116,10 @@ export function TripStudio({
   const guide = guideById(trip.planning_preferences?.guide);
   const days = document?.days ?? [];
   const budget = document?.budget;
+  const covers = useDayCovers(document);
+  // The selected day's base city, located by the enrichment: what "Around here" in Trip details centres on.
+  const dayBase = days.find((entry) => entry.day === day)?.base;
+  const nearby = dayBase ? document?.enrichment?.places?.find((place) => place.name === dayBase) : undefined;
   // The brief is on the trip from the start; the document arrives a moment later.
   const prefs = trip.planning_preferences;
   const people = (prefs?.adults ?? document?.travelers.adults ?? 1) + (prefs?.children ?? document?.travelers.children ?? 0);
@@ -191,7 +201,8 @@ export function TripStudio({
         {isLoading && <span className="tv-studio__live" role="status"><i aria-hidden="true" />{guide.name}: {loadingStage}</span>}
         <ThemeToggle />
         <button type="button" className="tv-btn tv-btn--ghost tv-btn--sm" onClick={onOpenBudget}>Budget</button>
-        <ExportMenu document={document} />
+        <ExportMenu document={document}
+          pdf={document ? () => import('../../lib/exporters/pdf').then(({ tripPdf }) => tripPdf(document, guide)) : undefined} />
       </header>
 
       <main className="tv-studio__stage" data-flip-id="trip-stage">
@@ -234,14 +245,14 @@ export function TripStudio({
                 : tab === 'plan' ? <StudioPlan document={document} day={day} onSelectDay={onSelectDay} />
                   : (
                     <React.Suspense fallback={<p className="tv-plan__empty">Loading the sketchbook…</p>}>
-                      <SketchbookView document={document} day={day} onSelectDay={onSelectDay} />
+                      <SketchbookView document={document} day={day} onSelectDay={onSelectDay} guide={guide} busy={isLoading} stage={loadingStage} />
                     </React.Suspense>
                   )
             ) : (
               <React.Suspense fallback={<p className="tv-plan__empty">Loading the {tab === 'map' ? 'map' : '3D view'}…</p>}>
-                <SpatialWorkspace isOpen embedded mode={tab} onModeChange={(mode) => pickTab(mode)}
+                <SpatialWorkspace isOpen embedded guide={guide} mode={tab} onModeChange={(mode) => pickTab(mode)}
                   selectedDay={day} onSelectDay={onSelectDay} trip={tripContext} tripId={trip.id}
-                  graph={graph} preferences={trip.planning_preferences} dark={dark} />
+                  graph={graph} preferences={trip.planning_preferences} dark={dark} onAddPlace={onAddPlace} weather={document?.enrichment?.weather} />
               </React.Suspense>
             )}
           </div>
@@ -257,7 +268,13 @@ export function TripStudio({
                   </li>
                   {days.map((entry) => (
                     <li key={entry.day}>
-                      <button type="button" aria-current={day === entry.day ? 'page' : undefined} onClick={() => onSelectDay(entry.day)}>
+                      <button type="button" aria-current={day === entry.day ? 'page' : undefined} onClick={() => onSelectDay(entry.day)}
+                        className={covers[entry.day] ? 'has-cover' : undefined}>
+                        {covers[entry.day] && <span className="tv-daycover">
+                          <img src={sizedImage(covers[entry.day].image, 120)} alt="" title={creditLine(covers[entry.day])} loading="lazy" decoding="async"
+                            onLoad={(event) => event.currentTarget.classList.add('is-loaded')}
+                            ref={(img) => { if (img?.complete && img.naturalWidth) img.classList.add('is-loaded'); }} />
+                        </span>}
                         <span className="tv-label">DAY {entry.day}{entry.date ? ` · ${dayDate(entry.date)?.toUpperCase()}` : ''}</span>
                         <strong>{entry.base}</strong>
                         <small>{entry.items.length ? `${entry.items.length} place${entry.items.length === 1 ? '' : 's'}` : 'Open day'}</small>
@@ -265,6 +282,9 @@ export function TripStudio({
                     </li>
                   ))}
                 </ol>
+                {Object.keys(covers).length > 0 && (
+                  <p className="tv-studio__days-credit">Photos: Wikimedia Commons. Hover a photo for its author and licence.</p>
+                )}
               </nav>
             </FloatingWindow>
           )}
@@ -294,6 +314,12 @@ export function TripStudio({
                   </section>
                 )}
                 {document && <TripConditions enrichment={document.enrichment} selectedDay={day} onSelectDay={onSelectDay} />}
+                {nearby && (
+                  <section className="tv-studio__card">
+                    <span className="tv-label">DAY {day} · {nearby.name.toUpperCase()}</span>
+                    <AroundHere lat={nearby.lat} lon={nearby.lon} day={day} onAddPlace={onAddPlace} />
+                  </section>
+                )}
                 {!budget && !document && <p className="tv-plan__empty">Loading trip details…</p>}
               </div>
             </FloatingWindow>

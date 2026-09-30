@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { GUIDES, DEFAULT_GUIDE } from '../guide/guides';
 
 type Pace = 'relaxed' | 'balanced' | 'packed';
@@ -31,7 +31,17 @@ interface Props {
   initial?: Partial<OnboardingValues>;
   disabled?: boolean;
   onSubmit: (values: OnboardingValues) => void;
+  /** Every section on one page: for editing a brief that is already filled in. */
+  allAtOnce?: boolean;
 }
+
+/** One small question at a time. Only the first step has required fields; the rest can be skipped. */
+const STEPS = [
+  { title: 'Where are you going, and for how long?', note: 'From, to and the number of days are all I need to start.' },
+  { title: 'Who’s coming, and what’s the budget?', note: 'Optional. Skip it and I’ll plan for one adult, mid-range.' },
+  { title: 'How do you like to travel?', note: 'Optional. It sets the pace and what I pick for you.' },
+  { title: 'Who should guide you?', note: 'Your guide sketches the trip and chats with you along the way.' },
+];
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -42,7 +52,7 @@ function returnLabel(start: string, days: number): string {
   return end.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
-export const TripOnboardingForm: React.FC<Props> = ({ initial, disabled, onSubmit }) => {
+export const TripOnboardingForm: React.FC<Props> = ({ initial, disabled, onSubmit, allAtOnce = false }) => {
   const prefs = initial?.planning_preferences;
   const [origin, setOrigin] = useState(initial?.origin || '');
   const [destination, setDestination] = useState(initial?.destination || '');
@@ -61,37 +71,52 @@ export const TripOnboardingForm: React.FC<Props> = ({ initial, disabled, onSubmi
   const [avoid, setAvoid] = useState((prefs?.avoid || []).join(', '));
   const [guide, setGuide] = useState(prefs?.guide || DEFAULT_GUIDE.id);
   const [error, setError] = useState('');
+  const [step, setStep] = useState(0);
+  const last = step === STEPS.length - 1;
+  const heading = useRef<HTMLHeadingElement>(null);
+  const moved = useRef(false);
+  // A new step announces itself and puts the keyboard at its top (not on first render: the chat keeps focus).
+  useEffect(() => {
+    if (moved.current) heading.current?.focus();
+    moved.current = true;
+  }, [step]);
 
   const duration = Number(days);
   const returning = returnLabel(startDate, duration);
+  const list = (value: string) => [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))];
+  const requested = list(places);
+  const selectedInterests = list(interests);
+  const selectedAvoid = list(avoid);
+  const adultCount = Number(adults);
+  const childCount = Number(children);
+  const budgetAmount = budget.trim() ? Number(budget) : null;
 
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!origin.trim() || !destination.trim() || !Number.isInteger(duration) || duration < 1 || duration > 365) return;
-    const requested = [...new Set(places.split(',').map((place) => place.trim()).filter(Boolean))];
-    if (requested.length > 20 || requested.some((place) => place.length > 255)) {
-      setError('Add up to 20 places, with each name under 255 characters.');
-      return;
+  /** The first problem in steps 0..upTo, with the step it lives on, so "Skip the rest" can send you back to it. */
+  const problem = (upTo: number): { step: number; message: string } | null => {
+    const checks: [boolean, string][][] = [
+      [[!origin.trim() || !destination.trim() || !Number.isInteger(duration) || duration < 1 || duration > 365,
+        'Add where you’re travelling from, where to, and how many days (1–365).'],
+      [requested.length > 20 || requested.some((place) => place.length > 255),
+        'Add up to 20 places, with each name under 255 characters.']],
+      [[!Number.isInteger(adultCount) || adultCount < 1 || adultCount > 20 || !Number.isInteger(childCount) || childCount < 0 || childCount > 20,
+        'Travelers: 1–20 adults and 0–20 children.'],
+      [budgetAmount !== null && !(budgetAmount > 0), 'Budget must be a positive amount, or leave it empty.']],
+      [[[selectedInterests, selectedAvoid].some((items) => items.length > 3 || items.some((item) => item.length > 80)),
+        'Add up to 3 interests and 3 things to avoid, each under 80 characters.']],
+    ];
+    for (const [index, group] of checks.slice(0, upTo + 1).entries()) {
+      const failed = group.find(([bad]) => bad);
+      if (failed) return { step: index, message: failed[1] };
     }
-    const splitPreferences = (value: string) => [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))];
-    const selectedInterests = splitPreferences(interests);
-    const selectedAvoid = splitPreferences(avoid);
-    if ([selectedInterests, selectedAvoid].some((items) => items.length > 3 || items.some((item) => item.length > 80))) {
-      setError('Add up to 3 interests and 3 things to avoid, each under 80 characters.');
-      return;
-    }
-    const adultCount = Number(adults);
-    const childCount = Number(children);
-    if (!Number.isInteger(adultCount) || adultCount < 1 || adultCount > 20 || !Number.isInteger(childCount) || childCount < 0 || childCount > 20) {
-      setError('Travelers: 1–20 adults and 0–20 children.');
-      return;
-    }
-    const budgetAmount = budget.trim() ? Number(budget) : null;
-    if (budgetAmount !== null && !(budgetAmount > 0)) {
-      setError('Budget must be a positive amount, or leave it empty.');
-      return;
-    }
-    setError('');
+    return null;
+  };
+
+  /** Next on a step checks that step and moves on; the last step, Skip and the one-page form send the brief. */
+  const go = (finish: boolean) => {
+    const found = problem(finish ? STEPS.length - 1 : step);
+    setError(found?.message ?? '');
+    if (found) { setStep(found.step); return; }
+    if (!finish) { setStep(step + 1); return; }
     onSubmit({
       origin: origin.trim(),
       destination: destination.trim(),
@@ -107,15 +132,8 @@ export const TripOnboardingForm: React.FC<Props> = ({ initial, disabled, onSubmi
     });
   };
 
-  return (
-    <form className="tv-onboarding" onSubmit={submit} aria-label="Start your journey">
-      <div className="tv-onboarding__heading">
-        <span className="tv-label">YOUR JOURNEY</span>
-        <h2>Start with the places that matter to you.</h2>
-        <p>The route and days are all I need. Everything else helps me plan closer to how you travel.</p>
-      </div>
-
-      <fieldset className="tv-onboarding__section">
+  const sections = [
+      <fieldset className="tv-onboarding__section" key="where">
         <legend>Where and when</legend>
         <div className="tv-onboarding__grid">
           <label>Travelling from <input className="tv-input" required maxLength={255} autoComplete="address-level2" placeholder="e.g. Kolkata" value={origin} onChange={(e) => setOrigin(e.target.value)} disabled={disabled} /></label>
@@ -127,9 +145,9 @@ export const TripOnboardingForm: React.FC<Props> = ({ initial, disabled, onSubmi
             <small>{returning ? `Back on ${returning}.` : 'Unlocks weather, holidays and calendar export.'}</small>
           </label>
         </div>
-      </fieldset>
+      </fieldset>,
 
-      <fieldset className="tv-onboarding__section">
+      <fieldset className="tv-onboarding__section" key="who">
         <legend>Who's coming and the budget</legend>
         <div className="tv-onboarding__grid tv-onboarding__grid--3">
           <label>Adults <input className="tv-input" type="number" min="1" max="20" inputMode="numeric" value={adults} onChange={(e) => setAdults(e.target.value)} disabled={disabled} /></label>
@@ -157,9 +175,9 @@ export const TripOnboardingForm: React.FC<Props> = ({ initial, disabled, onSubmi
             <small>For “≈” conversions of local prices.</small>
           </label>
         </div>
-      </fieldset>
+      </fieldset>,
 
-      <fieldset className="tv-onboarding__section">
+      <fieldset className="tv-onboarding__section" key="how">
         <legend>How do you like to travel? <span>(optional)</span></legend>
         <div className="tv-onboarding__grid">
           <label>Daily pace
@@ -186,9 +204,9 @@ export const TripOnboardingForm: React.FC<Props> = ({ initial, disabled, onSubmi
             <small>Up to 3, separated by commas.</small>
           </label>
         </div>
-      </fieldset>
+      </fieldset>,
 
-      <fieldset className="tv-onboarding__section">
+      <fieldset className="tv-onboarding__section" key="guide">
         <legend>Pick your guide</legend>
         <div className="tv-onboarding__guides" role="radiogroup" aria-label="Guide character">
           {GUIDES.map((entry) => (
@@ -203,10 +221,41 @@ export const TripOnboardingForm: React.FC<Props> = ({ initial, disabled, onSubmi
         <p className="tv-onboarding__guide-line" aria-live="polite">
           {GUIDES.find((entry) => entry.id === guide)?.line}
         </p>
-      </fieldset>
+      </fieldset>,
+  ];
+
+  return (
+    <form className={`tv-onboarding ${allAtOnce ? '' : 'tv-onboarding--steps'}`} aria-label="Your trip brief"
+      onSubmit={(event) => { event.preventDefault(); go(allAtOnce || last); }}>
+      {allAtOnce ? (
+        <div className="tv-onboarding__heading">
+          <h2>Your trip details</h2>
+          <p>The route and days are all I need. Everything else helps me plan closer to how you travel.</p>
+        </div>
+      ) : (
+        <div className="tv-onboarding__heading">
+          <p className="tv-onboarding__progress">
+            <span aria-hidden="true">{STEPS.map((entry, index) => <i key={entry.title} className={index <= step ? 'is-done' : ''} />)}</span>
+            Step {step + 1} of {STEPS.length}
+          </p>
+          <h2 ref={heading} tabIndex={-1}>{STEPS[step].title}</h2>
+          <p>{STEPS[step].note}</p>
+        </div>
+      )}
+
+      {allAtOnce ? sections : sections[step]}
 
       {error && <p role="alert" className="tv-field__error">{error}</p>}
-      <button type="submit" className="tv-btn tv-btn--primary" disabled={disabled}>Continue to planning options</button>
+      {allAtOnce ? (
+        <button type="submit" className="tv-btn tv-btn--primary" disabled={disabled}>Continue to planning options</button>
+      ) : (
+        <div className="tv-onboarding__nav">
+          {step > 0 && <button type="button" className="tv-btn tv-btn--ghost" disabled={disabled} onClick={() => { setError(''); setStep(step - 1); }}>Back</button>}
+          {/* Skip is not a submit button, so Enter in a field always means Next. */}
+          {!last && <button type="button" className="tv-onboarding__skip" disabled={disabled} onClick={() => go(true)}>Skip the rest</button>}
+          <button type="submit" className="tv-btn tv-btn--primary" disabled={disabled}>{last ? 'Continue to planning options' : 'Next'}</button>
+        </div>
+      )}
     </form>
   );
 };

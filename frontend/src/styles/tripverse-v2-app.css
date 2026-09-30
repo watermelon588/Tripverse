@@ -29,7 +29,7 @@
   --tv-ink: #f4f3f1;
   --tv-ink-soft: #e2e0dc;
   --tv-muted: #9a9894;
-  --tv-faint: #6f6d69;
+  --tv-faint: #86847f; /* 4.6–5.0:1 on the dark canvases (WCAG AA small text) */
 
   --tv-line: #2a2a2a;
   --tv-line-soft: rgba(255, 255, 255, 0.07);
@@ -668,6 +668,10 @@
   max-width: 34ch;
 }
 
+/* Beside the title once a plan exists: there is no "finalize" step to look for. */
+.tv-chat__saved { flex: none; padding-left: 0.6rem; border-left: 1px solid var(--tv-line); font-size: 0.68rem; white-space: nowrap; }
+@media (max-width: 900px) { .tv-chat__saved { display: none; } }
+
 .tv-chat__scroll {
   flex: 1;
   overflow-y: auto;
@@ -790,6 +794,41 @@
 }
 
 .tv-msg2__system-text { flex: 1; font-size: 0.84rem; color: var(--tv-ink-soft); }
+
+/* Receipt under a reply: what the planner actually changed. */
+.tv-receipt {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.6rem 0.8rem 0.7rem;
+  border: 1px solid var(--tv-line);
+  border-radius: var(--tv-r-md);
+  background: var(--tv-surface-sunk);
+  font-size: 0.8rem;
+}
+.tv-receipt header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 1.6rem; }
+.tv-receipt header .tv-label { font-size: 0.6rem; color: var(--tv-green-fg); }
+.tv-receipt.is-unchanged header .tv-label { color: var(--tv-muted); }
+.tv-receipt ul { display: grid; gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
+.tv-receipt li { display: grid; grid-template-columns: 13px minmax(0, 1fr) auto; align-items: start; gap: 0.5rem; line-height: 1.45; color: var(--tv-ink); }
+.tv-receipt li > svg { margin-top: 0.2rem; color: var(--tv-green-fg); }
+.tv-receipt li.is-skipped { color: var(--tv-muted); }
+.tv-receipt__dash { text-align: center; }
+.tv-receipt li small { display: block; margin-top: 0.1rem; font-size: 0.74rem; color: var(--tv-yellow-fg); }
+.tv-receipt button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--tv-line-strong);
+  border-radius: 999px;
+  background: var(--tv-surface);
+  color: var(--tv-ink);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  transition: border-color 0.2s var(--tv-ease);
+}
+.tv-receipt button:hover { border-color: var(--tv-ink); }
+.tv-receipt button:focus-visible { outline: 2px solid var(--tv-blue-fg); outline-offset: 2px; }
 
 /* ---- Composer ---- */
 

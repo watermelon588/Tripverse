@@ -10,10 +10,15 @@ export interface Guide {
   name: string;
   image: string;
   line: string;
+  /** Hand-made cut-out frames for the thinking loop; other guides "think" with transforms alone. */
+  thinkingFrames?: [string, string];
 }
 
 export const GUIDES: Guide[] = [
-  { id: 'aoi', name: 'Aoi', image: '/pfp/5ebc2b293bd93a26c5a67eb0d7c7c37a.jpg', line: 'Cool-headed planner. Quiet corners, zero wasted steps.' },
+  {
+    id: 'aoi', name: 'Aoi', image: '/pfp/5ebc2b293bd93a26c5a67eb0d7c7c37a.jpg', line: 'Cool-headed planner. Quiet corners, zero wasted steps.',
+    thinkingFrames: ['/pfp/1799ebaa48154581babb19b738f3428c-removebg-preview.png', '/pfp/ed31ea17c30c97a56d0d7b84b35ea020-removebg-preview.png'],
+  },
   { id: 'yuki', name: 'Yuki', image: '/pfp/4f9accdea0d0f90f7c828e529b6bcecc.jpg', line: 'Wide-eyed explorer who has seen centuries of sights.' },
   { id: 'beni', name: 'Beni', image: '/pfp/084f860e3eb1569fddd7e47d1ab9337f.jpg', line: 'Tiny critic with big opinions on where to eat.' },
   { id: 'kaede', name: 'Kaede', image: '/pfp/f6acbd3ea789240a081bc312c6dc69d5.jpg', line: 'Always has a plan. Budget in check, no surprises.' },
@@ -24,3 +29,21 @@ export const GUIDES: Guide[] = [
 export const DEFAULT_GUIDE = GUIDES[0];
 
 export const guideById = (id?: string | null): Guide => GUIDES.find((guide) => guide.id === id) || DEFAULT_GUIDE;
+
+/** A stable guide for anyone with no picture of their own: same seed, same guide, nothing stored. */
+export const guideForSeed = (seed: string): Guide => {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return GUIDES[h % GUIDES.length];
+};
+
+const PICK_KEY = 'tripverse-companion-guide';
+
+/** The guide riding along on every page (the floating companion, the hero cast). */
+export const companionGuide = (): Guide => {
+  try { return guideById(localStorage.getItem(PICK_KEY)); } catch { return DEFAULT_GUIDE; }
+};
+export const setCompanionGuide = (id: string) => {
+  try { localStorage.setItem(PICK_KEY, id); } catch { /* storage blocked: lasts until reload */ }
+  window.dispatchEvent(new CustomEvent('tripverse-companion-guide', { detail: id }));
+};

@@ -37,7 +37,11 @@ def build_trip_planner_graph():
 
     graph = StateGraph(TripPlanningState)
     graph.add_node("greet", lambda state: {
-        "assistant_response": "Hi, I'm TripVerse. Tell me where you're thinking of going, or what kind of trip you want. We can talk it through first; when you're ready to make a draft, I'll ask for the few details I need.",
+        # By first name when signed in. The time of day is the client's to say: only it knows the traveler's clock.
+        "assistant_response": f"Hi{' ' + state['user_name'].split()[0] if (state.get('user_name') or '').strip() else ''}, "
+                              "I'm TripVerse. Tell me where you're thinking of going, or what kind of trip you want. "
+                              "We can talk it through first; when you're ready for a draft, I'll ask three quick things "
+                              "(where from, where to, how many days) and the rest is optional.",
         "ui_action": None,
     })
     graph.add_node("respond_before_form", respond_to_user)

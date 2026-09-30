@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppBar } from '../components/common/AppBar';
 import { ArrowRightIcon, ArrowUpRightIcon, ClockIcon, PinIcon, PlusIcon } from '../components/home/v2/IconsV2';
 import { apiFetch } from '../services/apiClient';
-import { creditLine, usePlaceMedia } from '../services/placeMedia';
+import { creditLine, sizedImage, usePlaceMedia } from '../services/placeMedia';
 import { deleteTrip, getTripMessages, type TripModelResponse } from '../services/tripService';
 import '../styles/trip-library.css';
 
@@ -210,7 +210,7 @@ export function TripLibrary({ onNavigateHome, onNavigateExplore, onNavigateProfi
                     <button key={trip.id} type="button" className={`tv-library__row ${selected?.id === trip.id ? 'is-selected' : ''}`} aria-pressed={selected?.id === trip.id} aria-controls="trip-library-detail" onClick={() => selectTrip(trip.id)}>
                       <span className="tv-library__row-number">
                         {String(index + 1).padStart(2, '0')}
-                        {photos[trip.id] && <img src={photos[trip.id].image} alt="" title={creditLine(photos[trip.id])} loading="lazy" decoding="async" onLoad={revealed} ref={revealIfReady} />}
+                        {photos[trip.id] && <img src={sizedImage(photos[trip.id].image, 120)} alt="" title={creditLine(photos[trip.id])} loading="lazy" decoding="async" onLoad={revealed} ref={revealIfReady} />}
                       </span>
                       <span className="tv-library__row-main"><strong>{title(trip)}</strong><span>{trip.origin_text ? `From ${trip.origin_text}` : 'Origin to be decided'} · {trip.duration_days ? `${trip.duration_days} ${trip.duration_days === 1 ? 'day' : 'days'}` : 'Dates open'}</span></span>
                       <span className={`tv-library__status ${isCompleted(trip) ? 'is-ready' : ''}`}>{stateLabel(trip)}</span>

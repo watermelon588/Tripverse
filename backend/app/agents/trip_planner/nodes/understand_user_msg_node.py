@@ -3,6 +3,7 @@ import logging
 import re
 from typing import Any
 
+from app.agents.trip_planner.copilot.engine import CURRENCIES, number
 from app.agents.trip_planner.state import TripPlanningState
 from app.services.llm.service import llm_service, model_for
 
@@ -122,7 +123,9 @@ The JSON object MUST contain exactly these fields:
   "destination": string | null,
   "duration_days": integer | null,
   "origin": string | null,
-  "user_name": string | null
+  "user_name": string | null,
+  "budget_amount": number | null,
+  "budget_currency": "INR" | "JPY" | "USD" | "EUR" | "GBP" | "AUD" | "CAD" | null
 }
 
 Do not return markdown.
@@ -522,6 +525,20 @@ Valid range:
 1 to 365 days.
 
 If a duration cannot be reliably interpreted, return null.
+
+A day NUMBER inside the trip is never a duration. "Move Fushimi Inari from day 5
+to day 3", "what's on day 2?", "add a museum on day 4": all "duration_days": null.
+
+==================================================
+BUDGET
+==================================================
+
+Extract the total trip budget when the user states or changes one:
+"my budget is 60,000 rupees" -> 60000, "INR"; "keep it under $2k" -> 2000, "USD";
+"1.5 lakh" -> 150000, "INR"; "budget 80k yen" -> 80000, "JPY".
+Return the currency only when the message makes it clear (a symbol, code or
+name); otherwise null. A price question ("is 5000 yen enough?") is not a budget.
+No budget communicated: "budget_amount": null, "budget_currency": null.
 
 ==================================================
 ORIGIN
@@ -1068,5 +1085,12 @@ Return only the required JSON object.
         and origin.strip().lower() not in invalid_origins
     ):
         updates["origin"] = origin.strip()
+
+    # Budget
+    amount = number(str(parsed.get("budget_amount")).replace(",", "")) if parsed.get("budget_amount") is not None else None
+    if amount:
+        updates["budget_amount"] = amount
+        currency = str(parsed.get("budget_currency") or "").upper()
+        updates["budget_currency"] = currency if currency in CURRENCIES else None
 
     return updates
