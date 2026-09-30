@@ -2,6 +2,107 @@
 
 _Written 2026-09-28 from the planning discussion. Seven build sessions, each medium to hard and each leaving the app working. The last section lists future work that is deliberately out of scope._
 
+## Fix list: hands-on review (added 2026-09-29) — the next tasks
+
+_Six problems found by using the app end to end. Order agreed: **F4 first** (the core agent fix), then F6 (chat layout, which shows F4's results), then F3, F5, F2 and F1 (the guide last, so its screenshots show the fixed app). Each fix ends with a real-browser check against the running app._
+
+| # | Problem | Status |
+|---|---|---|
+| F4 | Changing a finished trip ("move X from day 5 to day 3") doesn't update the studio; the agent suggests instead of doing, can't be told to finalize, and makes things up. The budget is vague. | ✅ Done 2026-09-30 (not committed yet) |
+| F6 | The chat is hard to use: the transcript, your message and the suggestions don't fit on screen together; it's unclear how to change, finalize, or get to the studio and budget. | ✅ Done 2026-09-30 (not committed yet) |
+| F3 | Exports: only the JSON export works. | To do |
+| F5 | The welcome is vague ("where do you want to go?", no name or greeting), and the trip brief arrives as one long form that scares people off. | To do |
+| F2 | The home page still has setup-era placeholder text and screenshots. | To do |
+| F1 | The `/guide` page is broken and out of date. | To do |
+
+### F4: trip updates that actually happen (the core fix)
+
+**What goes wrong today** (traced in the code with graphify's call graph, and confirmed in the saved conversations of the 2026-09-29 Goa trip):
+
+*Build-with-the-agent trips:*
+1. **The engine refuses your own edits.** `engine.apply_ops` blocks a move or add when the day passes its hour cap (8 h at a balanced pace) or the budget. "Move Tito's Lane to day 2" came back "day 2 is already packed", three times in a row, so the studio never changed. A cap should warn, not veto something you asked for.
+2. **The interpreter has no memory of the conversation.** `interpret` sees the plan but not the last reply, so "move **it** to day 5" (meaning Club Cubana, which the agent had just offered) moved Tito's Lane instead, and "yes, do that" can't work at all.
+3. **The reply claims changes that didn't happen.** The reply prompt's example opens with "Done, …", and the model wrote "Done – …" above a message saying the swap couldn't be made.
+
+*One-shot trips:*
+4. **A change request can be answered instead of made.** `_is_question` lets the intent label win: a message tagged `trip_question` or `casual_conversation` gets the answer prompt even when it says "move" or "swap". The answer prompt then offers "Want me to swap it in?", your "yes" is tagged casual, and it offers again: an endless loop where nothing is applied.
+5. **The day number can be misread as the trip length.** The understanding step extracts `duration_days`; if it reads "day 3" as a 3-day trip, the trip is cut and redrafted from scratch.
+6. **The budget can't be set from the chat.** Nothing extracts "my budget is ₹50,000"; the draft is rewritten around it, but the studio and budget panel never get the target.
+
+*Both:*
+7. **Nothing shows what actually changed.** The only record of a change is the model's own prose, so a wrong claim can't be caught, and there's no sign the studio was updated.
+8. **Your message sometimes appears after the reply.** Both rows are written in one flush and can get the same timestamp (Windows clock), so reloading the chat can order them randomly.
+
+**Fix:**
+- *Engine:* an explicit add or move always applies; going over the day's hours or the budget becomes a warning in the change itself ("Moved Tito's Lane to day 2 · day 2 is now 11 h, over your 8 h pace"). Only your own hard rules (a "never" preference, a place you turned down) still ask first, with an **Add anyway** button.
+- *Interpreter:* gets your previous message and the agent's last reply, resolves "it", "that one" and "yes" against them, and runs on the main model (this is the one decision in the turn that must be right).
+- *Reply:* may only say something changed if the engine's change list says so; otherwise it says plainly that nothing changed and why.
+- *One-shot routing:* an edit verb always means edit; "yes / do it / go ahead / finalize / update the studio" after an offer applies that offer (the revision prompt sees the agent's last message); a question is answered only when nothing is being changed. "It's final / save it" when nothing is pending confirms that the studio already has this version.
+- *Understanding:* a day reference is never a trip length; the budget ("₹50,000", "50k INR") is extracted and saved to the budget ledger in both modes.
+- *Change receipt:* every turn that edits the trip saves a `changes` list in the message payload (the engine's events in agent mode; a before/after diff of the day plan in one-shot mode). The chat shows it under the reply as a small **"Studio updated"** card, one line per change (done, warning, or not changed), with an **Open studio** button. The receipt is the source of truth, not the prose.
+- *Message order:* each message gets its timestamp when it's created; older tied rows sort user-first.
+- *Budget clarity:* the budget panel opens with three plain steps (set a target → suggest or enter amounts → watch "left to spend"), and budget changes from the chat appear in the receipt.
+
+**Acceptance criteria:**
+- In an agent trip, "move X to day N" moves X, even onto a full day, and the studio's Days and Plan show it after the reply.
+- "Move it to day 5" right after the agent offered a place moves that place.
+- In a one-shot trip, "move X from day 5 to day 3", then "yes" to any offer, both change the day plan the studio shows.
+- The receipt under each reply lists exactly the changes in the saved plan.
+- "My budget is 60,000 INR" sets the budget target in both modes.
+- Reloaded chats show every message in the order it was sent.
+
+**Verify:** engine and routing unit tests (moves over the cap, reference resolution input, the answer loop, day-vs-duration, budget extraction, the day-plan diff); then a real run in the browser: move a place in an agent trip and in a one-shot trip, confirm the studio updates, and reload the chat.
+
+**Files:** `copilot/engine.py`, `copilot/graph.py`, `services/conversation.py`, `nodes/understand_user_msg_node.py`, `nodes/planning_trip_node.py`, `repositories/message.py`; frontend `ChatMessage.tsx`, `CreateTrip.tsx`, `CopilotPanel.tsx`, `BudgetWorkspace.tsx`, `tripService.ts`.
+
+**Not in F4:** the non-streaming `POST /messages` path (the app only uses the streaming one; it keeps its old behaviour for tests), and turning one-shot edits into structured operations (only if the receipts show the rewrite path still misses changes).
+
+**Progress (2026-09-29):** built test-first; the backend suite went from 159 to 172 tests, all passing, and the frontend type-checks with its 44 tests passing. Verified live in the browser against the running app:
+- *Agent trip (Goa, 4 days):* "move the street food tour to day 2" onto a 7.6 h day now applies, with the heads-up in the receipt; "do the second one" moved the second option the agent had offered; the studio's Plan showed exactly the engine's days.
+- *One-shot trip (Kyoto, 3 days):* "Can you move Nishiki Market from day 3 to day 1?" is now applied (it used to be answered as a question). "Day 3 looks packed. Is there anything you'd shift?" gets one concrete yes/no offer instead of a rewrite.
+- *Found while testing, and fixed:*
+  - Receipts showed the same place twice under different spellings (`Kiyomizu‑dera` with U+2011 vs `Kiyomizu-dera`, `Café` vs `Cafe`, `Kinkaku-ji (Golden Pavilion)` vs `Kinkaku-ji`). The diff now keys places by a normalized name, and a revision's extraction gets the previous plan's names to reuse.
+  - The extraction model sometimes returned an empty reply, which left the studio on the old days. It now retries once and reads the JSON even with prose around it.
+  - Advice questions that contain an edit verb ("should I add Nara?", "anything you'd shift?") get an answer with an offer. Requests phrased as questions ("can you…", "could you…", "what if we…", "how about…", "is it possible to…") are still edits.
+- *Cost:* an agent turn now takes about 10–18 s, because the interpreter runs on the main model. That's the price of resolving "it" correctly.
+- *Offer → "yes" (2026-09-30):* in a fresh Kyoto one-shot trip, "Day 1 looks packed. Is there anything you'd shift?" got "Want me to shift Kodai‑ji to Day 2?", and "yes" applied it: the receipt read "Moved Kodai-ji Temple from day 1 to day 2".
+
+### F6: a chat you can actually use (after F4)
+
+- The build-with-agent panel is pinned above the composer and takes most of the screen, pushing the transcript out of view. Make it collapsible (collapsed by default to a one-line day strip with the budget), so the conversation, your message and the suggestions fit together.
+- A clear top bar: trip name, a budget chip ("₹12,400 of ₹60,000"), and **Open studio**, always visible once there's a plan.
+- Suggestions and "Add anyway" as quick-reply chips under the latest reply, not in a separate panel.
+- An empty-state hint that explains the three verbs: *ask*, *change* ("move X to day 3"), *finish*.
+- Scope: the chat column only. **The studio stays as it is.** Load `impeccable`, `frontend-ui-engineering` and `emil-design-eng` first.
+
+**Done (2026-09-30).** Measured first, at 1280×800 on an agent trip with an empty day: the transcript had 381 px (48% of the screen), the build panel 235 px (up to about 450 px on a full day), and the 340 px trip card was pinned under the latest reply, so the visible area showed the card instead of the conversation.
+- **Build panel → dock.** Closed by default: one line (day stepper, places and hours, "~₹12,200 planned of ₹30,000" with its meter) plus the day's suggestions. "Day plan" opens the rest (every day, this day's places with Remove, Finish). 87 px closed instead of 235 px; the transcript went from 381 px to 529 px.
+- **Trip card** sits where the plan was made (after the first plan message) instead of under every reply. Its line now says how to change things. The morph into the studio runs only when the card is on screen.
+- **Header:** Open studio is the one primary button; Budget uses the wallet icon the studio uses; "Changes save to your studio" sits beside the title on wide screens.
+- **Composer:** "Change the plan, or ask a question…", a Send button (Plan before there's a trip), and a hint with real examples ("move it to day 2", "my budget is 60,000").
+- **A finished agent trip stays editable:** suggestions and Remove no longer disappear after Finish.
+- **Found and fixed:** the header's staggered entrance tween left the theme and Budget buttons stranded 10 px high on every load. The tween is removed; a header seen on every chat switch shouldn't animate.
+- **Receipt:** the 3 px coloured side border is gone (one hairline, per the design system).
+- **Checked:** at 1280×800 the user's message, the whole reply with its receipt, and the suggestions are on screen together; at 375 px there is no horizontal scroll and every dock target is at least 24 px; one-shot trips, the studio's chat drawer and Open studio work; no console errors; `tsc` clean, 44 frontend tests pass, impeccable's layout scan is clean.
+- **Not done:** a budget figure in the header for one-shot trips (it would need a budget fetch in the chat; the dock shows it for agent trips).
+
+### F3: exports
+
+Only JSON downloads today. Reproduce each entry of the studio's Export menu in the browser (calendar, Google Maps links, GPX, KML, budget CSV, PDF), read the console and network errors, and fix the root cause (likely shared, e.g. the download helper or the points request). Add a test per format where one is missing.
+
+### F5: a warmer start and a shorter brief
+
+- The first message greets you by name with the time of day ("Good evening, Rohit"), says in one line what TripVerse does, and offers two or three starting points.
+- The brief comes in small steps (where and when → who's going and budget → pace and interests → review) instead of one long form; the agent asks only for what's missing. Keep the existing form component for "edit details".
+
+### F2: home page content
+
+Keep the design and layout. Replace placeholder copy and screenshots with what the app really does now (chat planning, build with the agent, the Trip Studio, the sketchbook, map & 3D, weather and holidays, budget, exports). New sections are allowed; nothing existing is removed. Screenshots come from real trips. Load `design-taste-frontend` and `emil-design-eng` for copy and imagery.
+
+### F1: the `/guide` page
+
+Rebuild it end to end so a first-time user can learn the whole app from it: every page, how to move between them, every feature, with a fresh screenshot for each (extend `frontend/scripts/capture_guide.py`). Done last so the screenshots show F2–F6.
+
 ## The idea in one paragraph
 
 You plan in the **chat**, which stays as it is. As soon as a plan exists, a small **trip preview card** in the chat opens the **Trip Studio**: a dedicated page for the trip. The studio holds the **Sketchbook** (hand-drawn pages, drawn live by an anime guide character), the **Map**, the **3D route view**, plus **weather, holidays, budget** and **one-click exports** (PDF, calendar, maps). Moving between the chat and the studio is one continuous motion: the preview card grows into the studio and shrinks back. So it feels like one app with rooms, not two apps. The guide characters in `frontend/public/pfp/` are the "uncle who's been to Japan five times". They pop in, hold the pen, react while thinking, and sketch your plan on paper.

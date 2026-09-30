@@ -170,7 +170,9 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
     const tripId = activeSessionId ? tripsMap[activeSessionId]?.id : undefined;
     if (!tripId) return;
     const card = document.querySelector('.tv-chat [data-flip-id="trip-stage"]');
-    if (card && !prefersReducedMotion()) studioFlip.current = Flip.getState(card);
+    const box = card?.getBoundingClientRect();
+    // The card sits where the plan was made, so it may be scrolled away: morph only from a card on screen.
+    if (card && box && box.bottom > 0 && box.top < window.innerHeight && !prefersReducedMotion()) studioFlip.current = Flip.getState(card);
     setStudioDay(day);
     setIsBudgetOpen(false);
     setStudioOpen(true);

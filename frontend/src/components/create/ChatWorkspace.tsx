@@ -3,12 +3,13 @@
  *
  * Header bar, scrolling transcript, and a sticky composer. Hairlines and
  * quiet surfaces replace the previous hard-shadow tactile chrome.
+ *
+ * The header has no entrance animation: it is on screen for every chat switch, and a staggered
+ * tween over children that mount later left two of its buttons stranded 10 px high.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { useGSAP } from '@gsap/react';
-import gsap from 'gsap';
 
-import { ChatMessage, type ChatMessageItem } from './ChatMessage';
+import { ChatMessage, type ChatMessageItem, type PlanChange } from './ChatMessage';
 import { AssistantAvatar } from './AssistantAvatar';
 import { GuideContext } from '../guide/GuideContext';
 import { guideById } from '../guide/guides';
@@ -18,8 +19,7 @@ import { TripOnboardingForm, type OnboardingValues } from './TripOnboardingForm'
 import { TripPlanningChoice } from './TripPlanningChoice';
 import { CopilotPanel, type CopilotOp, type CopilotState } from './CopilotPanel';
 import { ThemeToggle } from '../common/ThemeToggle';
-import { MenuIcon, LayersIcon, GraphIcon } from '../home/v2/IconsV2';
-import { EASE, prefersReducedMotion } from '../home/v2/motion';
+import { MenuIcon, LayersIcon, GraphIcon, WalletIcon } from '../home/v2/IconsV2';
 
 interface ChatWorkspaceProps {
   messages: ChatMessageItem[];
@@ -64,12 +64,6 @@ function ResetIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-function BudgetIcon(props: React.SVGProps<SVGSVGElement>) {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-    <rect x="3" y="5" width="18" height="15" rx="2" /><path d="M3 9h18M7 5V3m10 2V3M7 14h4m3 0h3" />
-  </svg>;
-}
-
 export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   messages,
   onSendMessage,
@@ -100,9 +94,18 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   guideId,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const root = useRef<HTMLDivElement>(null);
   const [editingBrief, setEditingBrief] = useState(false);
   const hasMessages = messages.length > 0;
+  const latestReplyId = [...messages].reverse().find((msg) => msg.sender === 'assistant')?.id;
+  // The trip card belongs where the plan was made, not under every later reply. Until that message
+  // is saved (the first draft is still streaming) it closes the thread.
+  const planIndex = messages.findIndex((msg) => msg.payload?.kind === 'ITINERARY_GRAPH');
+  const planned = Boolean(tripPreview) || variant === 'drawer'; // the studio only opens on a planned trip
+  // "Add anyway" on a held-back add: the same add, forced, on the day it was meant for.
+  const retry = (change: PlanChange) => {
+    const op = change.retry;
+    if (op && onCopilotOps) onCopilotOps([op], `Add ${op.name} to day ${op.day} anyway`, op.day ?? copilot?.current_day ?? 1);
+  };
 
   // Follow the transcript down as it grows, but only while the reader is already at
   // the bottom — a streamed itinerary must not yank someone reading further up.
@@ -114,24 +117,10 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
     if (pinned.current) el.scrollTop = el.scrollHeight;
   }, [messages, isLoading, hasMessages]);
 
-  useGSAP(
-    () => {
-      if (prefersReducedMotion()) return;
-      gsap.from('.tv-chat__bar > *', {
-        y: -10,
-        opacity: 0,
-        duration: 0.6,
-        ease: EASE,
-        stagger: 0.05,
-      });
-    },
-    { scope: root },
-  );
-
   return (
     <GuideContext.Provider value={guideById(guideId)}>
     {/* The chat page's main landmark; in the studio drawer it isn't one, since the studio has its own <main>. */}
-    <div className={`tv-chat ${variant === 'drawer' ? 'tv-chat--drawer' : ''}`} ref={root} role={variant === 'page' ? 'main' : undefined}>
+    <div className={`tv-chat ${variant === 'drawer' ? 'tv-chat--drawer' : ''}`} role={variant === 'page' ? 'main' : undefined}>
       <header className="tv-chat__bar">
         {variant === 'page' && <button
           type="button"
@@ -146,6 +135,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         <div className="tv-chat__title">
           <GraphIcon width={15} height={15} />
           <h1>{activeChatTitle || 'New trip'}</h1>
+          {variant === 'page' && planned && <span className="tv-meta tv-chat__saved">Changes save to your studio</span>}
         </div>
 
         <span className="tv-app__bar-spacer" />
@@ -161,11 +151,11 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         {variant === 'page' && onToggleBudget && <button type="button"
           className={`tv-btn tv-btn--sm ${isBudgetOpen ? 'tv-btn--primary' : 'tv-btn--ghost'}`}
           onClick={onToggleBudget} aria-pressed={isBudgetOpen} aria-label="Trip budget">
-          <BudgetIcon width={14} height={14} /><span className="tv-hide-mobile">Budget</span>
+          <WalletIcon width={14} height={14} /><span className="tv-hide-mobile">Budget</span>
         </button>}
 
         {variant === 'page' && onOpenStudio && (
-          <button type="button" className="tv-btn tv-btn--sm tv-btn--ghost" onClick={onOpenStudio} aria-label="Open studio">
+          <button type="button" className="tv-btn tv-btn--sm tv-btn--primary" onClick={onOpenStudio} aria-label="Open studio">
             <LayersIcon width={14} height={14} />
             <span className="tv-hide-mobile">Open studio</span>
           </button>
@@ -182,8 +172,12 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           </div>
         ) : (
           <div className="tv-chat__thread">
-            {messages.map((msg) => (
-              <ChatMessage key={msg.id} message={msg} />
+            {messages.map((msg, index) => (
+              <React.Fragment key={msg.id}>
+                <ChatMessage message={msg} onOpenStudio={variant === 'page' ? onOpenStudio : undefined}
+                  onRetry={msg.id === latestReplyId && !isLoading && copilot && onCopilotOps ? retry : undefined} />
+                {index === planIndex && tripPreview}
+              </React.Fragment>
             ))}
 
             {/* Forms belong to the turn before a stream; the trip status only updates when
@@ -198,7 +192,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                 : <TripPlanningChoice disabled={isLoading} onGenerateFull={onGenerateFull} onStartBuild={onStartBuild} brief={planningBrief || undefined} onEditDetails={() => setEditingBrief(true)} />
             )}
 
-            {tripPreview}
+            {planIndex < 0 && tripPreview}
 
             {isLoading && (
               <div className="tv-chat__thinking">
@@ -223,10 +217,14 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           onSendMessage={onSendMessage}
           isLoading={isLoading}
           placeholder={
-            hasMessages
-              ? 'Tell me where you want to go, or ask a travel question…'
-              : 'Where are you thinking of going?'
+            planned ? 'Change the plan, or ask a question…'
+              : hasMessages ? 'Tell me where you want to go, or ask a travel question…'
+                : 'Where are you thinking of going?'
           }
+          sendLabel={planned ? 'Send' : 'Plan'}
+          hint={planned ? (copilot
+            ? 'Tap a suggestion, or say “move it to day 2” or “finish”'
+            : 'Try “move a place to day 1” or “my budget is 60,000”') : undefined}
         />
       </div>}
     </div>
