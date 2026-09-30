@@ -437,11 +437,13 @@ async def _stream(trip_id: str, headers: dict, text: str) -> list[dict]:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("intent, instruction, redraws_map", [
-    ("update_trip", "REVISION_SYSTEM_INSTRUCTION", True),
-    ("trip_question", "ANSWER_SYSTEM_INSTRUCTION", False),
+@pytest.mark.parametrize("intent, message, instruction, redraws_map", [
+    ("update_trip", "Swap day 2's afternoon for Okochi-Sanso", "REVISION_SYSTEM_INSTRUCTION", True),
+    # An edit verb wins over the intent label (the old routing answered this and changed nothing).
+    ("trip_question", "Can you move Okochi-Sanso to day 1?", "REVISION_SYSTEM_INSTRUCTION", True),
+    ("trip_question", "Is Okochi-Sanso worth it in the rain?", "ANSWER_SYSTEM_INSTRUCTION", False),
 ])
-async def test_one_shot_follow_ups_revise_or_answer_the_existing_plan(client: AsyncClient, intent, instruction, redraws_map):
+async def test_one_shot_follow_ups_revise_or_answer_the_existing_plan(client: AsyncClient, intent, message, instruction, redraws_map):
     from unittest.mock import patch
     from app.agents.trip_planner.nodes import planning_trip_node
     from app.services.llm.service import llm_service
@@ -460,21 +462,258 @@ async def test_one_shot_follow_ups_revise_or_answer_the_existing_plan(client: As
     with patch.object(llm_service, "generate_stream", new=fake_stream), \
             patch("app.agents.trip_planner.nodes.understand_user_msg_node.understand_user_message", new=fake_understand), \
             patch("app.agents.trip_planner.nodes.planning_trip_node.execute_planning_subgraph") as research:
-        events = await _stream(trip_id, headers, "Swap day 2's afternoon for Okochi-Sanso")
+        events = await _stream(trip_id, headers, message)
     prompt, system = seen[0]
     assert system == getattr(planning_trip_node, instruction)
-    assert "CURRENT ITINERARY:" in prompt and "Swap day 2's afternoon for Okochi-Sanso" in prompt
+    assert "CURRENT ITINERARY:" in prompt and message in prompt
     research.assert_not_called()  # no fresh research for a follow-up
     assert any(e["type"] == "graph" for e in events) is redraws_map
 
 
-def test_follow_up_questions_are_answered_even_when_the_intent_label_is_wrong():
-    from app.services.conversation import _is_question
+def test_follow_up_routing_edits_on_edit_verbs_and_agreement_and_answers_the_rest():
+    from app.services.conversation import _follow_up_mode
 
-    assert _is_question("Is Fushimi Inari very crowded in the early morning?", "update_trip")
-    assert _is_question("thanks!", "casual_conversation")
-    assert not _is_question("Can you add Arashiyama bamboo grove on day 2 morning?", "update_trip")
-    assert not _is_question("Swap day 2's afternoon for Okochi-Sanso", None)
+    assert _follow_up_mode("Is Fushimi Inari very crowded in the early morning?", "update_trip", False) == "answer"
+    assert _follow_up_mode("thanks!", "casual_conversation", False) == "answer"
+    assert _follow_up_mode("Can you add Arashiyama bamboo grove on day 2 morning?", "trip_question", False) == "revise"
+    assert _follow_up_mode("Swap day 2's afternoon for Okochi-Sanso", None, False) == "revise"
+    # "yes" is an edit only when the last reply offered one; otherwise there's nothing to apply.
+    assert _follow_up_mode("yes please", "casual_conversation", True) == "revise"
+    assert _follow_up_mode("Go ahead and finalize it", "planning_request", True) == "revise"
+    assert _follow_up_mode("ok finalize it, update the studio", "planning_request", False) == "answer"
+    assert _follow_up_mode("What's the plan for day 2?", "trip_question", False) == "answer"
+    # Asking for advice gets an answer with one concrete offer; a request phrased as a question is a request.
+    assert _follow_up_mode("Day 1 feels rushed. Is there anything you'd shift to another day?", "trip_question", False) == "answer"
+    assert _follow_up_mode("Should I add Nara as a day trip?", "trip_question", False) == "answer"
+    assert _follow_up_mode("Could you add Nara on day 2?", "trip_question", False) == "revise"
+    assert _follow_up_mode("What if we move Nishiki Market to day 1?", "trip_question", False) == "revise"
+    assert _follow_up_mode("How about we swap days 2 and 3?", "trip_question", False) == "revise"
+    assert _follow_up_mode("Is it possible to move Nishiki Market to day 1?", "trip_question", False) == "revise"
+
+
+@pytest.mark.asyncio
+async def test_yes_after_an_offer_applies_the_offer_instead_of_offering_again(client: AsyncClient):
+    """The loop seen live: "Want me to swap it in?" → "yes" → another offer, and nothing ever changed."""
+    from unittest.mock import patch
+    from app.agents.trip_planner.nodes.planning_trip_node import ANSWER_SYSTEM_INSTRUCTION, REVISION_SYSTEM_INSTRUCTION
+    from app.services.llm.service import llm_service
+
+    headers = {"X-Guest-ID": str(uuid.uuid4())}
+    trip_id = await _plan_one_shot(client, headers)
+    seen = []
+
+    async def fake_stream(prompt, system_instruction=None, **_):
+        seen.append((prompt, system_instruction))
+        yield ("It's lovely in the morning light. Want me to move Okochi-Sanso to day 1 morning?"
+               if system_instruction == ANSWER_SYSTEM_INSTRUCTION else "| Day 1 | Kyoto | **Okochi-Sanso** |")
+
+    intents = iter(["trip_question", "casual_conversation"])
+
+    async def fake_understand(state):
+        return {"intent": next(intents)}
+
+    with patch.object(llm_service, "generate_stream", new=fake_stream), \
+            patch("app.agents.trip_planner.nodes.understand_user_msg_node.understand_user_message", new=fake_understand):
+        await _stream(trip_id, headers, "Is Okochi-Sanso nicer in the morning?")
+        events = await _stream(trip_id, headers, "yes")
+    prompt, system = seen[1]
+    assert system == REVISION_SYSTEM_INSTRUCTION
+    assert "YOUR LAST MESSAGE:\nIt's lovely in the morning light. Want me to move Okochi-Sanso to day 1 morning?" in prompt
+    assert any(e["type"] == "graph" for e in events)
+
+
+@pytest.mark.asyncio
+async def test_a_day_number_is_never_read_as_the_trip_length(client: AsyncClient):
+    """"Move X to day 2" read as a 2-day trip would cut the trip and redraft it from scratch."""
+    from unittest.mock import patch
+    from app.agents.trip_planner.nodes.planning_trip_node import REVISION_SYSTEM_INSTRUCTION
+    from app.services.llm.service import llm_service
+
+    headers = {"X-Guest-ID": str(uuid.uuid4())}
+    trip_id = await _plan_one_shot(client, headers)
+    seen = []
+
+    async def fake_stream(prompt, system_instruction=None, **_):
+        seen.append(system_instruction)
+        yield "| Day 2 | Kyoto | **Okochi-Sanso** |"
+
+    async def fake_understand(state):
+        return {"intent": "update_trip", "duration_days": 2}
+
+    with patch.object(llm_service, "generate_stream", new=fake_stream), \
+            patch("app.agents.trip_planner.nodes.understand_user_msg_node.understand_user_message", new=fake_understand):
+        events = await _stream(trip_id, headers, "Move Okochi-Sanso from day 3 to day 2")
+    assert events[-1]["trip"]["duration_days"] == 3
+    assert seen == [REVISION_SYSTEM_INSTRUCTION]
+
+
+@pytest.mark.asyncio
+async def test_a_budget_in_the_chat_sets_the_trip_budget_without_rewriting_the_plan(client: AsyncClient):
+    from unittest.mock import patch
+    from app.agents.trip_planner.nodes.planning_trip_node import ANSWER_SYSTEM_INSTRUCTION
+    from app.services.llm.service import llm_service
+
+    headers = {"X-Guest-ID": str(uuid.uuid4())}
+    trip_id = await _plan_one_shot(client, headers)
+    seen = []
+
+    async def fake_stream(prompt, system_instruction=None, **_):
+        seen.append((prompt, system_instruction))
+        yield "Got it, 60,000 INR it is."
+
+    async def fake_understand(state):
+        return {"intent": "update_trip", "budget_amount": 60000.0, "budget_currency": "INR"}
+
+    with patch.object(llm_service, "generate_stream", new=fake_stream), \
+            patch("app.agents.trip_planner.nodes.understand_user_msg_node.understand_user_message", new=fake_understand):
+        events = await _stream(trip_id, headers, "My budget is 60,000 rupees")
+    assert [system for _, system in seen] == [ANSWER_SYSTEM_INSTRUCTION]
+    assert "Budget target set to 60,000 INR" in seen[0][0]  # the reply knows what was saved
+    assert events[-1]["assistant_message"]["payload"]["changes"] == [
+        {"status": "done", "text": "Budget target set to 60,000 INR"}]
+    budget = (await client.get(f"/api/trips/{trip_id}/budget", headers=headers)).json()
+    assert (budget["currency"], float(budget["target_amount"])) == ("INR", 60000.0)
+
+
+@pytest.mark.asyncio
+async def test_a_revision_saves_a_receipt_of_what_changed_in_the_day_plan(client: AsyncClient):
+    import json
+    from unittest.mock import patch
+    from sqlalchemy import select
+    from app.agents.trip_planner.nodes.extract_itinerary_node import EXTRACTION_INSTRUCTION
+    from app.models.trip import ConversationMessage, ConversationSession
+    from app.services.llm.service import llm_service
+    from conftest import TestingSessionLocal
+
+    headers = {"X-Guest-ID": str(uuid.uuid4())}
+    trip_id = await _plan_one_shot(client, headers)
+    item = lambda name: {"name": name, "category": "sight", "time_of_day": None, "option": False}  # noqa: E731
+    before = [{"day": 1, "base": "Kyoto", "items": [item("Fushimi Inari")]},
+              {"day": 2, "base": "Kyoto", "items": [item("Kinkaku-ji")]},
+              {"day": 3, "base": "Kyoto", "items": [item("Okochi-Sanso")]}]
+    async with TestingSessionLocal() as db:
+        rows = (await db.execute(select(ConversationMessage).join(ConversationSession)
+                                 .where(ConversationSession.trip_id == uuid.UUID(trip_id)))).scalars().all()
+        latest = next(row for row in rows if (row.payload or {}).get("kind") == "ITINERARY_GRAPH")
+        latest.payload = {**latest.payload, "day_plan": before}
+        await db.commit()
+
+    async def fake_stream(prompt, system_instruction=None, **_):
+        yield "| Day 1 | Kyoto | **Fushimi Inari**, **Okochi-Sanso** |\n| Day 2 | Kyoto | **Kinkaku-ji** |\n| Day 3 | Kyoto | Free |"
+
+    async def fake_generate(prompt, system_instruction=None, **_):
+        assert system_instruction == EXTRACTION_INSTRUCTION
+        return json.dumps({"stops": [], "days": [
+            {"day": 1, "base": "Kyoto", "items": [{"name": "Fushimi Inari"}, {"name": "Okochi-Sanso"}]},
+            {"day": 2, "base": "Kyoto", "items": [{"name": "Kinkaku-ji"}]}, {"day": 3, "base": "Kyoto", "items": []}]})
+
+    async def fake_understand(state):
+        return {"intent": "update_trip"}
+
+    with patch.object(llm_service, "generate_stream", new=fake_stream), patch.object(llm_service, "generate", new=fake_generate), \
+            patch("app.agents.trip_planner.nodes.understand_user_msg_node.understand_user_message", new=fake_understand):
+        events = await _stream(trip_id, headers, "Move Okochi-Sanso to day 1")
+    assert events[-1]["assistant_message"]["payload"]["changes"] == [
+        {"status": "done", "text": "Moved Okochi-Sanso from day 3 to day 1"}]
+
+
+def test_day_plan_changes_are_computed_from_the_saved_plans():
+    from app.agents.trip_planner.nodes.extract_itinerary_node import day_plan_changes
+
+    item = lambda name: {"name": name, "category": "sight", "time_of_day": None, "option": False}  # noqa: E731
+    before = [{"day": 1, "base": "Kyoto", "items": [item("Fushimi Inari"), item("Nishiki Market")]},
+              {"day": 2, "base": "Kyoto", "items": [item("Kinkaku-ji")]}]
+    after = [{"day": 1, "base": "Kyoto", "items": [item("fushimi inari")]},
+             {"day": 2, "base": "Nara", "items": [item("Todai-ji"), item("Nishiki Market")]}]
+    assert day_plan_changes(before, after) == [
+        {"status": "done", "text": "Moved Nishiki Market from day 1 to day 2"},
+        {"status": "done", "text": "Added Todai-ji to day 2"},
+        {"status": "done", "text": "Removed Kinkaku-ji from day 2"},
+        {"status": "done", "text": "Day 2 now based in Nara (was Kyoto)"},
+    ]
+    assert day_plan_changes(before, before) == []
+    # Seen live: the same places came back as "Kiyomizu‑dera" (U+2011) and "Vermillion Café".
+    retyped = [{"day": 1, "base": "Kyoto", "items": [item("Fushimi Inari"), item("Nishiki  Market")]},
+               {"day": 2, "base": "Kyoto", "items": [item("Kinkaku‑ji")]}]
+    assert day_plan_changes(before, retyped) == []
+    assert day_plan_changes([{"day": 1, "base": "Kyoto", "items": [item("Vermillion Cafe")]}],
+                            [{"day": 1, "base": "Kyoto", "items": [item("Vermillion Café")]}]) == []
+    assert day_plan_changes([{"day": 1, "base": "Kyoto", "items": [item("Kinkaku-ji (Golden Pavilion)"), item("Gion district")]}],
+                            [{"day": 1, "base": "Kyoto", "items": [item("Kinkaku-ji"), item("Gion")]}]) == []
+
+
+@pytest.mark.asyncio
+async def test_a_revision_extracts_days_with_the_previous_plans_place_names():
+    """Re-extracting from scratch split and merged the same places differently each time."""
+    from unittest.mock import patch
+    from app.agents.trip_planner.nodes.extract_itinerary_node import extract_itinerary
+    from app.services.llm.service import llm_service
+
+    seen = []
+
+    async def fake(prompt, system_instruction=None, **_):
+        seen.append(prompt)
+        return '{"stops": [], "days": []}'
+
+    with patch.object(llm_service, "generate", new=fake):
+        await extract_itinerary({"assistant_response": "| Day 1 | Kyoto | **Sannenzaka and Ninenzaka** |",
+                                 "destination": "Kyoto", "duration_days": 1,
+                                 "known_places": ["Sannenzaka", "Ninenzaka"]})
+    assert "KNOWN PLACES" in seen[0] and '"Sannenzaka", "Ninenzaka"' in seen[0]
+
+
+@pytest.mark.asyncio
+async def test_extraction_retries_an_empty_reply_and_reads_json_after_prose():
+    """Seen live: one empty extraction reply meant the studio kept the old days after a real change."""
+    from unittest.mock import patch
+    from app.agents.trip_planner.nodes.extract_itinerary_node import extract_itinerary
+    from app.services.llm.service import llm_service
+
+    replies = iter(["", 'Here is the JSON:\n{"stops": [], "days": [{"day": 1, "base": "Kyoto", "items": [{"name": "Nishiki Market"}]}]}'])
+
+    async def flaky(prompt, system_instruction=None, **_):
+        return next(replies)
+
+    with patch.object(llm_service, "generate", new=flaky):
+        result = await extract_itinerary({"assistant_response": "| Day 1 | Kyoto | **Nishiki Market** |",
+                                          "destination": "Kyoto", "duration_days": 1})
+    assert result["day_plan"][0]["items"][0]["name"] == "Nishiki Market"
+
+
+@pytest.mark.asyncio
+async def test_understanding_extracts_a_budget_and_its_currency():
+    from unittest.mock import patch
+    from app.agents.trip_planner.nodes.understand_user_msg_node import understand_user_message
+    from app.services.llm.service import llm_service
+
+    async def fake(prompt, system_instruction=None, **_):
+        return '{"intent": "update_trip", "destination": null, "duration_days": null, "origin": null, ' \
+               '"user_name": null, "budget_amount": "60,000", "budget_currency": "inr"}'
+
+    with patch.object(llm_service, "generate", new=fake):
+        result = await understand_user_message({"user_message": "keep it under 60k rupees"})
+    assert (result["budget_amount"], result["budget_currency"]) == (60000.0, "INR")
+
+
+@pytest.mark.asyncio
+async def test_a_turn_lists_your_message_before_the_reply_even_with_equal_timestamps(client: AsyncClient):
+    """Both rows of a turn can get the same timestamp; reloading the chat then showed the reply first."""
+    from datetime import datetime, timezone
+    from app.models.enums import MessageRole
+    from app.models.trip import ConversationMessage
+    from app.repositories.conversation import ConversationRepository
+    from conftest import TestingSessionLocal
+
+    headers = {"X-Guest-ID": str(uuid.uuid4())}
+    trip_id = (await client.post("/api/trips", headers=headers)).json()["trip_id"]
+    async with TestingSessionLocal() as db:
+        session = await ConversationRepository().get_active_session_by_trip_id(db, uuid.UUID(trip_id))
+        stamp = datetime.now(timezone.utc)
+        db.add(ConversationMessage(session_id=session.id, role=MessageRole.ASSISTANT, content="the reply", created_at=stamp))
+        db.add(ConversationMessage(session_id=session.id, role=MessageRole.USER, content="my question", created_at=stamp))
+        await db.commit()
+    rows = (await client.get(f"/api/trips/{trip_id}/messages", headers=headers)).json()["messages"]
+    assert [row["content"] for row in rows[-2:]] == ["my question", "the reply"]
 
 
 @pytest.mark.asyncio

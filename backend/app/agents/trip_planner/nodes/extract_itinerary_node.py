@@ -65,6 +65,44 @@ def normalize_day_plan(raw: object, duration_days: int, graph: dict | None, dest
              "base": by_day.get(day, {}).get("base") or stop_for(day)} for day in range(1, duration_days + 1)]
 
 
+def place_key(name: str) -> str:
+    """One key for one place however the model typed it: "Kiyomizu‑dera" (U+2011) is "Kiyomizu-dera",
+    "Café" is "Cafe"."""
+    plain = "".join(c for c in unicodedata.normalize("NFKD", name) if not unicodedata.combining(c)).casefold()
+    # "Kinkaku-ji (Golden Pavilion)" is "Kinkaku-ji"; "Gion district" is "Gion".
+    plain = re.sub(r"\(.*?\)|\b(district|area|neighbou?rhood)\s*$", "", plain.strip())
+    return re.sub(r"[^0-9a-z]+", "", plain)
+
+
+def day_plan_changes(before: list[dict], after: list[dict], limit: int = 12) -> list[dict]:
+    """What a revision changed in the day plan the studio shows: the receipt under the reply."""
+    def days_of(plan: list[dict]) -> dict[str, tuple[str, list[int]]]:
+        found: dict[str, tuple[str, list[int]]] = {}
+        for day in plan:
+            for item in day.get("items") or []:
+                name = found.setdefault(place_key(item["name"]), (item["name"], []))
+                name[1].append(day["day"])
+        return found
+
+    old, new = days_of(before), days_of(after)
+    moved, added, removed = [], [], []
+    for key, (name, days) in new.items():
+        was = old.get(key, (name, []))[1]
+        if len(was) == len(days) == 1 and was != days:
+            moved.append(f"Moved {name} from day {was[0]} to day {days[0]}")
+        else:
+            added += [f"Added {name} to day {day}" for day in days if day not in was]
+    for key, (name, days) in old.items():
+        now = new.get(key, (name, []))[1]
+        if not (len(days) == len(now) == 1):
+            removed += [f"Removed {name} from day {day}" for day in days if day not in now]
+    bases = [f"Day {b['day']} now based in {b['base']} (was {a['base']})" for a, b in zip(before, after)
+             if a["day"] == b["day"] and a.get("base") and b.get("base") and a["base"].casefold() != b["base"].casefold()]
+    lines = moved + added + removed + bases
+    extra = [f"…and {len(lines) - limit} more changes"] if len(lines) > limit else []
+    return [{"status": "done", "text": line} for line in lines[:limit] + extra]
+
+
 def _evidence_line(markdown: str, name: str) -> str | None:
     for line in markdown.splitlines():
         if name.casefold() in line.casefold():
@@ -341,15 +379,25 @@ def build_itinerary_graph(
 async def extract_itinerary(state: TripPlanningState) -> dict:
     markdown = state.get("assistant_response") or ""
     extracted = None
-    if markdown:
+    # A revision passes the previous plan's names, so a place still in the text keeps its name and isn't
+    # split or merged differently (which would show up as a change that never happened).
+    known = state.get("known_places") or []
+    reuse = (f"KNOWN PLACES (use these exact names for places the itinerary still mentions; don't merge or split them): "
+             f"{json.dumps(known, ensure_ascii=False)}\n\n") if known else ""
+    # Two tries: an occasional empty or chatty reply would otherwise leave the studio on the old days.
+    for attempt in range(2 if markdown else 0):
         try:
             raw = await llm_service.generate(
-                prompt=f"Destination: {state.get('destination')}\nTrip days: {state.get('duration_days')}\n\nITINERARY:\n{markdown[:18000]}",
+                prompt=f"Destination: {state.get('destination')}\nTrip days: {state.get('duration_days')}\n\n"
+                       f"{reuse}ITINERARY:\n{markdown[:18000]}",
                 system_instruction=EXTRACTION_INSTRUCTION, temperature=0.0,
             )
-            extracted = json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.I))
+            extracted = json.loads(re.search(r"\{[\s\S]*\}", raw or "").group(0))
+            break
         except Exception as exc:
-            logger.info("Using deterministic itinerary graph fallback: %s", exc)
+            logger.info("Itinerary extraction attempt %d failed: %s", attempt + 1, exc)
+    if extracted is None and markdown:
+        logger.info("Using deterministic itinerary graph fallback")
     graph = build_itinerary_graph(
         markdown=markdown, origin=state.get("origin"), destination=state.get("destination") or "Trip",
         duration_days=state.get("duration_days") or 1, candidates=state.get("candidates"),

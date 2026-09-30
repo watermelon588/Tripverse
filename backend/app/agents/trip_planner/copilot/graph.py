@@ -22,7 +22,7 @@ from app.agents.trip_planner.copilot import engine
 from app.agents.trip_planner.copilot.research import initial_queries, research
 from app.agents.trip_planner.nodes.extract_itinerary_node import build_itinerary_graph
 from app.services.enrichment import agent_facts, get_enrichment
-from app.services.llm.service import llm_service, model_for
+from app.services.llm.service import llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,7 @@ class CopilotState(TypedDict, total=False):
     planning_preferences: dict
     places_to_visit: list[str]
     user_name: str | None
+    recent: list[dict]  # the last exchange, [{"role": "traveler" | "you", "text"}], oldest first
 
     ops: list
     events: list[str]
@@ -75,9 +76,15 @@ Operations:
 {"op":"set_base","days":[3,4],"base":"Kyoto"}
 {"op":"next_day"}  {"op":"goto_day","day":4}
 {"op":"research","query":"late-night ramen near Shinjuku"}   when they want ideas POOL cannot answer
-{"op":"finish"}
+{"op":"finish"}   when they say it's final, done, lock it in, or to finalize the plan
 "The 2nd one" refers to LAST SUGGESTIONS. "day" defaults to CURRENT DAY. Use exact names from POOL or PLAN.
-Only "add" a real, specifically named place (from POOL, PLAN, LAST SUGGESTIONS, or named by the traveler).
+Resolve "it", "that", "there", "the first option" against RECENT CHAT, newest first: in "move it to day 5" after
+your reply offered Club Cubana, "it" is Club Cubana. A yes ("yes", "do it", "go ahead", "sounds good") to a change
+you proposed in your last reply means the ops for exactly that proposal. "Anyway"/"do it anyway" after a warning
+means the same op with "force":true.
+Any request to change the plan must produce ops: never answer a change with {"ops":[]}. A move of a place not in
+PLAN is a move op too (it puts the place on that day). "Swap A and B" is two moves.
+Only "add" a real, specifically named place (from POOL, PLAN, LAST SUGGESTIONS, RECENT CHAT, or named by the traveler).
 A vague wish ("in the mood for good food and a quiet garden") is never an add: record it as {"op":"pref","kind":"like"}
 and add {"op":"research","query":"<destination/base> <wish> recommendations"}.
 """
@@ -89,10 +96,15 @@ only when offering 2-3 options.
 
 FACTS come from the planner and are your only source of truth:
 - Name only places that appear in FACTS. Use only numbers from FACTS, with the currency and "~" (estimates).
-- React to what the traveler just said or did first, in their terms ("Done, Kagurazaka is on day 1").
-  If they asked a question, answer it before anything else.
-- If something was blocked, say why in plain words (it would go over budget by ~N, the day is already full,
-  it clashes with their no-X rule, they turned it down before) and offer its alternatives or other days by name.
+- events is the complete list of what just changed, and it is already saved to their Trip Studio. Open with
+  those changes in plain words ("Kagurazaka is on day 1 now."). Never say something was done, added, moved or
+  removed unless events says so. If they asked for a change and events has nothing for it, say plainly that
+  nothing changed and why (see blocked), or ask what they meant. Don't ask them to confirm or finalize a change
+  that is in events. If they asked a question, answer it before anything else.
+- An event with a "heads-up" went through but strains the day or the budget: mention it in a few words and offer
+  one fix (move something to a lighter day, drop something).
+- If something was blocked, it clashes with their own rule (a no-X preference) or a place they turned down: say
+  so plainly, offer its alternatives by name, and say they can tell you to add it anyway.
 - Mention a money_moves entry only when it saves something meaningful, as a friendly tip.
 - The traveler can already see hours and totals in the day panel. Only bring up the budget when it changed a
   lot, is over, or they asked. If budget.baseline (stay + food) alone exceeds the budget, say so kindly and
@@ -106,7 +118,8 @@ FACTS come from the planner and are your only source of truth:
   practical clause (an umbrella, an indoor backup from the suggestions, booking ahead, possible closures or crowds).
   Call it a forecast only when the label is "Forecast"; otherwise say it's typical for that month. Mention a
   heads_up entry only when it affects what they're deciding. Never invent weather or holidays.
-- If status is "complete": a brief wrap-up, one line per day plus the trip total, then invite changes.
+- When events includes "Marked the itinerary complete": a brief wrap-up, one line per day plus the trip total,
+  then invite changes. After that, a finished trip is edited like any other: reply to the change, no wrap-up.
 - End with one easy question. Never mention tools, data, JSON, the planner or other internal systems.
 """
 
@@ -145,11 +158,14 @@ async def interpret(state: CopilotState) -> dict:
         "LAST WARNINGS: " + json.dumps(copilot.get("last_blocked", []), ensure_ascii=False),
         "POOL: " + json.dumps([i["name"] for i in copilot["pool"][:40]], ensure_ascii=False),
         "PROFILE: " + json.dumps(copilot["profile"], ensure_ascii=False),
+        "RECENT CHAT (oldest first):\n" + "\n".join(
+            f"{turn['role'].upper()}: {turn['text']}" for turn in state.get("recent") or []),
         f'TRAVELER MESSAGE: "{state.get("user_message") or ""}"',
     ])
     try:
+        # The main model: this is the one decision in the turn that has to be right.
         parsed = _json(await llm_service.generate(prompt=prompt, system_instruction=INTERPRET_INSTRUCTION,
-                                                  temperature=0.0, **model_for("fast")))
+                                                  temperature=0.0))
     except Exception as exc:
         logger.warning("Copilot interpret failed: %s", exc)
         parsed = {}
@@ -324,12 +340,26 @@ def _turn_input(state: dict[str, Any], defer_reply: bool = False) -> dict:
     return {"copilot": copilot, "defer_reply": defer_reply,
             **{k: state.get(k) for k in ("user_message", "ui_action", "destination", "duration_days", "origin",
                                          "currency", "budget_target", "planning_preferences",
-                                         "places_to_visit", "user_name")}}
+                                         "places_to_visit", "user_name", "recent")}}
+
+
+REASON_WORDS = {"hard_avoid": "it clashes with your no-{} rule", "rejected_before": "you turned it down before"}
+
+
+def turn_changes(facts: dict | None) -> list[dict]:
+    """The receipt shown under the reply: the engine's own record of this turn, never the model's."""
+    facts = facts or {}
+    skipped = [{"status": "skipped", "text": f"Didn't add {b['name']} to day {b['day']}: " + "; ".join(
+        REASON_WORDS[r["code"]].format(", ".join(r.get("detail") or [])) for r in b["reasons"] if r["code"] in REASON_WORDS),
+        "retry": {"op": "add", "name": b["name"], "day": b["day"], "force": True}}  # the "Add anyway" button
+        for b in facts.get("blocked") or []]
+    return [{"status": "done", "text": event} for event in facts.get("events") or []] + skipped
 
 
 def _turn_output(result: dict) -> dict:
     return {"copilot": result["copilot"], "assistant_response": result.get("assistant_response") or "",
-            "itinerary_graph": result["itinerary_graph"], "facts": result.get("facts"), "ui_action": None}
+            "itinerary_graph": result["itinerary_graph"], "facts": result.get("facts"), "ui_action": None,
+            "changes": turn_changes(result.get("facts"))}
 
 
 async def build_with_agent(state: dict[str, Any]) -> dict:
