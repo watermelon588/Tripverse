@@ -171,6 +171,11 @@ export function BudgetWorkspace({ tripId, destination, graph, refreshVersion, on
       <header className="tv-budget__bar"><span>TRIP BUDGET</span><button type="button" onClick={onClose} aria-label="Close budget">Close ×</button></header>
       <div className="tv-budget__body">
         <div className="tv-budget__heading"><h2>{destination ? `${destination} budget` : 'Your trip budget'}</h2><p>Plan what you expect to spend, place by place. Numbers you enter are saved with this trip.</p></div>
+        <ol className="tv-budget__steps" aria-label="How the budget works">
+          <li><strong>Set a target</strong><span>Your total for the whole trip, below. You can also tell the chat: “my budget is 60,000 INR”.</span></li>
+          <li><strong>Fill in the costs</strong><span>Every place gets rows for stay, food, activities and travel. Tap <em>Suggest amounts</em> for typical costs, or type your own.</span></li>
+          <li><strong>Watch what’s left</strong><span>Amounts you enter or <em>Use</em> count toward the total. Suggestions stay out until you use them.</span></li>
+        </ol>
         {error && <div className="tv-budget__error" role="alert">{error}<button type="button" onClick={() => { setError(null); setLoading(true); void getTripBudget(tripId).then((data) => { setBudget(data); setTarget(data.target_amount || ''); setCurrency(data.currency); }).catch((cause: Error) => setError(cause.message)).finally(() => setLoading(false)); }}>Retry</button></div>}
         {loading ? <p className="tv-budget__loading" role="status">Loading budget…</p> : budget && <>
           <section className="tv-budget__summary" aria-label="Budget summary">

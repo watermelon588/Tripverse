@@ -8,6 +8,10 @@ export interface ChatComposerProps {
   disabled?: boolean;
   placeholder?: string;
   initialValue?: string;
+  /** The line under the composer; defaults to the keyboard hint. */
+  hint?: string;
+  /** "Plan" before there's a trip, "Send" once there is one. */
+  sendLabel?: string;
 }
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -16,6 +20,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   disabled = false,
   placeholder = "Describe your voyage: destination, duration, budget, or preferred sights...",
   initialValue = "",
+  hint = 'Enter to send · Shift + Enter for a new line',
+  sendLabel = 'Plan',
 }) => {
   const [input, setInput] = useState<string>(initialValue);
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -168,7 +174,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             onClick={handleSend}
             disabled={!canSubmit}
           >
-            <span>{isLoading ? 'Planning' : 'Plan'}</span>
+            <span>{isLoading ? 'Working' : sendLabel}</span>
             <ArrowUpRightIcon width={14} height={14} />
           </button>
         </div>
@@ -177,7 +183,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       <p className="tv-meta tv-comp__hint">
         {isListening
           ? 'Listening — speak your changes'
-          : 'Enter to send · Shift + Enter for a new line'}
+          : hint}
       </p>
     </div>
   );
