@@ -33,6 +33,9 @@ COMFORT = ("budget", "mid_range", "comfortable")
 PREF_LISTS = {"must": ("hard", "must"), "avoid": ("hard", "avoid"),
               "like": ("soft", "likes"), "dislike": ("soft", "dislikes")}
 OPPOSITE = {"must": "avoid", "avoid": "must", "like": "dislike", "dislike": "like"}
+# How a saved preference reads in the receipt under the reply.
+PREF_SAVED = {"must": "Rule saved: {} is a must", "avoid": "Rule saved: no {}",
+              "like": "Noted: you like {}", "dislike": "Noted: you'd rather skip {}"}
 POOL_LIMIT = 60
 _STOP = {"with", "and", "the", "long", "late", "early", "very", "lots", "much", "many", "heavy",
          "places", "place", "things", "stuff", "spots", "areas", "area", "too", "any", "more"}
@@ -335,10 +338,28 @@ def _day_arg(copilot: dict, value: Any, default: int) -> int:
     return value if type(value) is int and 1 <= value <= len(copilot["days"]) else default
 
 
+# The traveler's own rules still ask before an add; day hours and the budget only warn.
+ASK_FIRST = {"hard_avoid", "rejected_before"}
+
+
+def _heads_up(copilot: dict, day_no: int) -> str:
+    """What an edit the traveler asked for strained, said in the event itself."""
+    status, day = budget_status(copilot), day_of(copilot, day_no)
+    notes = []
+    hours, capacity = round(day_hours(copilot, day["items"]), 1), PACE_HOURS[copilot["profile"]["pace"]]
+    if hours > capacity:
+        notes.append(f"day {day_no} is now {hours:g} h, over the {capacity:g} h a {copilot['profile']['pace']} day holds")
+    if status["over"]:
+        notes.append(f"the trip is ~{status['committed'] - status['budget']:g} {copilot['currency']} over budget")
+    return f" (heads-up: {'; '.join(notes)})" if notes else ""
+
+
 def apply_ops(copilot: dict, ops: list[Any]) -> tuple[list[str], list[dict], list[str]]:
     """Apply structured traveler decisions. Returns (events, blocked adds, research queries).
 
-    Ops come from the LLM or the client, so every field is validated here.
+    Ops come from the LLM or the client, so every field is validated here. Anything the traveler
+    asks for happens; only their own hard rules (an avoid, a place they turned down) hold an add
+    back until they insist (force). Events are the record of what changed, so a no-op says so.
     """
     events: list[str] = []
     blocked: list[dict] = []
@@ -350,48 +371,47 @@ def apply_ops(copilot: dict, ops: list[Any]) -> tuple[list[str], list[dict], lis
             continue
         kind, name = op.get("op"), clean(op.get("name"))
         day_no = _day_arg(copilot, op.get("day"), current)
+        hit = next(((d, i) for d, i in scheduled(copilot) if find([i], name)), None) if name else None
+        if kind == "move" and name and not hit:
+            kind = "add"  # "move X to day 3" for a place not planned yet means "put it there"
 
         if kind == "add" and name:
             item = find(copilot["pool"], name) or make_item({**op, "name": name})
             if find([i for _, i in scheduled(copilot)], item["name"]):
                 events.append(f"{item['name']} is already in the plan")
                 continue
-            fit = check_add(copilot, day_no, item)
-            if fit["ok"] or op.get("force") is True:
-                day_of(copilot, day_no)["items"].append(item)
-                if item["name"] in profile["rejected"]:
-                    profile["rejected"].remove(item["name"])
-                events.append(f"Added {item['name']} to day {day_no}"
-                              + (" (you overrode a warning)" if not fit["ok"] else ""))
-            else:
-                blocked.append({"item": item, "day": day_no, "reasons": fit["reasons"],
-                                "cost_delta": fit["cost_delta"]})
+            rules = [r for r in check_add(copilot, day_no, item)["reasons"] if r["code"] in ASK_FIRST]
+            if rules and op.get("force") is not True:
+                blocked.append({"item": item, "day": day_no, "reasons": rules, "cost_delta": 0})
+                continue
+            day_of(copilot, day_no)["items"].append(item)
+            if item["name"] in profile["rejected"]:
+                profile["rejected"].remove(item["name"])
+            events.append(f"Added {item['name']} to day {day_no}"
+                          + (" (you overrode a warning)" if rules else "") + _heads_up(copilot, day_no))
         elif kind == "remove" and name:
-            for day, item in scheduled(copilot):
-                if find([item], name):
-                    day["items"].remove(item)
-                    events.append(f"Removed {item['name']} from day {day['day']}")
-                    if op.get("reject") is True:
-                        profile["rejected"].append(item["name"])
-                    break
-            else:
+            if hit:
+                hit[0]["items"].remove(hit[1])
+                events.append(f"Removed {hit[1]['name']} from day {hit[0]['day']}")
                 if op.get("reject") is True:
-                    profile["rejected"].append(name)
-                    events.append(f"Won't suggest {name} again")
+                    profile["rejected"].append(hit[1]["name"])
+            elif op.get("reject") is True:
+                profile["rejected"].append(name)
+                events.append(f"Won't suggest {name} again")
+            else:
+                events.append(f"{name} wasn't in the plan")
         elif kind == "move" and name:
-            hit = next(((d, i) for d, i in scheduled(copilot) if find([i], name)), None)
-            if hit and hit[0]["day"] != day_no:
-                source, item = hit
-                target = day_of(copilot, day_no)
-                if day_hours(copilot, [*target["items"], item]) > PACE_HOURS[profile["pace"]] and op.get("force") is not True:
-                    blocked.append({"item": item, "day": day_no, "reasons": [{"code": "day_full"}], "cost_delta": 0})
-                    continue
-                before = budget_status(copilot)["committed"]
-                source["items"].remove(item)
-                target["items"].append(item)
-                saved = round(before - budget_status(copilot)["committed"], 2)
-                events.append(f"Moved {item['name']} from day {source['day']} to day {day_no}"
-                              + (f", saving ~{saved:g} {copilot['currency']}" if saved > 0 else ""))
+            source, item = hit
+            if source["day"] == day_no:
+                events.append(f"{item['name']} is already on day {day_no}")
+                continue
+            before = budget_status(copilot)["committed"]
+            source["items"].remove(item)
+            day_of(copilot, day_no)["items"].append(item)
+            saved = round(before - budget_status(copilot)["committed"], 2)
+            events.append(f"Moved {item['name']} from day {source['day']} to day {day_no}"
+                          + (f", saving ~{saved:g} {copilot['currency']}" if saved > 0 else "")
+                          + _heads_up(copilot, day_no))
         elif kind == "set_budget":
             amount = number(op.get("amount"))
             currency = str(op.get("currency") or "").upper()
@@ -434,7 +454,7 @@ def apply_ops(copilot: dict, ops: list[Any]) -> tuple[list[str], list[dict], lis
             profile[other_group][other_field][:] = [t for t in profile[other_group][other_field] if key(t) != key(value)]
             if not existing:
                 target.append(value)
-                events.append(f"Noted {'hard' if group == 'hard' else 'soft'} preference ({op['kind']}): {value}")
+                events.append(PREF_SAVED[op["kind"]].format(value))
             if op["kind"] == "avoid":
                 clashes = [i["name"] for _, i in scheduled(copilot) if matches(value, i)]
                 if clashes:

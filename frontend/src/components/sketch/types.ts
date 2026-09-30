@@ -11,7 +11,8 @@ export type Point = [number, number];
 
 export type SketchElement = { id: string } & (
   | { kind: 'text'; x: number; y: number; lines: string[]; size: number; tone: Tone; anchor?: 'start' | 'middle' | 'end'; bold?: boolean }
-  | { kind: 'box'; x: number; y: number; w: number; h: number; tone: Tone; dashed?: boolean }
+  /** `label` names the place a card stands for. */
+  | { kind: 'box'; x: number; y: number; w: number; h: number; tone: Tone; dashed?: boolean; label?: string }
   | { kind: 'ellipse'; cx: number; cy: number; w: number; h: number; tone: Tone; fill?: boolean }
   /** A hand-drawn line through the points; `curve` bends it, `arrow` adds a head at the end. */
   | { kind: 'path'; points: Point[]; tone: Tone; dashed?: boolean; arrow?: boolean; curve?: boolean }
@@ -28,6 +29,9 @@ export interface SketchPage {
   title: string;
   /** Text alternative for the whole page, from the trip document only. */
   alt: string;
+  /** Page size in px: A4 landscape, or the same sheet upright for phones. */
+  w: number;
+  h: number;
   elements: SketchElement[];
 }
 

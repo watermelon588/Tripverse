@@ -4,6 +4,8 @@ from app.agents.trip_planner.nodes.validate_state_node import validate_state
 
 FORM_ACTION = "SHOW_ONBOARDING_FORM"
 SUBMIT_ACTION = "SUBMIT_TRIP_ONBOARDING"
+NEEDED = {"destination": "where you're going", "duration_days": "how many days",
+          "origin": "where you're travelling from"}
 
 
 def show_onboarding_form(state: TripPlanningState) -> dict:
@@ -14,12 +16,18 @@ def show_onboarding_form(state: TripPlanningState) -> dict:
     if state.get("duration_days"):
         known.append(f'{state["duration_days"]} days')
     summary = " for ".join(known) if known else "your trip"
+    validation = validate_state(state)
+    # Ask only for what chat hasn't told us yet; the form takes it one small step at a time.
+    needed = [NEEDED[field] for field in validation["missing_fields"]]
+    ask = (f"I just need {', '.join(needed[:-1])}{' and ' if needed[:-1] else ''}{needed[-1]}."
+           if needed else "Check the basics below.")
     return {
-        **validate_state(state),
+        **validation,
         # The form is the gate: even when chat already supplied every field, the trip
         # stays in onboarding until the traveler submits it (otherwise the client hides it).
         "onboarding_complete": False,
-        "assistant_response": f"I can start a draft for {summary}. Add the remaining trip details below, then I'll show you the brief before generating anything.",
+        "assistant_response": f"I can start a draft for {summary}. {ask} Everything after that is optional, so skip it "
+                              "whenever you like. You'll see the brief before I plan anything.",
         "ui_action": {
             "action": FORM_ACTION,
             "fields": ["origin", "destination", "places_to_visit", "duration_days", "planning_preferences"],

@@ -6,17 +6,27 @@
  * tagged chips with icons — the previous emoji badges are out; the system
  * bans emoji.
  */
+import { UserAvatar } from '../guide/UserAvatar';
 import React, { useRef } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 
 import { AssistantAvatar } from './AssistantAvatar';
+import { useGuide } from '../guide/GuideContext';
 import { MarkdownMessage } from './MarkdownMessage';
 import { useAuth } from '../../context/AuthContext';
-import { CheckIcon, ClockIcon, PinIcon, PlaneIcon, WalletIcon } from '../home/v2/IconsV2';
+import { CheckIcon, ClockIcon, LayersIcon, PinIcon, PlaneIcon, WalletIcon } from '../home/v2/IconsV2';
 import { EASE, prefersReducedMotion } from '../home/v2/motion';
 import type { ItineraryGraph } from './itineraryGraph';
-import type { CopilotState } from './CopilotPanel';
+import type { CopilotOp, CopilotState } from './CopilotPanel';
+
+/** One line of a turn's receipt: what the planner actually changed (the server's record, not the reply's words). */
+export interface PlanChange {
+  status: 'done' | 'skipped';
+  text: string;
+  /** A held-back add the traveler can push through ("Add anyway"). */
+  retry?: CopilotOp & { day?: number; name?: string };
+}
 
 export interface ChatMessageItem {
   id: string;
@@ -26,7 +36,7 @@ export interface ChatMessageItem {
   stage?: string;
   payload?: {
     action?: string; values?: Record<string, unknown>; kind?: string; graph?: ItineraryGraph;
-    copilot?: CopilotState;
+    copilot?: CopilotState; changes?: PlanChange[];
   } | null;
   metadata?: {
     destination?: string;
@@ -39,11 +49,51 @@ export interface ChatMessageItem {
 
 interface ChatMessageProps {
   message: ChatMessageItem;
+  /** Shown on the receipt; left out inside the studio, where the change is already on screen. */
+  onOpenStudio?: () => void;
+  /** "Add anyway" on a held-back add; only the latest reply gets it. */
+  onRetry?: (change: PlanChange) => void;
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
+function PlanReceipt({ changes, onOpenStudio, onRetry }: { changes: PlanChange[] } & Omit<ChatMessageProps, 'message'>) {
+  const changed = changes.some((change) => change.status === 'done');
+  return (
+    <section className={`tv-receipt ${changed ? '' : 'is-unchanged'}`} aria-label="What changed in your trip">
+      <header>
+        <span className="tv-label">{changed ? (onOpenStudio ? 'Saved to your studio' : 'Studio updated') : 'Nothing changed'}</span>
+        {changed && onOpenStudio && (
+          <button type="button" className="tv-receipt__open" onClick={onOpenStudio}>
+            <LayersIcon width={13} height={13} />Open studio
+          </button>
+        )}
+      </header>
+      <ul>
+        {changes.map((change, index) => {
+          // The engine appends strain to the change itself: "Moved X to day 2 (heads-up: day 2 is now 9 h, …)".
+          const [text, headsUp] = change.text.split(' (heads-up: ');
+          return (
+            <li key={index} className={`is-${change.status}`}>
+              {change.status === 'done' ? <CheckIcon width={13} height={13} /> : <span className="tv-receipt__dash" aria-hidden="true">–</span>}
+              <span>
+                {change.status === 'skipped' && <span className="sr-only">Not changed: </span>}
+                {text}
+                {headsUp && <small>Heads-up: {headsUp.replace(/\)$/, '')}</small>}
+              </span>
+              {change.retry && onRetry && (
+                <button type="button" onClick={() => onRetry(change)}>Add anyway</button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onOpenStudio, onRetry }) => {
   const { user } = useAuth();
   const root = useRef<HTMLDivElement>(null);
+  const guide = useGuide();
 
   const avatarUrl = user?.user_metadata?.avatar_url;
   const isUser = message.sender === 'user';
@@ -82,20 +132,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
       <div className="tv-msg2__avatar">
         {isUser ? (
           <span className="tv-msg2__you">
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="" />
-            ) : (
-              (user?.email ?? 'Y').slice(0, 1).toUpperCase()
-            )}
+            <UserAvatar avatarUrl={avatarUrl} seed={user?.id ?? user?.email} size={34} />
           </span>
         ) : (
-          <AssistantAvatar size={34} />
+          <AssistantAvatar size={34} alt="" />
         )}
       </div>
 
       <div className="tv-msg2__col">
         <div className="tv-msg2__head">
-          <span className="tv-label">{isUser ? 'You' : 'TripVerse'}</span>
+          <span className="tv-label">{isUser ? 'You' : guide.name}</span>
           <span className="tv-meta">{message.timestamp}</span>
         </div>
 
@@ -121,6 +167,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
             </div>
           )}
         </div>
+
+        {!isUser && message.payload?.changes?.length ? (
+          <PlanReceipt changes={message.payload.changes} onOpenStudio={onOpenStudio} onRetry={onRetry} />
+        ) : null}
       </div>
     </article>
   );

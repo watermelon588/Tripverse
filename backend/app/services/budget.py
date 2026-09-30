@@ -76,17 +76,19 @@ async def budget_target(db: AsyncSession, trip_id: UUID) -> float | None:
     return float(plan.target_amount) if plan and plan.target_amount is not None else None
 
 
-async def apply_agent_budget(db: AsyncSession, trip: Trip, amount: float | None, currency: str | None) -> None:
-    """Mirror a budget from the trip brief or the agent into the ledger, never converting entered amounts."""
+async def apply_agent_budget(db: AsyncSession, trip: Trip, amount: float | None, currency: str | None) -> bool:
+    """Mirror a budget from the trip brief, the agent or the chat into the ledger, never converting
+    entered amounts. False when it couldn't: a new currency while amounts are entered in the old one."""
     if currency and currency != trip.currency:
         result = await db.execute(select(BudgetItem.id).where(
             BudgetItem.trip_id == trip.id, BudgetItem.unit_amount.is_not(None)).limit(1))
         if result.first():
-            return
+            return False
         trip.currency = currency
     if amount is not None:
         plan = await _ensure_plan(db, trip.id)
         plan.target_amount = Decimal(str(round(amount, 2)))
+    return True
 
 
 def _days(node: dict) -> tuple[int, int] | None:

@@ -14,8 +14,11 @@ import { useRef } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 
-import { AGENT_STEPS, ITINERARY_ROWS, img } from '../content';
+import { AGENT_STEPS, BUDGET_ROWS, img } from '../content';
 import { ArrowUpRightIcon, GraphIcon, PinIcon, WalletIcon, ClockIcon } from '../IconsV2';
+import { GuideCast } from '../../../guide/GuideCast';
+import { GuideCharacter } from '../../../guide/GuideCharacter';
+import { companionGuide } from '../../../guide/guides';
 import { EASE, countUp, parallaxImage, prefersReducedMotion, splitLines } from '../motion';
 
 export interface HeroProps {
@@ -70,7 +73,7 @@ export function HeroBento({ onStartPlanning, onNavigateExplore }: HeroProps) {
         parallaxImage(el, { trigger: el.parentElement ?? el, amount: 8 });
       });
 
-      if (statRef.current) countUp(statRef.current, 23, root.current ?? undefined);
+      if (statRef.current) countUp(statRef.current, 14, root.current ?? undefined);
 
       return () => split?.revert();
     },
@@ -99,13 +102,13 @@ export function HeroBento({ onStartPlanning, onNavigateExplore }: HeroProps) {
               <em>morning you leave</em>{' '}
               {/* Bright, high-contrast subject: dark night shots read as blobs at 0.8em. */}
               <img src={img.sydney} alt="" aria-hidden="true" className="tv-inline-img" />{' '}
-              — there is all of this <em>to work out.</em>
+              there is all of this <em>to work out.</em>
             </h1>
 
             <p className="tv-lead tv-bg__lead">
-              TripVerse works it out with you. Describe the journey once and the agent resolves the
-              cities, wires the routes, holds your budget, and opens the whole thing as a world you
-              can move through.
+              TripVerse works it out with you. Tell a guide where you are going and it drafts the days,
+              keeps an eye on the budget, and opens the trip as a studio you can explore: a plan,
+              a sketchbook, a map and a 3D route.
             </p>
 
             <div className="tv-bg__actions">
@@ -114,8 +117,11 @@ export function HeroBento({ onStartPlanning, onNavigateExplore }: HeroProps) {
                 <ArrowUpRightIcon width={15} height={15} />
               </button>
               <button type="button" className="tv-link" onClick={onNavigateExplore}>
-                <span>Explore built trips</span>
+                <span>Explore destinations</span>
               </button>
+            </div>
+            <div className="tv-bg__cast">
+              <GuideCast size={46} />
             </div>
           </div>
 
@@ -133,8 +139,8 @@ export function HeroBento({ onStartPlanning, onNavigateExplore }: HeroProps) {
           {/* Live trace */}
           <div className="tv-bg__cell tv-bg__cell--trace">
             <div className="tv-bg__cell-head">
-              <GraphIcon width={18} height={18} />
-              <span className="tv-label">Reasoning now</span>
+              <GuideCharacter guide={companionGuide()} size={30} mood="thinking" interactive label="Your guide, thinking" />
+              <span className="tv-label">Planning now</span>
             </div>
             <ul className="tv-trace tv-trace--compact">
               {AGENT_STEPS.slice(0, 4).map((s) => (
@@ -150,17 +156,17 @@ export function HeroBento({ onStartPlanning, onNavigateExplore }: HeroProps) {
           <div className="tv-bg__cell tv-bg__cell--cost">
             <div className="tv-bg__cell-head">
               <WalletIcon width={18} height={18} />
-              <span className="tv-label">Japan · 14 nights</span>
+              <span className="tv-label">Kyoto · 3 days · budget</span>
             </div>
             <ul className="tv-bg__rows">
-              {ITINERARY_ROWS.map((r) => (
-                <li key={r.day}>
-                  <span className="tv-bg__row-place">{r.place}</span>
-                  <span className="tv-meta">{r.cost}</span>
+              {BUDGET_ROWS.map((r) => (
+                <li key={r.label}>
+                  <span className="tv-bg__row-place">{r.label}</span>
+                  <span className="tv-meta">{r.amount}</span>
                 </li>
               ))}
             </ul>
-            <p className="tv-meta tv-bg__total">Rail only · under a ¥420,000 ceiling</p>
+            <p className="tv-meta tv-bg__total">~₹98,520 suggested · ₹150,000 budget</p>
           </div>
 
           {/* Wide photo band */}
@@ -177,9 +183,9 @@ export function HeroBento({ onStartPlanning, onNavigateExplore }: HeroProps) {
           {/* Stat */}
           <div className="tv-bg__cell tv-bg__cell--stat">
             <span className="tv-display tv-bg__stat-n" ref={statRef}>
-              23
+              14
             </span>
-            <span className="tv-meta tv-bg__stat-l">nodes wired across 4 cities, each one editable</span>
+            <span className="tv-meta tv-bg__stat-l">places across 3 days, each one movable by asking</span>
           </div>
         </div>
       </div>

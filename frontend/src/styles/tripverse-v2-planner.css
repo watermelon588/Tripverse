@@ -38,7 +38,7 @@
   font-weight: 500;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #787774;
+  color: var(--tv-muted, #666562);
 }
 
 /* ==========================================================================
@@ -204,7 +204,9 @@
   box-shadow: inset 0 0 0 1px var(--tv-line-strong);
 }
 
-.tv-hist__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.tv-hist__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1;
+  padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.tv-hist__text:focus-visible { outline: 2px solid var(--tv-blue-fg); outline-offset: 4px; border-radius: 2px; }
 
 .tv-hist__title {
   font-size: 0.86rem;
@@ -283,24 +285,6 @@
 }
 
 .tv-trip__tags { display: flex; flex-wrap: wrap; gap: 0.3rem; }
-
-/* ==========================================================================
- * Assistant avatar
- * ========================================================================== */
-
-.tv-ava {
-  position: relative;
-  flex: none;
-  overflow: hidden;
-  border-radius: 50%;
-  border: 1px solid var(--tv-line-strong);
-  background: var(--tv-surface-sunk);
-  user-select: none;
-}
-
-.tv-ava.is-thinking { background: var(--tv-ink); border-color: var(--tv-ink); }
-.tv-ava__img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
-.tv-ava__img--frame { object-fit: contain; transform: scale(1.1); }
 
 /* ==========================================================================
  * Markdown in agent replies
@@ -535,6 +519,22 @@
 .tv-onboarding__guide-line { margin: .7rem 0 0; color: var(--tv-muted); font-size: .8rem; }
 @media (prefers-reduced-motion: reduce) { .tv-onboarding__guide { transition: none; } .tv-onboarding__guide:hover { transform: none; } }
 @media (max-width: 640px) { .tv-onboarding__grid, .tv-onboarding__grid--3 { grid-template-columns: 1fr; } }
+/* The brief one step at a time: the step's question is the heading, so its legend is for screen readers only. */
+.tv-onboarding__progress { display: flex; align-items: center; gap: .6rem; margin: 0 0 .2rem; color: var(--tv-muted); font: .66rem var(--tv-mono); font-variant-numeric: tabular-nums; }
+.tv-onboarding__progress > span { display: flex; gap: 4px; }
+.tv-onboarding__progress i { width: 28px; height: 3px; background: var(--tv-line-strong); transition: background-color .25s var(--tv-ease); }
+.tv-onboarding__progress i.is-done { background: var(--tv-ink); }
+.tv-onboarding__heading h2:focus { outline: none; }
+.tv-onboarding--steps .tv-onboarding__section { padding-top: 0; border-top: 0; transition: opacity .2s var(--tv-ease), transform .2s var(--tv-ease); }
+@starting-style { .tv-onboarding--steps .tv-onboarding__section { opacity: 0; transform: translateY(6px); } }
+.tv-onboarding--steps .tv-onboarding__section legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.tv-onboarding--steps .tv-onboarding__section .tv-onboarding__grid, .tv-onboarding--steps .tv-onboarding__guides { margin-top: 0; }
+.tv-onboarding__nav { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
+.tv-onboarding__nav > :is(.tv-onboarding__skip, .tv-btn--primary:not(.tv-onboarding__skip + *)) { margin-left: auto; }
+.tv-onboarding__skip { padding: .4rem .2rem; color: var(--tv-ink-soft); font-size: .82rem; text-decoration: underline; text-underline-offset: 3px; }
+.tv-onboarding__skip:hover { color: var(--tv-ink); }
+.tv-onboarding__skip:focus-visible { outline: 2px solid var(--tv-blue-fg); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .tv-onboarding--steps .tv-onboarding__section, .tv-onboarding__progress i { transition: none; } }
 
 .tv-planning-choice { width: min(100%, 720px); padding: clamp(1.25rem, 4vw, 2.5rem); border: 1px solid var(--tv-line-strong); background: var(--tv-surface); }
 .tv-planning-choice__intro h2 { margin: .45rem 0; font-size: clamp(1.5rem, 3vw, 2.25rem); line-height: 1.15; }
@@ -556,36 +556,42 @@
 @media (max-width: 640px) { .tv-planning-choice__options { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .tv-planning-choice__brief { flex-direction: column; } }
 
-/* Build with the agent: day, budget and next choices above the composer */
-.tv-copilot { flex: none; display: grid; gap: .7rem; padding: .85rem clamp(.75rem, 2vw, 1.25rem) .2rem; border-top: 1px solid var(--tv-line); background: var(--tv-canvas); }
+/* Build with the agent: a one-line dock above the composer (day, hours, budget, suggestions);
+   "Day plan" opens every day, this day's places and Finish. */
+.tv-copilot { flex: none; display: grid; gap: .55rem; padding: .6rem clamp(.75rem, 2vw, 1.25rem) .15rem; border-top: 1px solid var(--tv-line); background: var(--tv-canvas); }
 .tv-copilot > * { width: 100%; max-width: 52rem; margin-inline: auto; }
+.tv-copilot__bar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; }
+.tv-copilot__stepper { display: flex; align-items: center; gap: .35rem; min-width: 0; }
+.tv-copilot__stepper button { display: grid; flex: none; place-items: center; width: 30px; height: 30px; border: 1px solid var(--tv-line); border-radius: var(--tv-r-sm); background: var(--tv-surface); color: var(--tv-ink); transition: border-color .2s var(--tv-ease), transform .14s var(--tv-ease); }
+.tv-copilot__stepper button.is-back svg { transform: rotate(180deg); }
+.tv-copilot__stepper button:hover:not(:disabled) { border-color: var(--tv-ink); }
+.tv-copilot__stepper button:active:not(:disabled) { transform: scale(.96); }
+.tv-copilot__stepper p { display: grid; gap: .05rem; min-width: 0; margin: 0 .35rem; }
+.tv-copilot__stepper strong { overflow: hidden; color: var(--tv-ink); font-size: .82rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.tv-copilot__stepper p span { color: var(--tv-muted); font: .62rem var(--tv-mono); font-variant-numeric: tabular-nums; }
+.tv-copilot__budget { display: grid; gap: .3rem; min-width: min(100%, 200px); margin-left: auto; color: var(--tv-ink-soft); font: .64rem var(--tv-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.tv-copilot__budget i { display: block; height: 3px; background: var(--tv-line); }
+.tv-copilot__budget b { display: block; height: 100%; background: var(--tv-ink); }
+.tv-copilot__budget.is-over { color: var(--tv-red-fg); }
+.tv-copilot__budget.is-over b { background: var(--tv-red-fg); }
+.tv-copilot__toggle { display: inline-flex; flex: none; align-items: center; gap: .4rem; min-height: 30px; padding: 0 .7rem; border: 1px solid var(--tv-line-strong); border-radius: var(--tv-r-sm); background: var(--tv-surface); color: var(--tv-ink); font-size: .74rem; transition: border-color .2s var(--tv-ease); }
+.tv-copilot__toggle:hover { border-color: var(--tv-ink); }
+.tv-copilot__toggle svg { transition: transform .2s var(--tv-ease); }
+.tv-copilot__toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.tv-copilot__chips { display: flex; gap: .4rem; overflow-x: auto; padding-bottom: .1rem; scrollbar-width: none; }
+.tv-copilot__chips button { display: inline-flex; flex: none; align-items: center; gap: .4rem; padding: .35rem .7rem; border: 1px solid var(--tv-line-strong); border-radius: 999px; background: var(--tv-surface); color: var(--tv-ink); font-size: .74rem; white-space: nowrap; transition: border-color .2s var(--tv-ease), transform .14s var(--tv-ease); }
+.tv-copilot__chips button small { color: var(--tv-muted); font: .6rem var(--tv-mono); }
+.tv-copilot__chips button:hover:not(:disabled) { border-color: var(--tv-ink); }
+.tv-copilot__chips button:active:not(:disabled) { transform: scale(.97); }
+.tv-copilot__detail { display: grid; gap: .55rem; max-height: min(40vh, 320px); overflow-y: auto; padding-top: .55rem; border-top: 1px solid var(--tv-line); }
+@starting-style { .tv-copilot__detail { opacity: 0; transform: translateY(4px); } }
+.tv-copilot__detail { transition: opacity .18s var(--tv-ease), transform .18s var(--tv-ease); }
 .tv-copilot__days { display: flex; gap: .35rem; overflow-x: auto; padding-bottom: .2rem; scrollbar-width: thin; }
 .tv-copilot__days button { display: grid; flex: none; gap: .1rem; min-width: 76px; padding: .4rem .55rem; border: 1px solid var(--tv-line); border-radius: var(--tv-r-sm); background: var(--tv-surface); color: var(--tv-ink-soft); text-align: left; }
 .tv-copilot__days button span { font: .62rem var(--tv-mono); letter-spacing: .06em; }
 .tv-copilot__days button small { overflow: hidden; max-width: 110px; color: var(--tv-muted); font-size: .66rem; text-overflow: ellipsis; white-space: nowrap; }
 .tv-copilot__days button.is-current { border-color: var(--tv-ink); color: var(--tv-ink); }
 .tv-copilot__days button:hover:not(:disabled) { border-color: var(--tv-line-strong); }
-.tv-copilot__status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; }
-.tv-copilot__status p { display: flex; flex-wrap: wrap; align-items: baseline; gap: .6rem; margin: 0; }
-.tv-copilot__status strong { color: var(--tv-ink); font-size: .84rem; font-weight: 600; }
-.tv-copilot__status p span { color: var(--tv-muted); font: .62rem var(--tv-mono); }
-.tv-copilot__budget { display: grid; gap: .3rem; min-width: min(100%, 220px); color: var(--tv-ink-soft); font: .64rem var(--tv-mono); text-align: right; }
-.tv-copilot__budget i { display: block; height: 3px; background: var(--tv-line); }
-.tv-copilot__budget b { display: block; height: 100%; background: var(--tv-ink); }
-.tv-copilot__budget small { color: var(--tv-muted); font-size: .6rem; }
-.tv-copilot__budget.is-over { color: var(--tv-red-fg); }
-.tv-copilot__budget.is-over b { background: var(--tv-red-fg); }
-.tv-copilot__chips { display: flex; flex-wrap: wrap; gap: .4rem; }
-.tv-copilot__chips button { display: inline-flex; align-items: baseline; gap: .45rem; padding: .4rem .7rem; border: 1px solid var(--tv-line-strong); border-radius: 999px; background: var(--tv-surface); color: var(--tv-ink); font-size: .74rem; transition: border-color .2s; }
-.tv-copilot__chips button small { color: var(--tv-muted); font: .6rem var(--tv-mono); }
-.tv-copilot__chips button:hover:not(:disabled) { border-color: var(--tv-ink); }
-.tv-copilot__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem; }
-.tv-copilot__done { margin-right: auto; color: var(--tv-muted); font-size: .74rem; }
-.tv-copilot button:focus-visible { outline: 2px solid var(--tv-blue-fg); outline-offset: 2px; }
-.tv-copilot button:disabled { opacity: .5; cursor: not-allowed; }
-.tv-copilot + .tv-chat__composer { border-top: 0; }
-@media (max-width: 640px) { .tv-copilot__budget { text-align: left; } }
-.tv-copilot__day { display: grid; gap: .55rem; max-height: 34vh; overflow-y: auto; }
 .tv-copilot__plan { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border: 1px solid var(--tv-line); background: var(--tv-surface); }
 .tv-copilot__plan li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: .75rem; padding: .45rem .7rem; font-size: .78rem; color: var(--tv-ink); }
 .tv-copilot__plan li + li { border-top: 1px solid var(--tv-line); }
@@ -595,3 +601,21 @@
 .tv-copilot__notes { border: 1px solid var(--tv-line); background: var(--tv-surface); }
 .tv-copilot__notes summary { padding: .45rem .7rem; color: var(--tv-ink-soft); font: .66rem var(--tv-mono); cursor: pointer; }
 .tv-copilot__notes > div { padding: 0 .7rem .6rem; font-size: .8rem; }
+.tv-copilot__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem; }
+.tv-copilot__done { margin-right: auto; color: var(--tv-muted); font-size: .72rem; }
+.tv-copilot button:focus-visible { outline: 2px solid var(--tv-blue-fg); outline-offset: 2px; }
+.tv-copilot button:disabled { opacity: .45; cursor: not-allowed; }
+.tv-copilot + .tv-chat__composer { border-top: 0; }
+@media (max-width: 640px) {
+  .tv-copilot__budget { order: 3; min-width: 100%; margin-left: 0; text-align: left; }
+  .tv-copilot__toggle { margin-left: auto; }
+}
+@media (prefers-reduced-motion: reduce) { .tv-copilot__detail, .tv-copilot__toggle svg, .tv-copilot__stepper button, .tv-copilot__chips button { transition: none; } }
+
+/* The selected stop on the flat map wears the guide's face instead of its number. */
+.tv-routemap__marker.has-guide { background-image: var(--guide); background-size: cover; background-position: center; color: transparent; width: 36px; height: 36px; transform: none; }
+
+/* Route curtain: the guide waits with the mark while the next page loads. */
+.tv-curtain__guide { width: 72px; height: 72px; border: 2px solid #111; border-radius: 50%; background: #fff; object-fit: cover; user-select: none; animation: tv-curtain-bob 900ms ease-in-out infinite; }
+@keyframes tv-curtain-bob { 50% { transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .tv-curtain__guide { animation: none; } }

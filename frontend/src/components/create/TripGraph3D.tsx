@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Html, Line, OrbitControls } from '@react-three/drei';
-import { QuadraticBezierCurve3, Vector3, type Mesh } from 'three';
+import { QuadraticBezierCurve3, Vector3, type Group } from 'three';
 import gsap from 'gsap';
 import type { Coordinates, ItineraryGraph, NearbyPlace } from './itineraryGraph';
 import type { LegExpansion, LegFacts } from './spatialModel';
 
 export type GraphLayout = 'geo' | 'helix' | 'line';
 interface Props {
+  /** The guide's portrait: it walks the selected leg and stands over the open stop. */
+  guideImage?: string;
   graph: ItineraryGraph;
   layout: GraphLayout;
   night: boolean;
@@ -75,13 +77,18 @@ function CameraFocus({ focus, reach, home, controlsRef }: { focus: Point | null;
 }
 
 // A bead that travels the selected leg — shows direction of travel.
-function Traveler({ curve, color }: { curve: QuadraticBezierCurve3; color: string }) {
-  const ref = useRef<Mesh>(null);
+function Traveler({ curve, color, image }: { curve: QuadraticBezierCurve3; color: string; image?: string }) {
+  const ref = useRef<Group>(null);
   useFrame(({ clock }) => { if (ref.current) ref.current.position.copy(curve.getPoint((clock.elapsedTime * 0.28) % 1)); });
-  return reduced() ? null : <mesh ref={ref}><sphereGeometry args={[0.13, 16, 12]} /><meshBasicMaterial color={color} /></mesh>;
+  if (reduced()) return null;
+  return <group ref={ref}>
+    {image
+      ? <Html center zIndexRange={[25, 0]} style={{ pointerEvents: 'none' }}><img src={image} alt="" className="tv-g3__guide is-walking" draggable={false} /></Html>
+      : <mesh><sphereGeometry args={[0.13, 16, 12]} /><meshBasicMaterial color={color} /></mesh>}
+  </group>;
 }
 
-export function TripGraph3D({ graph, layout, night, coordinates, facts, nearby, expandedNode, expandedEdge, expansion, selected, onSelect }: Props) {
+export function TripGraph3D({ guideImage, graph, layout, night, coordinates, facts, nearby, expandedNode, expandedEdge, expansion, selected, onSelect }: Props) {
   const [hover, setHover] = useState<string | null>(null);
   const controlsRef = useRef<any>(null);
   const points = useMemo(() => layoutPoints(graph, layout, coordinates), [graph, layout, coordinates]);
@@ -132,7 +139,7 @@ export function TripGraph3D({ graph, layout, night, coordinates, facts, nearby, 
             <tubeGeometry args={[curve, 24, 0.3, 6, false]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
           </mesh>
-          {expandedEdge === edge.id && <Traveler curve={curve} color={accent} />}
+          {expandedEdge === edge.id && <Traveler curve={curve} color={accent} image={guideImage} />}
           {(chips || active) && f && expandedEdge !== edge.id && <Html position={mid} center zIndexRange={[20, 0]}>
             <button type="button" className={`tv-g3__chip ${active ? 'is-active' : ''}`} onClick={() => onSelect('edge', edge.id)}
               onPointerEnter={() => setHover(edge.id)} onPointerLeave={() => setHover(null)}>
@@ -171,6 +178,7 @@ export function TripGraph3D({ graph, layout, night, coordinates, facts, nearby, 
         const hot = on || hover === node.id;
         return <group key={node.id} position={p}>
           {layout === 'line' && <Line points={[[0, -1.2, 0], [0, -1.6, 0]]} color={wire} lineWidth={1} transparent opacity={0.6} />}
+          {on && guideImage && <Html position={[0, 1.15, 0]} center zIndexRange={[28, 0]} style={{ pointerEvents: 'none' }}><img src={guideImage} alt="" className="tv-g3__guide is-bounce" draggable={false} /></Html>}
           {on && <mesh rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[0.62, 0.68, 48]} /><meshBasicMaterial color={accent} /></mesh>}
           <mesh onClick={pick('node', node.id)} onPointerOver={hoverOn(node.id)} onPointerOut={hoverOff}>
             <sphereGeometry args={[hot ? 0.44 : 0.36, 32, 20]} />

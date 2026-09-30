@@ -21,7 +21,7 @@ import { EASE, prefersReducedMotion } from './motion';
 
 const LINKS = [
   { n: '01', label: 'Plan a trip', hint: 'Open the agent', key: 'plan' },
-  { n: '02', label: 'Explore trips', hint: 'Community routes', key: 'explore' },
+  { n: '02', label: 'Explore destinations', hint: 'Places to start', key: 'explore' },
   { n: '03', label: 'How it works', hint: 'Four steps', key: 'how' },
   { n: '04', label: 'Destinations', hint: 'Six cities', key: 'destinations' },
   { n: '05', label: 'Questions', hint: 'Common answers', key: 'questions' },
@@ -61,6 +61,8 @@ export function SidebarV2({
   }, [open, onClose]);
 
   useEffect(() => {
+    // Closed, the drawer only slides off-screen; inert keeps Tab out of its buttons (React 18 has no inert prop).
+    if (panelRef.current) panelRef.current.inert = !open;
     if (open) panelRef.current?.focus();
   }, [open]);
 
@@ -142,13 +144,13 @@ export function SidebarV2({
         <button type="button" className="tv-drawer__feature" onClick={() => go('explore')}>
           <figure className="tv-drawer__feature-fig">
             <img src={img.blossomFuji} alt="Mount Fuji framed by cherry blossom" className="tv-img" loading="lazy" />
-            <span className="tv-drawer__feature-badge tv-label">Featured route</span>
+            <span className="tv-drawer__feature-badge tv-label">Featured destination</span>
           </figure>
           <span className="tv-drawer__feature-body">
-            <span className="tv-drawer__feature-title">Kansai in blossom season</span>
+            <span className="tv-drawer__feature-title">Japan in blossom season</span>
             <span className="tv-drawer__feature-meta tv-meta">
               <ClockIcon width={12} height={12} />
-              14 nights · rail only · 4 cities
+              Late March to early April
             </span>
           </span>
         </button>
@@ -202,7 +204,7 @@ export function SidebarV2({
             </>
           )}
 
-          <p className="tv-meta tv-drawer__note">Plan as a guest — an account only saves it.</p>
+          <p className="tv-meta tv-drawer__note">Plan as a guest. An account only saves it.</p>
         </div>
       </aside>
     </>

@@ -4,10 +4,13 @@ import { apiFetch } from './apiClient';
 export interface SeasonNote { tone: 'good' | 'warn' | 'info'; text: string }
 export interface StopSeason {
   id: string; month: number;
-  /** Always "Typical for <month>": climate averages, never a forecast. */
+  /** "Typical for <month>" for climate averages; "Forecast for <day>" when kind is 'forecast'. */
   label: string;
   temp_c: number; rain_mm_day: number;
   badge: SeasonNote; notes: SeasonNote[];
+  /** Set when the trip document's MET Norway forecast replaced the climate figure (inside the window). */
+  kind?: 'forecast';
+  source?: string;
 }
 export interface SeasonTarget { id: string; lat: number; lon: number; month: number; places: { name: string; category?: string }[] }
 

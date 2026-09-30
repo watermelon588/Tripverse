@@ -90,7 +90,9 @@ export function Inspector({ ctx }: { ctx: SpatialCtx }) {
     return <div className="tv-sd__empty"><PinIcon width={20} height={20} /><h3>Pick a stop or a leg.</h3>
       <p>Stops open into nearby places. Legs open into segments with time, distance and cost.</p>
       {!!heads.length && <section className="tv-sd__block tv-sd__heads" aria-label="Season heads-up">
-        <h4>Heads-up <span>typical weather</span></h4>
+        <h4>Heads-up <span>{heads.some(({ node }) => ctx.season[node.id]?.kind === 'forecast')
+          ? heads.every(({ node }) => ctx.season[node.id]?.kind === 'forecast') ? 'forecast' : 'forecast and typical weather'
+          : 'typical weather'}</span></h4>
         {heads.map(({ node, note }) => <button type="button" key={`${node.id}${note.text}`} onClick={() => onSelect('node', node.id)}>
           <strong>{node.name}<SeasonTag season={ctx.season[node.id]} /></strong><small>{note.text}</small>
         </button>)}
@@ -111,7 +113,8 @@ export function Inspector({ ctx }: { ctx: SpatialCtx }) {
         <Fig label="When" figure={{ value: dayLabel(node), source: node.day_start ? 'From itinerary' : 'Not scheduled' }} />
         <Fig label="Located" figure={ctx.coordinates[node.id] ? { value: `${ctx.coordinates[node.id].lat.toFixed(3)}, ${ctx.coordinates[node.id].lon.toFixed(3)}`, source: 'Geocoded' } : { value: 'Pending', source: 'Locating…' }} />
         {node.kind === 'stop' && <Fig label="Season" wide figure={ctx.season[node.id]
-          ? { value: `${ctx.season[node.id].badge.text} · ${Math.round(ctx.season[node.id].temp_c)} °C · ${ctx.season[node.id].rain_mm_day} mm rain/day`, source: `${ctx.season[node.id].label} · NASA POWER climate` }
+          ? { value: `${ctx.season[node.id].badge.text} · ${Math.round(ctx.season[node.id].temp_c)} °C · ${ctx.season[node.id].rain_mm_day} mm rain${ctx.season[node.id].kind === 'forecast' ? '' : '/day'}`,
+              source: `${ctx.season[node.id].label} · ${ctx.season[node.id].source ?? 'NASA POWER climate'}` }
           : !prefs.start_date ? { value: '—', source: 'Add a start date to the trip brief for season tips' }
             : { value: '—', source: node.day_start ? 'Checking typical weather…' : 'Not scheduled' }} />}
       </div>

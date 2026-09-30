@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, exports, health, places, trips, upload
+from app.api.routes import auth, exports, health, places, sketch_notes, trips, upload
 from app.core.config import settings
 from app.core.database import close_db, init_db
 
@@ -45,6 +45,7 @@ app.include_router(trips.router)
 app.include_router(upload.router)
 app.include_router(places.router)
 app.include_router(exports.router)
+app.include_router(sketch_notes.router)
 
 if __name__ == "__main__":
     import uvicorn

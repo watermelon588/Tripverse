@@ -30,17 +30,35 @@ def _copilot(budget=12000.0, **prefs):
     return copilot
 
 
-def test_budget_guard_blocks_add_and_offers_cheaper_alternatives():
+def test_an_add_you_ask_for_goes_over_budget_with_a_heads_up_while_suggestions_stay_within_it():
     copilot = _copilot(budget=5000.0)
     events, blocked, _ = engine.apply_ops(copilot, [{"op": "add", "name": "teamlab planets"}])
     assert events == ["Added teamLab Planets to day 1"]
-    _, blocked, _ = engine.apply_ops(copilot, [{"op": "add", "name": "Golden Gai"}])
-    assert blocked[0]["reasons"][0]["code"] == "over_budget"
-    assert blocked[0]["reasons"][0]["overshoot"] == 3100  # 3800 + 4000 + one 300 hop - 5000
-    alternatives = engine.alternatives_for(copilot, blocked[0])["alternatives"]
-    assert alternatives and all(a["est_cost"] < 4000 and a["cost_delta"] <= 1200 for a in alternatives)
-    engine.apply_ops(copilot, [{"op": "add", "name": "Golden Gai", "force": True}])
+    events, blocked, _ = engine.apply_ops(copilot, [{"op": "add", "name": "Golden Gai"}])
+    assert blocked == [] and [i["name"] for i in copilot["days"][0]["items"]] == ["teamLab Planets", "Golden Gai"]
+    assert "3100 JPY over budget" in events[0]  # 3800 + 4000 + one 300 hop - 5000
     assert engine.budget_status(copilot)["over"] is True
+    assert all(s["cost_delta"] <= 0 for s in engine.rank(copilot, 2))  # only free things still fit
+
+
+def test_an_explicit_move_applies_even_onto_a_full_day():
+    """Seen live (Goa): "move Tito's Lane to day 2" was refused three times because day 2 was 'packed'."""
+    copilot = _copilot(budget=None)
+    copilot["profile"]["pace"] = "relaxed"  # 6 h a day
+    engine.apply_ops(copilot, [{"op": "add", "name": "Golden Gai", "day": 2}, {"op": "add", "name": "teamLab Planets", "day": 2},
+                               {"op": "add", "name": "Nezu Museum", "day": 1}])
+    events, blocked, _ = engine.apply_ops(copilot, [{"op": "move", "name": "nezu museum", "day": 2}])
+    assert blocked == [] and copilot["days"][0]["items"] == []
+    assert [i["name"] for i in copilot["days"][1]["items"]][-1] == "Nezu Museum"
+    assert events[0].startswith("Moved Nezu Museum from day 1 to day 2") and "over the 6 h" in events[0]
+
+
+def test_moving_a_place_that_isnt_planned_puts_it_on_that_day_and_misses_are_reported():
+    copilot = _copilot()
+    events, _, _ = engine.apply_ops(copilot, [{"op": "move", "name": "Shinjuku Gyoen", "day": 3},
+                                              {"op": "remove", "name": "Tokyo Tower"}])
+    assert copilot["days"][2]["items"][0]["name"] == "Shinjuku Gyoen"
+    assert events == ["Added Shinjuku Gyoen to day 3", "Tokyo Tower wasn't in the plan"]
 
 
 def test_hard_and_soft_preferences_shape_recommendations():
@@ -67,17 +85,17 @@ def test_moving_a_plan_to_a_same_area_day_saves_the_transfer():
     assert events[0].endswith("saving ~300 JPY")
 
 
-def test_day_capacity_and_invalid_ops_are_ignored_safely():
+def test_a_full_day_warns_and_invalid_ops_are_ignored_safely():
     copilot = _copilot(budget=None)
     copilot["profile"]["pace"] = "relaxed"
     engine.apply_ops(copilot, [{"op": "add", "name": "Golden Gai"}, {"op": "add", "name": "teamLab Planets"}])
-    _, blocked, _ = engine.apply_ops(copilot, [{"op": "add", "name": "Nezu Museum"},
-                                                "junk", {"op": "set_budget", "amount": "NaN"},
-                                                {"op": "add", "name": "x", "day": 99, "est_cost": -5}])
-    assert [b["reasons"][0]["code"] for b in blocked] == ["day_full", "day_full"]
-    assert 2 in engine.alternatives_for(copilot, blocked[0])["fits_on_days"]
+    events, blocked, _ = engine.apply_ops(copilot, [{"op": "add", "name": "Nezu Museum"},
+                                                    "junk", {"op": "set_budget", "amount": "NaN"},
+                                                    {"op": "add", "name": "x", "day": 99, "est_cost": -5}])
+    assert blocked == [] and all("over the 6 h" in event for event in events)
+    assert 1 not in [d for d in engine.other_days_that_fit(copilot, copilot["pool"][3], 2)]  # day 1 is over now
     assert copilot["budget"] is None
-    assert (blocked[1]["day"], blocked[1]["item"]["est_cost"]) == (1, None)  # bad day/cost sanitized
+    assert copilot["days"][0]["items"][-1]["name"] == "x" and copilot["days"][0]["items"][-1]["est_cost"] is None
 
 
 def test_copilot_days_render_into_the_shared_itinerary_graph():
@@ -90,6 +108,26 @@ def test_copilot_days_render_into_the_shared_itinerary_graph():
     assert [(s["name"], s["day_start"], s["day_end"]) for s in stops] == [("Tokyo", 1, 2), ("Hakone", 3, 3)]
     assert stops[0]["nearby_places"][0]["name"] == "Nezu Museum"
     assert len(graph["edges"]) == 3  # Delhi → Tokyo → Hakone → Delhi
+
+
+async def test_the_interpreter_reads_the_last_exchange_and_uses_the_main_model():
+    """Seen live: "Move it to day 5" moved the wrong place, because 'it' was only in the previous reply."""
+    from app.agents.trip_planner.copilot.graph import interpret
+
+    seen = {}
+
+    async def fake(prompt, system_instruction=None, **kwargs):
+        seen.update(prompt=prompt, kwargs=kwargs)
+        return '{"ops": [{"op": "move", "name": "Golden Gai", "day": 3}]}'
+
+    recent = [{"role": "traveler", "text": "move golden gai to day 2"},
+              {"role": "you", "text": "Day 2 is busy. Want me to put Golden Gai on day 3 instead?"}]
+    with patch.object(llm_service, "generate", new=fake):
+        out = await interpret({"copilot": _copilot(), "user_message": "yes, move it there", "recent": recent})
+    assert "move golden gai to day 2" in seen["prompt"]
+    assert "Want me to put Golden Gai on day 3 instead?" in seen["prompt"]
+    assert "model" not in seen["kwargs"]  # the main model, not the fast one
+    assert out["ops"] == [{"op": "move", "name": "Golden Gai", "day": 3}]
 
 
 async def _fake_generate(prompt, system_instruction=None, **_):
@@ -129,6 +167,9 @@ async def test_build_with_agent_turns_persist_state_budget_and_graph(client: Asy
             "action": "COPILOT_OPS", "ops": [{"op": "add", "name": "Nezu Museum"}]}})
         copilot = added.json()["assistant_message"]["payload"]["copilot"]
         assert copilot["days"][0]["items"][0]["name"] == "Nezu Museum"
+        # The receipt under the reply is the engine's own record, not the model's words.
+        assert added.json()["assistant_message"]["payload"]["changes"] == [
+            {"status": "done", "text": "Added Nezu Museum to day 1"}]
 
         chat = await client.post(url, headers=headers, json={"message_type": "TEXT", "content": "no museums please"})
         copilot = chat.json()["assistant_message"]["payload"]["copilot"]
@@ -217,3 +258,47 @@ async def test_streamed_turn_updates_map_and_panel_before_the_reply(client: Asyn
     done = events[-1]["assistant_message"]
     assert done["content"] == "Nezu is lovely."
     assert done["payload"]["copilot"]["days"][0]["reply"] == "Nezu is lovely."  # held for day switches
+
+
+def test_preference_receipts_read_like_a_person_wrote_them():
+    copilot = _copilot()
+    events, _, _ = engine.apply_ops(copilot, [
+        {"op": "pref", "kind": "avoid", "value": "museums"}, {"op": "pref", "kind": "must", "value": "Tokyo Tower"},
+        {"op": "pref", "kind": "like", "value": "quiet gardens"}, {"op": "pref", "kind": "dislike", "value": "shopping"}])
+    assert events == ["Rule saved: no museums", "Rule saved: Tokyo Tower is a must",
+                      "Noted: you like quiet gardens", "Noted: you'd rather skip shopping"]
+
+
+def test_a_change_request_that_changed_nothing_says_so_in_the_receipt():
+    """Seen live: the interpreter dropped "Add the Tokyo National Museum" itself, so the reply refused with no receipt."""
+    from app.agents.trip_planner.copilot.graph import INTERPRET_INSTRUCTION, turn_changes
+
+    nothing = {"events": [], "blocked": []}
+    assert turn_changes({**nothing, "user_message": "Add the Tokyo National Museum to day 2"}) == [
+        {"status": "skipped", "text": "Nothing in the plan changed"}]
+    assert turn_changes({**nothing, "user_message": "What should I add to day 2?"}) == []  # a question, not a request
+    assert turn_changes({**nothing, "user_message": ""}) == []  # a day switch or a tap with nothing to report
+    assert "even when it breaks a rule in PROFILE" in INTERPRET_INSTRUCTION  # the planner decides, not the interpreter
+
+
+async def test_research_retries_on_the_main_model_when_the_fast_one_returns_nothing():
+    """Seen live: the fast model returned broken JSON twice, and build-with-agent opened with nothing to suggest."""
+    from app.agents.trip_planner.copilot.research import research
+
+    models = []
+
+    async def fake(prompt, system_instruction=None, **kwargs):
+        models.append(kwargs.get("model"))
+        if kwargs.get("model"):
+            return '{"candidates": [{"name": "Nezu Mus'  # truncated
+        return json.dumps({"rates": {}, "candidates": [{"name": "Nezu Museum", "base": "Tokyo", "area": "Aoyama",
+                                                         "category": "attraction", "tags": [], "est_cost": 1300,
+                                                         "duration_hours": 2, "why": "Quiet garden", "source": None}]})
+
+    copilot = engine.new_copilot(destination="Tokyo", duration_days=3, currency="JPY", preferences={}, places=[],
+                                 budget_target=None, overrides={})
+    with patch("app.agents.trip_planner.copilot.research.community_search", new=AsyncMock(return_value=[])), \
+            patch.object(llm_service, "generate", new=fake):
+        added = await research(copilot, ["Tokyo 3 day itinerary advice"])
+    assert added == 1 and copilot["pool"][0]["name"] == "Nezu Museum"
+    assert models[0] and models[1] is None  # the fast model first, then the main one

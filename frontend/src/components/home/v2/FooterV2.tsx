@@ -4,6 +4,7 @@
  * An oversized wordmark rule, a three-column link index, and a meta strip.
  * Separated by hairlines only; no boxed cards, no dark slab.
  */
+import { openCredits } from '../../common/AppBar';
 import { FOOTER_NAV } from './content';
 import { LogoMark, ArrowUpRightIcon } from './IconsV2';
 
@@ -73,8 +74,17 @@ export function FooterV2({ onStartPlanning, onNavigateExplore }: FooterV2Props) 
           <span className="tv-meta">© {year} TripVerse</span>
           <span className="tv-meta tv-hide-mobile">Built with LangGraph, React Three Fiber, and FastAPI</span>
           <div className="tv-footer__legal">
-            <a href="#privacy" className="tv-meta">Privacy</a>
-            <a href="#terms" className="tv-meta">Terms</a>
+            <a
+              href="/credits"
+              className="tv-meta"
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey) return; // let "open in new tab" through
+                e.preventDefault();
+                openCredits();
+              }}
+            >
+              Credits
+            </a>
           </div>
         </div>
       </div>

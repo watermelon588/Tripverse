@@ -5,6 +5,7 @@
  * key/value ledger, and a link to the real trip library. Same tokens, type and hairlines
  * as the marketing surface at the app surface's tighter density.
  */
+import { UserAvatar } from '../components/guide/UserAvatar';
 import React, { useEffect, useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
@@ -192,7 +193,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
               {avatarUrl ? (
                 <img src={avatarUrl} alt="" className="tv-avatar__img" />
               ) : (
-                <span className="tv-avatar__initials">{initials}</span>
+                <UserAvatar seed={user?.id ?? user?.email} size={68} />
               )}
               <span className="tv-avatar__edit">
                 {isUploading ? <ClockIcon width={15} height={15} /> : <PlusIcon width={15} height={15} />}

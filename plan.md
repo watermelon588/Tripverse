@@ -2,6 +2,143 @@
 
 _Written 2026-09-28 from the planning discussion. Seven build sessions, each medium to hard and each leaving the app working. The last section lists future work that is deliberately out of scope._
 
+## Fix list: hands-on review (added 2026-09-29) — the next tasks
+
+_Six problems found by using the app end to end. Order agreed: **F4 first** (the core agent fix), then F6 (chat layout, which shows F4's results), then F3, F5, F2 and F1 (the guide last, so its screenshots show the fixed app). Each fix ends with a real-browser check against the running app._
+
+| # | Problem | Status |
+|---|---|---|
+| F4 | Changing a finished trip ("move X from day 5 to day 3") doesn't update the studio; the agent suggests instead of doing, can't be told to finalize, and makes things up. The budget is vague. | ✅ Done 2026-09-30 (not committed yet) |
+| F6 | The chat is hard to use: the transcript, your message and the suggestions don't fit on screen together; it's unclear how to change, finalize, or get to the studio and budget. | ✅ Done 2026-09-30 (not committed yet) |
+| F3 | Exports: only the JSON export works. | ✅ Done 2026-09-30 (not committed yet) |
+| F5 | The welcome is vague ("where do you want to go?", no name or greeting), and the trip brief arrives as one long form that scares people off. | ✅ Done 2026-09-30 |
+| F2 | The home page still has setup-era placeholder text and screenshots. | ✅ Done 2026-09-30 |
+| F1 | The `/guide` page is broken and out of date. | ✅ Done 2026-09-30 |
+
+### F4: trip updates that actually happen (the core fix)
+
+**What goes wrong today** (traced in the code with graphify's call graph, and confirmed in the saved conversations of the 2026-09-29 Goa trip):
+
+*Build-with-the-agent trips:*
+1. **The engine refuses your own edits.** `engine.apply_ops` blocks a move or add when the day passes its hour cap (8 h at a balanced pace) or the budget. "Move Tito's Lane to day 2" came back "day 2 is already packed", three times in a row, so the studio never changed. A cap should warn, not veto something you asked for.
+2. **The interpreter has no memory of the conversation.** `interpret` sees the plan but not the last reply, so "move **it** to day 5" (meaning Club Cubana, which the agent had just offered) moved Tito's Lane instead, and "yes, do that" can't work at all.
+3. **The reply claims changes that didn't happen.** The reply prompt's example opens with "Done, …", and the model wrote "Done – …" above a message saying the swap couldn't be made.
+
+*One-shot trips:*
+4. **A change request can be answered instead of made.** `_is_question` lets the intent label win: a message tagged `trip_question` or `casual_conversation` gets the answer prompt even when it says "move" or "swap". The answer prompt then offers "Want me to swap it in?", your "yes" is tagged casual, and it offers again: an endless loop where nothing is applied.
+5. **The day number can be misread as the trip length.** The understanding step extracts `duration_days`; if it reads "day 3" as a 3-day trip, the trip is cut and redrafted from scratch.
+6. **The budget can't be set from the chat.** Nothing extracts "my budget is ₹50,000"; the draft is rewritten around it, but the studio and budget panel never get the target.
+
+*Both:*
+7. **Nothing shows what actually changed.** The only record of a change is the model's own prose, so a wrong claim can't be caught, and there's no sign the studio was updated.
+8. **Your message sometimes appears after the reply.** Both rows are written in one flush and can get the same timestamp (Windows clock), so reloading the chat can order them randomly.
+
+**Fix:**
+- *Engine:* an explicit add or move always applies; going over the day's hours or the budget becomes a warning in the change itself ("Moved Tito's Lane to day 2 · day 2 is now 11 h, over your 8 h pace"). Only your own hard rules (a "never" preference, a place you turned down) still ask first, with an **Add anyway** button.
+- *Interpreter:* gets your previous message and the agent's last reply, resolves "it", "that one" and "yes" against them, and runs on the main model (this is the one decision in the turn that must be right).
+- *Reply:* may only say something changed if the engine's change list says so; otherwise it says plainly that nothing changed and why.
+- *One-shot routing:* an edit verb always means edit; "yes / do it / go ahead / finalize / update the studio" after an offer applies that offer (the revision prompt sees the agent's last message); a question is answered only when nothing is being changed. "It's final / save it" when nothing is pending confirms that the studio already has this version.
+- *Understanding:* a day reference is never a trip length; the budget ("₹50,000", "50k INR") is extracted and saved to the budget ledger in both modes.
+- *Change receipt:* every turn that edits the trip saves a `changes` list in the message payload (the engine's events in agent mode; a before/after diff of the day plan in one-shot mode). The chat shows it under the reply as a small **"Studio updated"** card, one line per change (done, warning, or not changed), with an **Open studio** button. The receipt is the source of truth, not the prose.
+- *Message order:* each message gets its timestamp when it's created; older tied rows sort user-first.
+- *Budget clarity:* the budget panel opens with three plain steps (set a target → suggest or enter amounts → watch "left to spend"), and budget changes from the chat appear in the receipt.
+
+**Acceptance criteria:**
+- In an agent trip, "move X to day N" moves X, even onto a full day, and the studio's Days and Plan show it after the reply.
+- "Move it to day 5" right after the agent offered a place moves that place.
+- In a one-shot trip, "move X from day 5 to day 3", then "yes" to any offer, both change the day plan the studio shows.
+- The receipt under each reply lists exactly the changes in the saved plan.
+- "My budget is 60,000 INR" sets the budget target in both modes.
+- Reloaded chats show every message in the order it was sent.
+
+**Verify:** engine and routing unit tests (moves over the cap, reference resolution input, the answer loop, day-vs-duration, budget extraction, the day-plan diff); then a real run in the browser: move a place in an agent trip and in a one-shot trip, confirm the studio updates, and reload the chat.
+
+**Files:** `copilot/engine.py`, `copilot/graph.py`, `services/conversation.py`, `nodes/understand_user_msg_node.py`, `nodes/planning_trip_node.py`, `repositories/message.py`; frontend `ChatMessage.tsx`, `CreateTrip.tsx`, `CopilotPanel.tsx`, `BudgetWorkspace.tsx`, `tripService.ts`.
+
+**Not in F4:** the non-streaming `POST /messages` path (the app only uses the streaming one; it keeps its old behaviour for tests), and turning one-shot edits into structured operations (only if the receipts show the rewrite path still misses changes).
+
+**Progress (2026-09-29):** built test-first; the backend suite went from 159 to 172 tests, all passing, and the frontend type-checks with its 44 tests passing. Verified live in the browser against the running app:
+- *Agent trip (Goa, 4 days):* "move the street food tour to day 2" onto a 7.6 h day now applies, with the heads-up in the receipt; "do the second one" moved the second option the agent had offered; the studio's Plan showed exactly the engine's days.
+- *One-shot trip (Kyoto, 3 days):* "Can you move Nishiki Market from day 3 to day 1?" is now applied (it used to be answered as a question). "Day 3 looks packed. Is there anything you'd shift?" gets one concrete yes/no offer instead of a rewrite.
+- *Found while testing, and fixed:*
+  - Receipts showed the same place twice under different spellings (`Kiyomizu‑dera` with U+2011 vs `Kiyomizu-dera`, `Café` vs `Cafe`, `Kinkaku-ji (Golden Pavilion)` vs `Kinkaku-ji`). The diff now keys places by a normalized name, and a revision's extraction gets the previous plan's names to reuse.
+  - The extraction model sometimes returned an empty reply, which left the studio on the old days. It now retries once and reads the JSON even with prose around it.
+  - Advice questions that contain an edit verb ("should I add Nara?", "anything you'd shift?") get an answer with an offer. Requests phrased as questions ("can you…", "could you…", "what if we…", "how about…", "is it possible to…") are still edits.
+- *Cost:* an agent turn now takes about 10–18 s, because the interpreter runs on the main model. That's the price of resolving "it" correctly.
+- *Offer → "yes" (2026-09-30):* in a fresh Kyoto one-shot trip, "Day 1 looks packed. Is there anything you'd shift?" got "Want me to shift Kodai‑ji to Day 2?", and "yes" applied it: the receipt read "Moved Kodai-ji Temple from day 1 to day 2".
+
+### F6: a chat you can actually use (after F4)
+
+- The build-with-agent panel is pinned above the composer and takes most of the screen, pushing the transcript out of view. Make it collapsible (collapsed by default to a one-line day strip with the budget), so the conversation, your message and the suggestions fit together.
+- A clear top bar: trip name, a budget chip ("₹12,400 of ₹60,000"), and **Open studio**, always visible once there's a plan.
+- Suggestions and "Add anyway" as quick-reply chips under the latest reply, not in a separate panel.
+- An empty-state hint that explains the three verbs: *ask*, *change* ("move X to day 3"), *finish*.
+- Scope: the chat column only. **The studio stays as it is.** Load `impeccable`, `frontend-ui-engineering` and `emil-design-eng` first.
+
+**Done (2026-09-30).** Measured first, at 1280×800 on an agent trip with an empty day: the transcript had 381 px (48% of the screen), the build panel 235 px (up to about 450 px on a full day), and the 340 px trip card was pinned under the latest reply, so the visible area showed the card instead of the conversation.
+- **Build panel → dock.** Closed by default: one line (day stepper, places and hours, "~₹12,200 planned of ₹30,000" with its meter) plus the day's suggestions. "Day plan" opens the rest (every day, this day's places with Remove, Finish). 87 px closed instead of 235 px; the transcript went from 381 px to 529 px.
+- **Trip card** sits where the plan was made (after the first plan message) instead of under every reply. Its line now says how to change things. The morph into the studio runs only when the card is on screen.
+- **Header:** Open studio is the one primary button; Budget uses the wallet icon the studio uses; "Changes save to your studio" sits beside the title on wide screens.
+- **Composer:** "Change the plan, or ask a question…", a Send button (Plan before there's a trip), and a hint with real examples ("move it to day 2", "my budget is 60,000").
+- **A finished agent trip stays editable:** suggestions and Remove no longer disappear after Finish.
+- **Found and fixed:** the header's staggered entrance tween left the theme and Budget buttons stranded 10 px high on every load. The tween is removed; a header seen on every chat switch shouldn't animate.
+- **Receipt:** the 3 px coloured side border is gone (one hairline, per the design system).
+- **Checked:** at 1280×800 the user's message, the whole reply with its receipt, and the suggestions are on screen together; at 375 px there is no horizontal scroll and every dock target is at least 24 px; one-shot trips, the studio's chat drawer and Open studio work; no console errors; `tsc` clean, 44 frontend tests pass, impeccable's layout scan is clean.
+- **Not done:** a budget figure in the header for one-shot trips (it would need a budget fetch in the chat; the dock shows it for agent trips).
+
+### F3: exports
+
+Only JSON downloads today. Reproduce each entry of the studio's Export menu in the browser (calendar, Google Maps links, GPX, KML, budget CSV, PDF), read the console and network errors, and fix the root cause (likely shared, e.g. the download helper or the points request). Add a test per format where one is missing.
+
+**Done (2026-09-30).** Every exporter already built a correct file (checked in the browser: CSV, JSON, GPX, KML and a 9-page PDF). The files were being lost on the way out:
+- **Root cause: the download fired too late to count as yours.** JSON is the only export that saves inside the click. The others wait first: a first place lookup took 13 s here (the menu itself says "up to a minute"), a cold budget fetch 5.5 s, and the PDF loads its fonts. A browser only treats a download as the user's for about 5 s after the click (measured: `navigator.userActivation.isActive` was true at 1 s and false at 6 s). After that it is an "automatic download", which Chrome blocks silently once its multiple-downloads prompt has been dismissed, while the menu still said "downloaded". I couldn't see your browser block one, so this is the explanation that fits the evidence rather than something I watched happen.
+- **Fix:** every export goes through one path. The menu holds the finished file; while the click is fresh it saves at once, and otherwise it says "… is ready" and shows a **Save file** button (a fresh click, which always works). A "Save it again" link stays after a normal download. The PDF returns its file to the menu instead of saving itself.
+- **Calendar was a dead end:** it needs a start date, and the brief can't be edited after planning. The menu now has a "Trip starts on" date field for undated trips (`datedFrom`, with a test).
+- **Found on the way: the first request after a pause failed.** The hosted database drops idle connections, and the next request died with "connection is closed" (a 500, shown by the browser as a CORS error). That can break the budget and place lookups behind an export too. The engine now checks a pooled connection before using it (`pool_pre_ping`, about 200 ms per request).
+- **Checked with real clicks:** calendar from a picked date (events start on that day), PDF through the new path, and a budget fetch slowed to 6 s ends in "Budget is ready" with the Save button focused and no blocked download. 45 frontend and 172 backend tests pass.
+- **Not done:** the picked start date is used for the calendar file only; it isn't saved to the trip (so weather and holidays stay undated). Saving it needs a trip-update endpoint.
+
+### F5: a warmer start and a shorter brief
+
+- The first message greets you by name with the time of day ("Good evening, Rohit"), says in one line what TripVerse does, and offers two or three starting points.
+- The brief comes in small steps (where and when → who's going and budget → pace and interests → review) instead of one long form; the agent asks only for what's missing. Keep the existing form component for "edit details".
+
+**Done (2026-09-30).**
+- **The opening screen was never shown.** The planner has a composed welcome (portrait, headline, starter trips), but a new trip always arrives with one server greeting, and "has a message" hid the welcome. It now stays until you send something. It greets by local time and first name ("Good evening, Rohit. *Where are we going?*"; a guest gets the greeting without a name), and its paragraph says what really happens next (the old one promised to "price every segment").
+- **The server's first message** uses your first name when you're signed in, and says up front that a draft needs three quick things and the rest is optional.
+- **The brief is four small steps** instead of one page of 17 fields: where and how long (the only required step) → who and budget → how you travel → your guide. A progress line shows "Step 2 of 4"; each step is a question; **Skip the rest** works from step 1 and sends the brief with sensible defaults. Enter means Next, never Skip. A problem found while skipping takes you back to the step it's on. Same fields and the same submitted data, so nothing changed on the server.
+- **The agent's line above the form** asks only for what it doesn't know yet ("I can start a draft for Japan for 5 days. I just need where you're travelling from.").
+- **"Edit details"** keeps the one-page form, since everything is already filled in.
+- **Checked in the browser:** "I want to go to Japan for 5 days" → the form opens on step 1 with Japan and 5 filled in; Skip with no origin shows the error; typing the origin and pressing Enter moves to step 2 with focus on the new question; Skip the rest saves the brief and shows the planning choice; Edit details shows all four sections. 174 backend and 45 frontend tests pass.
+- **Not done:** the agent sending each step as its own chat message. The steps live in one form; doing it as separate agent turns would add a server round trip (about 5–10 s here) between every step.
+
+### F2: home page content
+
+Keep the design and layout. Replace placeholder copy and screenshots with what the app really does now (chat planning, build with the agent, the Trip Studio, the sketchbook, map & 3D, weather and holidays, budget, exports). New sections are allowed; nothing existing is removed. Screenshots come from real trips. Load `design-taste-frontend` and `emil-design-eng` for copy and imagery.
+
+**Done (2026-09-30).** Same sections, same layout and components; only the words, numbers and pictures changed (`components/home/v2/content.ts` and the copy in `HeroBento`, `SectionsV2`, `SidebarV2`, `FooterV2`).
+- **Copy says what the app does now:** the hero, the four steps, the capability panels, the "while it plans" agent section and the FAQ describe the chat, the two ways to plan, receipts, the studio, the sketchbook, map & 3D, budget and exports. Claims the app can't back up (pricing every segment, re-checking trains and bookings, handing over booking links) are gone.
+- **Real numbers:** the hero's budget card, the agent transcript and the itinerary table come from the Kyoto trip planned for the guide (₹98,520 suggested against a ₹150,000 budget, 14 places over 3 days).
+- **Real pictures:** the capability panels and the step thumbnails are crops of the guide's screenshots, cut by `frontend/scripts/home_crops.py` into `public/home/`. Re-run it after a re-shoot.
+- **Footer:** dead Privacy and Terms links removed; the columns link to real pages (Explore, My trips, Sign in, the guide, Credits).
+- **Planner labels made consistent with the home page:** "Open studio" (shown only once a plan exists) and "Explore destinations" in the sidebar.
+
+### F1: the `/guide` page
+
+Rebuild it end to end so a first-time user can learn the whole app from it: every page, how to move between them, every feature, with a fresh screenshot for each (extend `frontend/scripts/capture_guide.py`). Done last so the screenshots show F2–F6.
+
+**Done (2026-09-30).**
+- **Why it was broken:** the page's classes were `tv-guide*`, and the guide character's portrait (`guide-character.css`, added with the PFP guides) also uses `.tv-guide` / `.tv-guide__body` with `border-radius: 50%; overflow: hidden`. The whole page was clipped into an ellipse. The page is now `tv-howto*`.
+- **Rewritten from one tested run:** 18 sections (how it works, finding your way around with a table of every page, starting a trip, the full itinerary, changing the plan with receipts, the studio, sketchbook, map & 3D, exports, budget, building with your guide, the day dock, rules and "Add anyway", how it all connects, phone, phrases, FAQ, what's new) and 38 screenshots, each caption checked against its picture.
+- **The capture script** (`capture_guide.py`) follows the new app: the 4-step brief, receipts, offers and "yes", budget from chat, the day dock, Add anyway, the studio with the chat open, the phone, and a `pages` mode for Home, Explore, Credits and My trips. It waits for real map tiles, waits for the send button before sending (a click while a trip loads was dropped silently), and no longer dies on a websocket keepalive.
+- **Bugs the run found, fixed:**
+  - Building with a guide, the interpreter sometimes dropped a request that broke the traveler's own rule instead of passing it on, so there was no receipt and no Add anyway. It now always emits what was asked; the engine decides. If a change was asked for and nothing happened, the receipt says "Nothing in the plan changed".
+  - Replies said "hard-avoid… blocked" and did their own (wrong) sums; they now say "you said no museums" and take totals from the planner only.
+  - Preference receipts read "Rule saved: no museum" / "Noted: you like …".
+  - Research on the fast model sometimes returned nothing twice, leaving the first build turn with no suggestions; the retry now uses the main model (test added).
+- **Checked:** the page renders at 1440 px and 390 px with no console errors. 177 backend and 45 frontend tests pass.
+- **Still true, and the guide says so:** a reply can occasionally mention a change that didn't happen (shot 17 names a lunch spot that is only a suggestion). The receipt is always right, and the guide teaches reading it.
+
 ## The idea in one paragraph
 
 You plan in the **chat**, which stays as it is. As soon as a plan exists, a small **trip preview card** in the chat opens the **Trip Studio**: a dedicated page for the trip. The studio holds the **Sketchbook** (hand-drawn pages, drawn live by an anime guide character), the **Map**, the **3D route view**, plus **weather, holidays, budget** and **one-click exports** (PDF, calendar, maps). Moving between the chat and the studio is one continuous motion: the preview card grows into the studio and shrinks back. So it feels like one app with rooms, not two apps. The guide characters in `frontend/public/pfp/` are the "uncle who's been to Japan five times". They pop in, hold the pen, react while thinking, and sketch your plan on paper.
@@ -69,12 +206,12 @@ Rejected:
 3. ✅ **Session 2:** Trip Studio page + hand-off. *Checkpoint 1*. *Done 2026-09-28: `/trips/:id` studio, chat preview card with photo strip, GSAP Flip card→studio morph, chat drawer inside the studio.*
 4. ✅ **Spatial S1:** place photos. *Done 2026-09-28 (photo strip ready for Session 2's preview card).*
 5. ✅ **Session 3:** sketchbook engine. *Done 2026-09-29: Sketch tab in the studio (overview + a page per day), Rough.js pages, sticky notes, stamps, receipt, highlights.*
-6. ⏭️ **Session 4:** guide characters + motion. **Next.** *Checkpoint 2*. **Spatial S2** ("Around here") runs alongside Sessions 3–4.
+6. ✅ **Session 4:** guide characters + motion. *Done 2026-09-29: the guide draws each sketch page with a pen, redraws only what changed while the agent works, and is the same character in the chat.* Next: the PDF (Session 6). *Checkpoint 2*. **Spatial S2** ("Around here") runs alongside Sessions 3–4.
 7. ✅ **Session 5:** weather, holidays, currency. *Done 2026-09-28 (built ahead of Sessions 3–4). `<TripConditions>` is mounted in the studio's Details window (by the map session); the sketch's weather doodles move to Session 3.*
 8. **Spatial S3:** season-aware recommendations. *Climate tips done early (2026-09-28); the forecast and agent prompts follow Session 5.*
 9. **Session 6:** exports. *Checkpoint 3*.
    - ✅ Calendar, Google Maps, GPX/KML, budget CSV and JSON exporters, plus the Export menu. *Done 2026-09-28; the menu sits next to Budget in the studio's top bar.*
-   - PDF: not started. It's built from Session 3's sketch pages and plugs into the menu's `pdf` slot.
+   - ✅ PDF, one click. *Done 2026-09-29: cover, the sketch pages as vectors, the day-by-day plan, the budget and the credits.*
 10. **Session 7:** polish and the one-time docs pass. The docs pass also covers the Spatial features.
 
 Sessions 1–7 are owned by the build-with-agent session. The Spatial sessions are owned by the map session, and their details are at the end of this file. Where one touches the other's files, message first.
@@ -188,6 +325,37 @@ Each session is roughly one long working session: backend + frontend + tests + a
 **Files:** new `frontend/src/components/sketch/{types,layout,render,notes}.ts(x)`, `SketchbookView.tsx`, `public/fonts/*`, `src/assets/doodles.svg`, CSS, and tests. Adds `roughjs`, `perfect-freehand` and `vitest`.
 
 ### Session 4: Guide characters and motion (the "wow")
+**Status (2026-09-29): done.**
+- `components/guide/GuideCharacter.tsx`: one portrait, five moods (idle, thinking, drawing, celebrating, confused), made from GSAP transforms plus a mood badge. Aoi keeps her two hand-made thinking frames (`thinkingFrames` in `guides.ts`).
+- `components/sketch/motion.ts` (`drawPage`):
+  - DrawSVG inks each outline in reading order, and the guide's pen (its portrait on a pencil) rides the first stroke with MotionPath.
+  - Labels are written with a clip-path wipe (SplitText can't split SVG text).
+  - Doodles pop, sticky notes slap on, stamps thud, highlights sweep.
+  - A first draw is capped at 3.2 s.
+- `components/sketch/live.ts`:
+  - `withCopilot` folds each streamed `copilot` event into the studio document (same mapping as the backend's `_agent_days`), so the sketch updates mid-reply.
+  - `diffPages` finds what's new, now that cards have name-based ids.
+  - `describeChange` gives the speech bubble text, from names only.
+- `SketchbookView` behavior:
+  - The guide draws a page the first time you open it.
+  - On a change, it flips to that day, draws only the new elements, and says so ("Added Kagurazaka to day 3.").
+  - It looks confused and circles the receipt when the plan goes over budget.
+  - It thinks out loud with the agent's stage while a turn runs.
+  - A Redraw button replays a page.
+- Chat: `GuideContext` makes every assistant avatar and name the trip's guide, including the thinking row. The dead `.tv-ava` CSS was removed.
+- Receipt: the total is max(ledger projected, planned), so agent trips don't show ¥0.
+- Rough.js `toPaths` dropped dashes; dashed cards and flight arcs now render dashed.
+- Verified:
+  - Headless Chrome captures: Day 1 draws in about 3 s, with the pen mid-word at 1.2 s.
+  - A place added to a day you've already seen: the guide is on that page in 63 ms and animates only that card's name, meta and note.
+  - The over-budget change: confused, and the total circled.
+  - Reduced motion: every page final instantly, and the guide still.
+  - 29 vitest tests pass (6 new in `live.test.ts`).
+- **Deviations and open items:**
+  - A one-shot draft doesn't fill in while it streams: its day plan only exists after extraction, so the pages draw when the draft lands. Streaming `day_plan` from the backend would be needed.
+  - An add the agent *blocks* for budget (not added) doesn't trigger the confused state. Only a plan that actually goes over does.
+  - The DevTools performance profile is still to do. By construction the tweens only touch transforms, opacity, clip-path and stroke dashes.
+
 **Goal:** An anime guide sketches your trip live and reacts to what's happening.
 
 - **Guide characters:** the PFP set becomes a cast with a name and personality line, picked in the brief (Session 1). The existing two-frame Miku "thinking" loop becomes the template for the states **idle, thinking, drawing, celebrating and confused**. Frames are generated from the source art with simple CSS and GSAP transforms (bob, tilt, squash), so no new art is needed.
@@ -264,7 +432,28 @@ Session 6 (non-PDF exporters): Plan dot cleanup session; PDF: build-with-agent s
 - Backend `POST /api/exports/points` (`api/routes/exports.py`, `enrichment.locate_places`) finds each place near its base with Nominatim. Places more than 60 km from their base are dropped as namesakes. Lookups are cached; a 40 s budget returns partial results, and the next call finishes from cache.
 - Tests: vitest (`npm test`, 10 tests) and `tests/test_exports.py` (3); 152 backend tests pass. Live: 5 of 6 Kyoto/Osaka places located with correct coordinates ("Springfield" rejected); 9.7 s the first time, 0.1 s cached. Checked in the browser: every download, the error path, the state with no start date, and Escape.
 - Mounted next to Budget in the studio's top bar. Checked in the studio at 1024 px and 390 px: the menu stays above the floating windows and doesn't overflow.
-- **Open:** the PDF (`pdf` prop); importing the files into real Calendar and Organic Maps apps once (per Verify).
+- **PDF (2026-09-29, build-with-agent session):** `lib/exporters/pdf.ts`, `pdfPlan.ts` and `pdfFonts.ts`, lazy loaded from the Export menu (a 486 kB chunk plus the font files).
+  - A4 landscape pages:
+    - a cover: the guide's portrait, destination, dates, travelers
+    - the sketch pages, rendered by the app's own `SketchPageSvg` and converted by svg2pdf, so they stay vectors with the theme colours baked in
+    - "Day by day": time-of-day groups, tips and linked sources, weather and holidays
+    - Budget: totals, costs by day, exchange rates
+    - Credits: the trip's enrichment sources, the community sites, the fonts and libraries
+  - Fonts:
+    - Helvetica for WinAnsi text
+    - Caveat for other Latin text, and for the sketches
+    - Yomogi for Japanese, embedded only when the trip has Japanese text
+    - The TTFs come from `@expo-google-fonts` (OFL); jsPDF subsets them.
+  - Checked:
+    - 7 vitest tests (`pdfPlan.test.ts`)
+    - Headless Chrome through the real Export menu: a 403 KB, 10-page PDF in 1.4 s, then "PDF downloaded."
+    - The Tokyo fixture PDF: text extraction finds selectable text on every page, including 嵐山 竹林の小径 and スポーツの日, and the pages render correctly.
+  - The avoid stamps use × instead of ✗, which Caveat lacks. Receipts show "not costed yet" instead of ¥0.
+- **Open:**
+  - Letter size (A4 only for now)
+  - the paper-grain filter is left out of print
+  - importing the files into real Calendar and Organic Maps apps once (per Verify)
+  - opening the PDF in Acrobat/Preview by hand
 **Goal:** Take the trip anywhere.
 
 **Export** menu in the studio:
@@ -297,15 +486,52 @@ Session 6 (non-PDF exporters): Plan dot cleanup session; PDF: build-with-agent s
 ### Session 7: Polish, launch readiness and the docs pass
 **Goal:** Resume-ready quality, and the one-time documentation pass.
 
-- **Performance:** lazy chunks for the studio, 3D, sketch and PDF code; initial chat bundle no bigger than today; font subsetting.
-- **Accessibility:** keyboard paths through the studio tabs, day rail and export menu; sketch pages get text alternatives from the trip document; contrast in both themes.
-- **Mobile:** the studio as tabs with bottom sheets, and a swipe-to-flip sketchbook.
-- **Credits page:** every API, font, icon set and character credit in one place.
-- **Commercial-readiness checklist** filled in (see below).
+- **Performance:** lazy chunks for the studio, 3D, sketch and PDF code; initial chat bundle no bigger than today; font subsetting. *Route splitting done 2026-09-29:* every page except Home loads on demand from one `LOADERS` map in `App.tsx`, and `transitionTo` starts the download as the curtain rises. The main chunk went from 908 kB to 560 kB; the chat path is that plus a 279 kB `CreateTrip` chunk. Checked cold on every route, with the `/profile` guard and back/forward. **Open:** Supabase (about 800 kB of source, all of it in main because `AuthContext` needs it at boot), GSAP's full plugin set, and font subsetting; Lighthouse still to run.
+- **Accessibility:** keyboard paths through the studio tabs, day rail and export menu; sketch pages get text alternatives from the trip document; contrast in both themes. ✅ *Done 2026-09-29 (Session 5/6 session), audited with axe-core (WCAG 2.1 A/AA) on every route of the production build, plus the build session's Lighthouse findings:*
+  - Contrast: `--tv-muted` #787774 → #666562 and `--tv-faint` #9b9a97 → #72716e (light), `--tv-faint` #6f6d69 → #86847f (dark). All at least 4.5:1 on every canvas and tint; the route curtain label uses the token. The 35–44 contrast failures per page are now 0.
+  - Keyboard: the Export menu focuses its first entry when opened, moves with ↑ ↓ Home End, and returns focus to its trigger on Esc; Tab away closes it. The studio tabs (roving tabindex), the day rail and the sketch pages were already reachable.
+  - Chat: `role="main"` on the chat page (not in the studio drawer), a name on the icon-only "Open studio" button, markdown headings exposed as levels 2 and 3 under the page's h1, history rows as a real button with Delete beside it rather than nested, and a 24 px photo-credit target.
+  - Home: the closed mobile drawer is `inert`, and the destinations rail is focusable so it scrolls from the keyboard.
+  - Also: day covers and library thumbnails request 120 px Wikimedia thumbs instead of 960 px (about 5 KB instead of 214 KB each), per the build session's Lighthouse run.
+  - Open: a Lighthouse re-run on the new build (owned by the Lighthouse/perf sessions); `.tv-invert` text over photos isn't auditable automatically.
+- **Mobile:** the studio as tabs with bottom sheets, and a swipe-to-flip sketchbook. ✅ *Done 2026-09-29 (build-with-agent session):*
+  - Portrait sketch pages for phones held upright (`layoutSketch(doc, 'portrait')`, 794×1123): time slots stack as rows, notes run along the bottom, the holiday gets its own line, and the overview's route uses 3 stops per row.
+  - Every element keeps the same id in both orientations, so live drawing and the page cache don't care. The PDF stays landscape.
+  - Tests cover the no-overlap, on-page and card-text checks for both orientations, plus id parity. The landscape snapshots were unchanged apart from the new `w`/`h` fields.
+  - Checked at 390 px: portrait pages, no horizontal scroll, swipe and keys.
+  - The chat sidebar now starts closed below 1024 px, where it's a drawer that used to cover the chat on every phone visit. A closed drawer is `inert`.
+- **Lighthouse (build-with-agent session, 2026-09-29):** Lighthouse 13 on the production build, cold HTTP cache, with the demo guest seeded in localStorage (a returning visitor).
+  - Before (warm cache, first pass): chat mobile 91 / desktop 98, studio mobile 86 / desktop 90 (CLS 0.184).
+  - Fixes:
+    - `useBoardSize` measures before first paint (studio CLS 0.184 → 0)
+    - the last studio document is cached (the studio paints without waiting 1–3 s for `/document`)
+    - the chat drawer starts closed on phones (chat mobile CLS 0.08 → 0.003)
+    - the welcome paragraph, which is the chat's LCP element, fades in with the eyebrow instead of after the headline
+    - 120 px day-cover thumbnails (Session 5/6 session)
+  - Cold-cache now: accessibility 100 on chat and studio, mobile and desktop. Performance on desktop: chat 96, studio 94. On mobile, chat 62 and studio 65, held back by first paint (3.1–3.7 s: render-blocking third-party font stylesheets and the main chunk). The credits session is moving the fonts to self-hosted and measured perf 85 with them out of the critical path.
+  - Best Practices is 77 wherever Wikimedia photos load (their third-party cookies).
+  - **Open:** the credits session measured self-hosted fonts at mobile perf ~81 (89 with Supabase off the main chunk) but ended before landing either change. Both are still to do; then re-run Lighthouse (the cold-cache script is described above).
+- **Credits page:** every API, font, icon set and character credit in one place. ✅ *Done 2026-09-29:* `/credits` (lazy, 9 kB), linked from the home footer. The list lives in `frontend/src/lib/credits.ts`; photographer names and links are derived from the Unsplash and Pexels file names, and `credits.test.ts` fails when a photo used in `src/` isn't credited. Guide portraits are labelled as unlicensed placeholder fan art. **Open:** credit `media/1st.jpg`, `3rd.jpg`, `4th.jpg`, `hero-bg.jpg` and `hero-bg-transparent.png` once their sources are known; the Fontshare Satoshi font is loaded in `index.html` but unused.
+- **Commercial-readiness checklist** filled in (see below). ✅ *Done 2026-09-29:* every external host the code calls, split into "must change before selling" (character art, the DuckDuckGo HTML fallback, Open-Meteo's non-commercial geocoder, public Nominatim at scale, the openrouteservice and Google quotas, LLM tiers, LangSmith, uncredited photos) and "fine, keep the attribution".
 - **Docs:** per your instruction, the `/guide` page is only updated now:
   - rewrite every flow
   - extend `frontend/scripts/capture_guide.py` with studio, sketch, character and export shots
   - re-shoot, and re-read each screenshot so its caption matches
+  ✅ *Done 2026-09-29 (build-with-agent session):*
+  - `/guide` has 16 sections, adding the Trip Studio, the sketchbook, Map & 3D, Export & PDF, building with your guide, "How it all connects" and "On your phone". The FAQ and What's new are updated.
+  - Screenshots: 27 of them, all fresh from two real trips (Kyoto one-shot, Tokyo with Beni). Every caption was written after looking at its screenshot.
+  - `capture_guide.py` now drives:
+    - the brief v2 and the guide picker
+    - the studio tabs, a mid-draw sketch frame, Export and the studio Budget
+    - a live change drawn with the chat open
+    - a 390 px phone page
+  - The script waits for buttons to be enabled (disabled ones drop clicks) and gives map tiles longer to load. The old shots are deleted.
+  - **Found and fixed during the shoot:** when the extraction LLM call failed (a Gemini 503), a one-shot revision saved empty days over a good day plan, emptying the studio, the sketch and the exports. `extract_itinerary` now returns `day_plan=None` when the model gave no days, and a revision keeps the previous plan (2 tests).
+  - Capture lessons (also in memory):
+    - any file change under `frontend/` reloads the page mid-run
+    - so does Vite's first-time dependency optimisation (e.g. Excalidraw)
+    - ask other sessions for a quiet window
+  - **Open:** re-shoot after the mascot session's changes land (it's putting the guide characters across the app: hero, map views and avatars). One command, about 20 min.
 
 **Acceptance criteria:**
 - Lighthouse performance and accessibility of at least 90 on chat and studio.
@@ -315,17 +541,43 @@ Session 6 (non-PDF exporters): Plan dot cleanup session; PDF: build-with-agent s
 
 ## Commercial readiness (keep in mind, act before any launch)
 
-| Item | Status now | Before selling it |
+_Filled in during Session 7 (2026-09-29) from every external host the code calls. This is a checklist, not legal advice: confirm each service's current terms before charging money._
+
+**Must change before selling it**
+
+| Item | Where | Status now | Before selling it |
+|---|---|---|---|
+| **Guide character art**: recognisable anime characters (e.g. Hatsune Miku, Frieren, Oshi no Ko, Chainsaw Man, Bocchi); at least one is fan art signed "@lulalang" | `frontend/public/pfp/`, `components/guide/guides.ts` | Labelled as placeholder art on `/credits` and in the PDF credits | **Replace with original or commissioned art** (or licensed characters). Swapping is an asset change in `guides.ts`; keep a two-frame "thinking" pair if you want Aoi's flip-book. |
+| **DuckDuckGo HTML scraping**: the search fallback when Tavily fails, sent with a browser User-Agent | `planning/tools/web_search.py` | Works, but scraping the HTML endpoint is outside DuckDuckGo's terms | **Remove it**, or replace it with a licensed search API (Tavily paid tier, Brave Search API, Bing). |
+| **Open-Meteo geocoding**: the browser locates stops for the map | `components/create/stopLocations.ts` | The free API is for non-commercial use | Buy the commercial Open-Meteo plan, or route lookups through the backend's Nominatim/ORS path. |
+| **Nominatim (OpenStreetMap)**: place lookups for exports and enrichment | `services/enrichment.py`, `api/routes/exports.py` | Cached, rate-limited and identified with a User-Agent, which the public usage policy allows for light use | At real traffic, use a hosted geocoder (paid) or your own Nominatim. Keep "© OpenStreetMap contributors". |
+| **openrouteservice**: route geometry and geocoding fallback | `services/route_metrics.py`, `services/place_geocoding.py` | Free key (daily quota) | A paid plan, or self-host ORS. |
+| **Google Maps JS, Routes and Places APIs** | `GoogleTripMap.tsx`, `route_metrics.py`, `google_places.py` | Personal API key; pay-as-you-go | Billing alerts and quotas, restricted keys, and Google's terms: Places content may only be cached briefly and must be shown with Google attribution or on a Google map. |
+| **LLM usage (Groq primary, Gemini fallback)** | `services/llm/` | Free tiers; 429s seen in testing | Paid tiers, per-user rate limits and spend monitoring. |
+| **LangSmith tracing** | backend env | Free quota exhausted | Turn it off, or move to a paid plan. |
+| **Unknown photo sources**: `media/1st.jpg`, `3rd.jpg`, `4th.jpg`, `hero-bg.jpg`, `hero-bg-transparent.png` | home page | Not credited (source unknown) | Find the source and licence, or replace them. |
+
+**Fine for commercial use, keep the attribution**
+
+| Item | Licence / terms | Where it's credited |
 |---|---|---|
-| **Guide character art**: the PFP images are recognisable anime characters (e.g. Hatsune Miku, Frieren, Oshi no Ko, Chainsaw Man, Bocchi) and at least one is third-party fan art signed "@lulalang" | Fine for a personal portfolio demo | **Replace with original or commissioned art** (or properly licensed characters). The code keeps characters in one config file (`guides.ts`), so swapping them is an asset change. |
-| Weather | MET Norway (commercial OK, attribution) | Keep the attribution. |
-| Groq and Gemini LLM usage | Free tiers hit rate limits in testing | A paid tier or quota monitoring. |
-| Fonts and icons | OFL / CC0 | Credits page (Session 7). |
-| Traveler-tip sources (Reddit, Quora, TripAdvisor via web search) | Paraphrased tips plus links | Review each site's terms for commercial reuse; keep paraphrasing, never bulk-copy. |
-| LangSmith | Tracing on, but the free quota is exhausted | Turn it off or move to a paid plan. |
+| MET Norway forecasts | CC BY 4.0 / NLOD; identify with a User-Agent | Trip details, sketch weather, PDF credits (`enrichment.sources`) |
+| NASA POWER climatology | Free; attribution requested | Same |
+| Nager.Date public holidays | Free API, MIT code | Same |
+| Frankfurter (ECB reference rates) | Free, ECB data | Same |
+| Wikipedia, Wikivoyage, Wikidata text | CC BY-SA 4.0 (share-alike if text is reproduced) | Place panels link back; keep excerpts short |
+| Wikimedia Commons photos (day covers, place photos) | Per-image licence (CC BY / BY-SA / PD) | Author and licence per photo; also sets third-party cookies (Lighthouse Best Practices 77) |
+| OpenFreeMap tiles | Free, OSM data (ODbL) | "© OpenStreetMap contributors" on the map |
+| Unsplash / Pexels home photos | Their free licences (commercial OK) | `/credits` |
+| Fonts: Caveat, Yomogi, Lato, Geist, Instrument Serif, Jockey One (OFL); Satoshi (Fontshare, unused) | OFL-1.1 / Fontshare licence | `/credits`, PDF credits |
+| Code: React, GSAP (free standard licence), Three.js, MapLibre, Rough.js, perfect-freehand, jsPDF, svg2pdf.js | MIT or equivalent | `/credits` |
+| Doodle icons | Drawn for TripVerse (CC0) | `/credits` |
+| Traveler tips (Reddit, Quora, TripAdvisor via web search) | Paraphrased, linked to the source post | Linked beside each tip; review each site's terms, never bulk-copy |
+| Supabase (auth and Postgres) | Free tier | Move to a paid plan before real traffic (the free tier pauses idle projects) |
 
 ## Future (not in these sessions)
 
+- ✅ *Built 2026-09-29 by the Session 5/6 session: a **Draw** button on landscape sketch pages opens a lazy Excalidraw editor over the page; your strokes are saved per trip and page (`/api/trips/{id}/sketch-notes`, owner only) and drawn over the live page. Not yet in the PDF, and not on portrait (phone) pages.* Original idea:
 - **Draw on the sketch yourself:** open any page in [Excalidraw](https://docs.excalidraw.com/docs/@excalidraw/excalidraw/api/excalidraw-element-skeleton) (MIT, lazy-loaded). The `SketchScene` maps to element skeletons; save the user's annotations per trip and redraw them over the generated sketch; export with `exportToSvg` / `exportToBlob`.
 - **Share links:** a read-only public studio link for a trip ("send the plan to your uncle").
 - **Real co-planning:** two people in one trip chat, with each person's preferences merged by the agent.
@@ -364,7 +616,7 @@ Building resumed on 2026-09-28 with Spatial S2. `[x]` = done and verified; `[ ]`
 - [x] Controlled `mode` + `onModeChange`
 - [x] `selectedDay` + `onSelectDay`, with no feedback loop and no reset from streamed graphs
 - [x] Layout decision: keep all three
-- [ ] Delete the preview harness once Session 2 mounts the views
+- [x] Delete the preview harness once Session 2 mounts the views (Session 5/6 session, 2026-09-29): `frontend/spatial-preview.html` and `frontend/src/dev/` removed; nothing referenced them. `.claude/launch.json` is kept, because it now holds the dev, production-preview, backend and audit server configs.
 
 **Spatial S1: Place photos**
 - [x] Backend `POST /api/places/media`: free licences only, 20 km check, SQLite cache, guests allowed, anonymous refused, 6 tests
@@ -372,20 +624,23 @@ Building resumed on 2026-09-28 with Spatial S2. `[x]` = done and verified; `[ ]`
 - [x] Photos in the detail panels, Nearby, route strip, Journal timeline and map photo pins
 - [x] `<TripPhotoStrip>` for the chat preview card, plus the shared `useStopCoordinates` hook
 - [x] Mount the strip in `TripPreviewCard` (build-with-the-agent session, in Session 2)
-- [ ] Day covers in the studio's day rail (after Session 2)
+- [x] Day covers in the studio's day rail (Session 5/6 session, 2026-09-29, after the map session ended): `studio/dayCovers.ts` finds each day's first planned place (options skipped) near its base from `enrichment.places`, falling back to the city's photo. Each thumbnail's credit is in its hover title, with a "Photos: Wikimedia Commons" line under the list. Live: Fushimi Inari-taisha, Kinkaku-ji, and Osaka for a day with no places; an unlocated base gets no photo.
 - [x] Photos on trip library cards: a thumbnail per row and a credited cover in the detail panel, looked up by destination name (done 2026-09-28)
 
 **Spatial S2: "Around here"**
 - [x] Backend `GET /api/places/around?lat&lon`: Wikivoyage listings + Wikipedia landmarks and stations, merged by Wikidata id, credited photos only, 30-day cache per ~1 km cell, guests allowed, anonymous refused, 4 tests (128 pass in total)
 - [x] `<AroundHere lat lon day onAddPlace/>` in the stop detail panel: four tabs, photo or tinted monogram, distance from the stop, hours, listed price marked "may be outdated", credits
 - [x] `SpatialWorkspace` `onAddPlace` prop; "Add to day N" shows only when the host passes it
-- [ ] Wire `onAddPlace` to `COPILOT_OPS {op: 'add', name, day}` (build-with-the-agent session, where the studio mounts the views)
-- [ ] Mount `<AroundHere>` in the studio's info rail (optional, same session)
+- [x] Wire `onAddPlace` in the studio (Session 5/6 session, 2026-09-29):
+  - Agent trips send `COPILOT_OPS {op: 'add', name, day}`.
+  - One-shot trips send a chat request ("Please add X to day N."), which revises the draft.
+  - The button hides while a reply is streaming.
+- [x] Mount `<AroundHere>` in the studio's Details window for the selected day, centred on that day's base city from `enrichment.places` (same session; checked live on Shibuya)
 
 **Spatial S3: Season- and weather-aware tips** (climate part pulled forward: it needs only NASA POWER and the start date)
 - [x] Backend `POST /api/places/season`: NASA POWER monthly climate per ~10 km cell (cached forever), deterministic rules for rainy season, showers, cold, freezing and snow, heat and pleasant months, crossed with each stop's planned places; 6 tests (134 pass in total)
 - [x] Season figure and tips in the stop panel, a season tag on every stop in the outline, journal and route strip, and a **Heads-up** list in the overview
-- [ ] Forecast inside the window from Session 5's MET Norway service (label "forecast" rather than "typical for <month>")
+- [x] Forecast inside the window from Session 5's MET Norway service (Session 5/6 session, 2026-09-29, after the map session ended): the studio passes `document.enrichment.weather` to `SpatialWorkspace`. A stop's first forecast day replaces its climate figure: "Rain · 18 °C · 20 mm rain", "Forecast for Thu, Oct 1 · MET Norway", with the forecast notes. The Heads-up label says "forecast" when it applies, and other stops keep "Typical for <month>".
 - [x] Feed the tips to the agent: Session 5's `enrichment.py` calls `season_tips` for typical days and adds them to FACTS.conditions.
 - [x] Feed the tips to the one-shot planner (map session, 2026-09-28):
   - `seasonality.trip_season` finds the destination on Wikipedia (cached forever), reads NASA POWER for every month the trip touches, and hands the draft prompt a `season` block with guidance: flexible day and indoor backups in a rainy season, off-season gardens, beaches and hikes swapped for indoor highlights in the cold, outdoor sights early or late in the heat, and one packing tip.
@@ -425,7 +680,7 @@ Building resumed on 2026-09-28 with Spatial S2. `[x]` = done and verified; `[ ]`
 - **Streaming fix:** forms hide while a response streams, the finished message no longer remounts (so its entrance animation doesn't replay), tokens are batched per animation frame, and auto-scroll only follows when you're at the bottom.
 - **Live map pins:** every stop's planned places are pinned, and a newly added place pulses and is panned into view.
 - **Fixes:** long legs with no stated mode are treated as flights; road metrics are cached across streamed preview graphs; single-stop framing is capped at zoom 14.
-- **Clean-up still owed:** delete the preview harness (`frontend/spatial-preview.html`, `frontend/src/dev/`, `.claude/launch.json`) once the layout is chosen, plus the dead `.tv-spatial__*` rules in `tripverse-v2-planner.css`.
+- **Clean-up:** done 2026-09-29. The preview harness is deleted (`.claude/launch.json` is kept for the dev servers), and the remaining `.tv-spatial__*` rules (`__loading`, `__empty`) are all used by `SpatialWorkspace`.
 
 ### Research: free data for places and seasons (tested live on 2026-09-28)
 
