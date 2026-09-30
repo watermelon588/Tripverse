@@ -18,7 +18,7 @@ import { layoutSketch } from '../../components/sketch/layout';
 import { SketchPageSvg } from '../../components/sketch/render';
 import type { SketchPage } from '../../components/sketch/types';
 import '../../styles/sketch.css';
-import { fileBase, tripTitle } from './download';
+import { tripTitle } from './download';
 import { embedFonts, fontFor, hasCjk } from './pdfFonts';
 import { planRows, type Row } from './pdfPlan';
 
@@ -152,7 +152,7 @@ async function cover(pdf: jsPDF, doc: TripDocument, guide: Guide) {
 
 // ---- the whole thing ---------------------------------------------------------------
 
-export async function tripPdf(doc: TripDocument, guide: Guide) {
+export async function tripPdf(doc: TripDocument, guide: Guide): Promise<Blob> {
   const pages = layoutSketch(doc);
   const rows = planRows(doc);
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4', compress: true });
@@ -178,5 +178,5 @@ export async function tripPdf(doc: TripDocument, guide: Guide) {
   }
 
   writeRows(pdf, rows);
-  pdf.save(`${fileBase(doc)}.pdf`);
+  return pdf.output('blob'); // the Export menu saves it, like every other file
 }

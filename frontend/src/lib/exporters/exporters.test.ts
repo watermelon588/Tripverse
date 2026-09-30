@@ -3,7 +3,7 @@ import type { TripBudget, TripDocument } from '../../services/tripService';
 import { budgetCsv, csvCell } from './csv';
 import { fileBase } from './download';
 import { toGpx } from './gpx';
-import { foldLine, icsText, toIcs } from './ics';
+import { datedFrom, foldLine, icsText, toIcs } from './ics';
 import { toKml } from './kml';
 import { dayDirectionsUrl } from './maps';
 import { pointsRequest, xml } from './points';
@@ -33,6 +33,19 @@ const doc: TripDocument = {
     { day: 1, date: '2026-10-12', name: 'Sports Day', local_name: 'スポーツの日', country: 'JP', regional: false },
   ] },
 };
+
+describe('a trip with no start date', () => {
+  const undated: TripDocument = { ...doc, start_date: null, end_date: null, days: doc.days.map((day) => ({ ...day, date: null })) };
+
+  it('has no calendar until a start day is picked, then dates every day from it', () => {
+    expect(toIcs(undated)).toBeNull();
+    const dated = datedFrom(undated, '2026-12-30');
+    expect([dated.start_date, dated.end_date, dated.days.map((day) => day.date)]).toEqual(
+      ['2026-12-30', '2026-12-31', ['2026-12-30', '2026-12-31']]);
+    expect(toIcs(dated)).toContain('DTSTART:20261231T130000'); // day 2's afternoon, across the month edge
+    expect(undated.days[0].date).toBeNull(); // the trip document itself is untouched
+  });
+});
 
 describe('ics', () => {
   const ics = toIcs(doc, new Date('2026-09-28T10:15:00Z'))!;
