@@ -96,6 +96,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [editingBrief, setEditingBrief] = useState(false);
   const hasMessages = messages.length > 0;
+  // Until the traveler says something, the opening screen stands in for the lone server greeting.
+  const fresh = !isLoading && messages.length <= 1 && !messages.some((msg) => msg.sender !== 'assistant');
   const latestReplyId = [...messages].reverse().find((msg) => msg.sender === 'assistant')?.id;
   // The trip card belongs where the plan was made, not under every later reply. Until that message
   // is saved (the first draft is still streaming) it closes the thread.
@@ -113,9 +115,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    if (!hasMessages && !isLoading) { el.scrollTop = 0; pinned.current = true; return; }
+    if (fresh) { el.scrollTop = 0; pinned.current = true; return; }
     if (pinned.current) el.scrollTop = el.scrollHeight;
-  }, [messages, isLoading, hasMessages]);
+  }, [messages, isLoading, fresh]);
 
   return (
     <GuideContext.Provider value={guideById(guideId)}>
@@ -140,7 +142,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 
         <span className="tv-app__bar-spacer" />
 
-        {variant === 'page' && hasMessages && onResetChat && (
+        {variant === 'page' && !fresh && hasMessages && onResetChat && (
           <button type="button" className="tv-iconbtn" onClick={onResetChat} title="Start over" aria-label="Start over">
             <ResetIcon width={17} height={17} />
           </button>
@@ -166,7 +168,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         const el = event.currentTarget;
         pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
       }}>
-        {!hasMessages && !isLoading ? (
+        {fresh ? (
           <div className="tv-chat__welcome-wrap">
             <ChatWelcome onSelectPrompt={onSelectPrompt} />
           </div>
@@ -188,7 +190,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 
             {!isLoading && showPlanningChoice && onGenerateFull && (
               editingBrief && planningBrief && onSubmitOnboarding
-                ? <TripOnboardingForm initial={planningBrief} disabled={isLoading} onSubmit={(values) => { setEditingBrief(false); onSubmitOnboarding(values); }} />
+                ? <TripOnboardingForm allAtOnce initial={planningBrief} disabled={isLoading} onSubmit={(values) => { setEditingBrief(false); onSubmitOnboarding(values); }} />
                 : <TripPlanningChoice disabled={isLoading} onGenerateFull={onGenerateFull} onStartBuild={onStartBuild} brief={planningBrief || undefined} onEditDetails={() => setEditingBrief(true)} />
             )}
 

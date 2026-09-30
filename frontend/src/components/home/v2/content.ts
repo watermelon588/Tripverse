@@ -87,63 +87,80 @@ export const DESTINATIONS: Destination[] = [
   { city: 'Sydney', country: 'Australia', code: 'SYD', image: sydney, nights: 6, note: 'Harbour walks, coastal track, ferries' },
 ];
 
-/** A believable agent transcript used by the Console and Bento heroes. */
+/*
+ * Everything below is one real trip, not a mock-up: the 3-day Kyoto plan made while writing the guide
+ * (`frontend/scripts/capture_guide.py`, screenshots in /guide). The message, the opening of the reply, the days,
+ * the public holiday and the suggested budget are what the app produced. Re-check them after a re-shoot.
+ */
 export const AGENT_TRANSCRIPT = [
-  { role: 'user' as const, text: 'Two weeks in Japan in early April. Trains, not flights. Keep it under ¥420,000.' },
-  { role: 'agent' as const, text: 'Anchoring on the Kansai–Kanto corridor so a rail pass covers the long legs. Holding 4 nights Kyoto for peak blossom, then Kanazawa.' },
+  { role: 'user' as const, text: 'Plan 3 days in Kyoto from Delhi. I love food and old temples.' },
+  { role: 'agent' as const, text: 'I’ve put together a balanced, three-day itinerary for your trip to Kyoto. Since you’re traveling in mid-October, you’ll be there during the pleasant autumn season, though October is part of the rainy season, so I’ve built in some flexibility.' },
 ];
 
+/** The stages the planner reports while it drafts (its own labels), with this trip's details. */
 export const AGENT_STEPS = [
-  { label: 'Parsed constraints', detail: '14 nights · rail-only · ¥420k ceiling', state: 'done' as const },
-  { label: 'Resolved 9 candidate cities', detail: 'Scored on season, transit, budget fit', state: 'done' as const },
-  { label: 'Built the route graph', detail: '23 nodes · 31 edges', state: 'done' as const },
-  { label: 'Costing the rail segments', detail: 'JR Pass vs. point-to-point', state: 'active' as const },
-  { label: 'Reserving evening slots', detail: 'Queued', state: 'idle' as const },
+  { label: 'Read your brief', detail: '3 days · 2 travelers · food, temples', state: 'done' as const },
+  { label: 'Researched possible stops', detail: 'Kyoto, from Delhi', state: 'done' as const },
+  { label: 'Checked your dates', detail: 'Typical for October · Sports Day on day 1', state: 'done' as const },
+  { label: 'Writing your day-by-day draft', detail: 'Day 2 of 3', state: 'active' as const },
+  { label: 'Drawing the sketchbook', detail: 'Queued', state: 'idle' as const },
 ];
 
 export const ITINERARY_ROWS = [
-  { day: 'D1–D4', place: 'Kyoto', mode: 'Arrive KIX', cost: '¥86,400' },
-  { day: 'D5–D6', place: 'Kanazawa', mode: 'Thunderbird', cost: '¥31,200' },
-  { day: 'D7–D9', place: 'Takayama', mode: 'Hida ltd. exp.', cost: '¥44,750' },
-  { day: 'D10–D14', place: 'Tokyo', mode: 'Hokuriku Shink.', cost: '¥118,900' },
+  { day: 'D1', place: 'Fushimi Inari Taisha, Takashimaya food hall', mode: 'Mon 12 Oct, holiday', cost: '2' },
+  { day: 'D2', place: 'Arashiyama Bamboo Grove, Kiyomizu-dera, Nishiki Market', mode: 'Tue 13 Oct', cost: '8' },
+  { day: 'D3', place: 'Okochi-sanso Villa, Nishijin, Uji', mode: 'Wed 14 Oct', cost: '4' },
 ];
 
+/** The budget planner's suggested amounts for that trip (estimates from traveler reports, not quotes). */
+export const BUDGET_ROWS = [
+  { label: 'Flights, Delhi and back', amount: '~₹60,000' },
+  { label: 'Stay, 2 nights', amount: '~₹22,000' },
+  { label: 'Activities', amount: '~₹8,420' },
+  { label: 'Food, 3 days', amount: '~₹4,500' },
+  { label: 'Local travel', amount: '~₹3,600' },
+];
+
+/*
+ * Each panel shows the app itself: crops of the guide's screenshots (public/home, made by
+ * `frontend/scripts/home_crops.py` from public/guide). Re-run that script after a re-shoot.
+ */
 export const CAPABILITIES = [
   {
     n: '01',
-    title: 'It reasons about the whole trip, not one stop',
-    body: 'Move a museum to Thursday and the agent re-checks the train you were going to catch, the table you booked after it, and whether the day still ends where you sleep.',
+    title: 'Ask for a change and it happens',
+    body: 'Say “move Nishiki Market to day 2” and the plan changes, the studio follows, and a receipt under the reply lists exactly what changed. If a day gets too full or the budget is passed, it tells you instead of refusing.',
     icon: 'graph' as const,
-    image: cityPlan,
-    alt: 'Transit corridor overlaid on a city plan',
-    caption: 'Every edit propagates through the graph',
+    image: '/home/cap-changes.png',
+    alt: 'A chat with two receipts: Moved Nishiki Market from day 1 to day 2, then Budget target set to 150,000 INR',
+    caption: 'Every change leaves a receipt',
   },
   {
     n: '02',
-    title: 'You watch it think',
-    body: 'Every constraint it reads, every city it scores, every route it discards is written out as it happens. Nothing arrives as a finished block you have to trust blindly.',
+    title: 'A guide who draws your trip',
+    body: 'Pick a guide and they sketch each day on paper as the plan takes shape: the places, the order, the weather, the public holiday. Change something in the chat and the page is redrawn while you watch.',
     icon: 'spark' as const,
-    image: monoCity,
-    alt: 'Aircraft passing between two towers',
-    caption: 'Streamed reasoning, not a finished block',
+    image: '/home/cap-sketch.png',
+    alt: 'A hand-drawn sketchbook page for one day of the trip, with its places, weather and a holiday flag',
+    caption: 'Drawn live, page by page',
   },
   {
     n: '03',
     title: 'The itinerary is a map, not a list',
-    body: 'Cities, stays, meals, and transit render as connected nodes in 3D. Distance and sequence are things you look at, rather than things you reconstruct from bullet points.',
+    body: 'Every stop sits on a real map and in a 3D route you can orbit, with photos, what is nearby, and the forecast or the season’s typical weather for your dates.',
     icon: 'layers' as const,
-    image: alpineLake,
-    alt: 'Lakeside village seen from the mountainside',
-    caption: 'Distance you can see, not infer',
+    image: '/home/cap-map.png',
+    alt: 'The Trip Studio map tab with the route into Kyoto and a weather heads-up for October',
+    caption: 'Map and 3D in one studio',
   },
   {
     n: '04',
-    title: 'Budget is a constraint, not a footnote',
-    body: 'Set a ceiling and it holds. Costs recompute on every edit, and the agent tells you which segment broke the budget before it hands you the plan.',
+    title: 'A budget you can see, not guess',
+    body: 'Set a target in the brief, or just say it. The budget planner suggests typical costs from traveler reports, row by row, and nothing counts toward your total until you accept it.',
     icon: 'wallet' as const,
-    image: izakaya,
-    alt: 'Lantern-lit izakaya alley at night',
-    caption: 'Priced to the segment, held to the ceiling',
+    image: '/home/cap-budget.png',
+    alt: 'The budget planner with a projected trip cost of about 98,520 rupees against a 150,000 target and suggested amounts per row',
+    caption: 'Suggested first, then yours to accept',
   },
 ];
 
@@ -163,52 +180,52 @@ export const MARQUEE = [
   { src: blossomFuji, label: 'Fujiyoshida' },
 ];
 
-/** Small supporting thumbnails for the How-it-works index. */
-export const STEP_IMAGES = [temple, cityPlan, pagoda, hotelRoom];
+/** Thumbnails for the How-it-works index: the app at each step (crops made by scripts/home_crops.py). */
+export const STEP_IMAGES = ['/home/step-1.png', '/home/step-2.png', '/home/step-3.png', '/home/step-4.png'];
 
 export const STEPS = [
   {
     n: '01',
-    title: 'Set your trip brief',
-    body: 'Add your destination, starting point, trip length, must-see places, pace, interests, and anything you want to avoid.',
+    title: 'Say where you are going',
+    body: 'Tell your guide the place, or just the mood. It asks three quick things (where from, where to, how many days). Dates, budget, pace and interests are optional.',
   },
   {
     n: '02',
-    title: 'Generate a first draft',
-    body: 'The agent researches possible stops and builds a day-by-day itinerary around the details you saved.',
+    title: 'Get a draft, or build it together',
+    body: 'Generate the whole itinerary in one go, or plan one day at a time while your guide suggests places that fit the day and the budget.',
   },
   {
     n: '03',
-    title: 'Explore it in three dimensions',
-    body: 'Your trip opens as a spatial universe. Pan across the route, open any node, see what connects to what and what it costs.',
+    title: 'Open the Trip Studio',
+    body: 'One page for the whole trip: the day plan, a hand-drawn sketchbook, a map, a 3D route, and the weather and public holidays for your dates.',
   },
   {
     n: '04',
-    title: 'Return and refine',
-    body: 'Your draft stays in your trip library. Reopen it to ask for changes and review the updated plan.',
+    title: 'Change it by asking, then take it with you',
+    body: 'Say “move the market to day 1” and it is done, with a receipt of what changed. Export a PDF, a calendar, map files or the budget as a spreadsheet.',
   },
 ];
 
 export const FAQ = [
   {
     q: 'What makes this different from asking a chatbot for an itinerary?',
-    a: 'A chatbot returns text it cannot check. TripVerse builds a structured graph of your trip — nodes for places and stays, edges for transit — then validates it against your dates, budget, and opening hours. When something does not fit, it tells you which constraint failed instead of quietly writing around it.',
+    a: 'A chatbot hands you a wall of text. TripVerse keeps the trip as a day-by-day plan it can change: ask it to move or add a place and the plan, the map and the sketchbook all update, with a receipt of what changed. It also brings in the forecast, public holidays and a budget for your dates.',
   },
   {
-    q: 'Can I edit the plan after the agent generates it?',
-    a: 'Yes, and editing is the point. Ask for a change in the same conversation and the agent replans only the affected branch of the graph. The parts you already approved stay where they are.',
+    q: 'Can I edit the plan after it is generated?',
+    a: 'Yes, and editing is the point. Say what you want in the same chat (“move Nishiki Market to day 1”, “make day 2 lighter”) and it is applied and saved straight away. When your guide suggests a change instead, a plain “yes” applies it.',
   },
   {
     q: 'Does it book anything on my behalf?',
-    a: 'Not today. TripVerse plans, prices, and sequences the trip, then hands you the booking links for each segment. You stay in control of every transaction.',
+    a: 'No. TripVerse plans and organises the trip; you book the flights, stays and tickets yourself. Costs in the budget planner are estimates from traveler reports until you enter your own.',
   },
   {
     q: 'What happens to a trip I started but did not finish?',
-    a: 'Sessions persist against your account. Reopen the conversation and both the transcript and the 3D graph come back in the state you left them.',
+    a: 'It stays in your trip library with its conversation, plan and budget, so you can reopen it and carry on. You can also take it with you: a PDF with the sketch pages, a calendar file, GPX and KML for map apps, and the budget as a spreadsheet.',
   },
   {
     q: 'Do I need an account to try it?',
-    a: 'You can plan a trip as a guest and see the full 3D graph. An account is only needed to save a trip, reopen it later, or pick it back up on another device.',
+    a: 'No. You can plan as a guest and use everything, including the studio and the exports. Sign in to keep your trips and open them on another device.',
   },
 ];
 
@@ -217,25 +234,25 @@ export const FOOTER_NAV = [
     heading: 'Product',
     links: [
       { label: 'How it works', href: '#how-it-works' },
-      { label: 'Explore trips', href: '#explore', key: 'explore' },
+      { label: 'Explore destinations', href: '/explore', key: 'explore' },
       { label: 'Plan a trip', href: '#plan', key: 'plan' },
+      { label: 'Destinations', href: '#destinations' },
+    ],
+  },
+  {
+    heading: 'Your trips',
+    links: [
+      { label: 'My trips', href: '/trips' },
+      { label: 'Sign in', href: '/login' },
+      { label: 'Create an account', href: '/signup' },
+    ],
+  },
+  {
+    heading: 'Help',
+    links: [
+      { label: 'How to use TripVerse', href: '/guide' },
+      { label: 'What the agent does', href: '#capabilities' },
       { label: 'Questions', href: '#questions' },
-    ],
-  },
-  {
-    heading: 'Company',
-    links: [
-      { label: 'About', href: '#about' },
-      { label: 'Changelog', href: '#changelog' },
-      { label: 'Contact', href: '#contact' },
-    ],
-  },
-  {
-    heading: 'Resources',
-    links: [
-      { label: 'Documentation', href: '#docs' },
-      { label: 'API reference', href: '#api' },
-      { label: 'Status', href: '#status' },
     ],
   },
 ];

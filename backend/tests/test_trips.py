@@ -767,3 +767,23 @@ async def test_extraction_without_days_gives_no_day_plan():
         result = await extract_itinerary({"assistant_response": "| Day 1 | Kyoto | **Fushimi Inari** |",
                                           "destination": "Kyoto", "duration_days": 2, "origin": "Delhi"})
     assert result["itinerary_graph"] and result["day_plan"] is None
+
+
+def test_the_brief_intro_says_what_is_still_needed_and_that_the_rest_is_optional():
+    from app.agents.trip_planner.nodes.onboarding_form_node import show_onboarding_form
+
+    asked = show_onboarding_form({"destination": "Japan", "duration_days": 5})["assistant_response"]
+    assert "Japan for 5 days" in asked and "where you're travelling from" in asked and "optional" in asked
+    assert "how many days" not in asked  # already known, so not asked again
+    nothing_known = show_onboarding_form({})["assistant_response"]
+    assert all(part in nothing_known for part in ("where you're going", "how many days", "where you're travelling from"))
+
+
+@pytest.mark.asyncio
+async def test_a_new_trip_greets_a_signed_in_traveler_by_first_name():
+    from app.agents.trip_planner.graph import trip_planner_graph
+
+    named = await trip_planner_graph.ainvoke({"user_message": "", "user_name": "Rohit Maity"})
+    assert named["assistant_response"].startswith("Hi Rohit, I'm TripVerse.")
+    guest = await trip_planner_graph.ainvoke({"user_message": "", "user_name": None})
+    assert guest["assistant_response"].startswith("Hi, I'm TripVerse.")

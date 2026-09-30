@@ -3,9 +3,11 @@
 Needs the frontend (5173) and backend (8000) running with real LLM keys. Uses only
 the stdlib plus `websockets` (already in the backend venv via uvicorn[standard]):
 
-    backend/.venv/Scripts/python frontend/scripts/capture_guide.py [--only one_shot|build]
+    backend/.venv/Scripts/python frontend/scripts/capture_guide.py [--only one_shot|build|pages]
 
-Every run plans real trips in a fresh guest profile, so it takes several minutes.
+Every run plans real trips in a fresh guest profile, so it takes several minutes (`pages` takes seconds).
+Run it against the production preview (`npm run build`, then `npm run preview -- --port 5173 --strictPort`)
+when you'll be editing files meanwhile: the dev server reloads the page on every save.
 Shots land in frontend/public/guide/<name>.png. After a run, look at every shot and
 make sure its caption in pages/GuidePage.tsx still says what the picture shows.
 """
@@ -96,8 +98,12 @@ class Page:
             raise LookupError(selector)
         await asyncio.sleep(0.4)
         if enter:
-            await self.js(f"""document.querySelector({json.dumps(selector)}).closest('.tv-chat__composer')
-                .querySelector('button.tv-comp__send, button[type=submit]').click()""")
+            # The send button is disabled while a trip loads, and the welcome screen shows no "thinking" row
+            # for idle() to wait on: a click then is dropped without a trace.
+            send = f"""document.querySelector({json.dumps(selector)}).closest('.tv-chat__composer')
+                .querySelector('button.tv-comp__send, button[type=submit]')"""
+            await self.wait(f"!{send}.disabled", 60, "send button enabled")
+            await self.js(f"{send}.click()")
             await asyncio.sleep(0.6)
 
     async def brief(self, label: str, value: str):
@@ -134,9 +140,24 @@ async def start_trip(page: Page, message: str):
     await page.wait("!!document.querySelector('.tv-onboarding')", 60, "trip brief")
 
 
-async def open_studio(page: Page):
+async def say(page: Page, message: str, composer: str = ".tv-chat__composer textarea"):
+    """Send a chat message and wait for the reply to finish."""
+    await page.type(composer, message, enter=True)
+    await page.idle(300)
     await page.scroll_chat("bottom")
-    await page.click("Open studio", ".tv-trip-card button")
+
+
+async def brief_shot(page: Page, name: str):
+    await page.js("document.querySelector('.tv-onboarding').scrollIntoView({block: 'center'})")
+    await page.shot(name)
+
+
+async def next_step(page: Page):
+    await page.click("Next", ".tv-onboarding button")
+
+
+async def open_studio(page: Page):
+    await page.click("Open studio", ".tv-chat__bar button")
     await page.wait("!!document.querySelector('.tv-studio')", 30, "studio")
     await asyncio.sleep(3)
 
@@ -144,20 +165,25 @@ async def open_studio(page: Page):
 async def one_shot(page: Page):
     await page.js("location.href = '/create'")
     await page.wait("!!document.querySelector('.tv-chat__composer textarea')", 60, "planner")
-    await page.idle(60)  # the greeting, not the "Preparing your trip" row
-    await page.shot("01-planner-start")
+    await page.idle(60)
+    await asyncio.sleep(3)  # the welcome's entrance
+    await page.shot("01-welcome")
 
+    # The brief, one step at a time.
     await start_trip(page, "Plan 3 days in Kyoto from Delhi. I love food and old temples.")
     await page.brief("Start date", KYOTO_START)
+    await brief_shot(page, "02-brief-step-1")
+    await next_step(page)
     await page.brief("Adults", "2")
     await page.brief("Total budget", "120000")
     await page.brief("Currency", "INR")
+    await brief_shot(page, "02b-brief-step-2")
+    await next_step(page)
     await page.brief("What interests you?", "food, temples")
     await page.brief("Anything to avoid?", "crowded attractions")
-    await page.js("document.querySelector('.tv-onboarding').scrollIntoView({block: 'start'})")
-    await page.shot("02-trip-brief")
-    await page.js("document.querySelector('.tv-onboarding__guides').scrollIntoView({block: 'center'})")
-    await page.shot("02b-guide-picker")
+    await brief_shot(page, "02c-brief-step-3")
+    await next_step(page)
+    await brief_shot(page, "02d-guide-picker")
     await page.click("Continue to planning options")
     await page.idle()
     await page.wait("!!document.querySelector('.tv-planning-choice')", 60, "planning choice")
@@ -169,15 +195,19 @@ async def one_shot(page: Page):
     await page.js("[...document.querySelectorAll('.tv-msg2--agent')].at(-1).scrollIntoView({block: 'start'})")
     await asyncio.sleep(0.5)
     await page.shot("04-one-shot-itinerary")
-    await page.scroll_chat("bottom")
-    await page.shot("05-one-shot-itinerary-end")
+    await page.js("document.querySelector('.tv-trip-card').scrollIntoView({block: 'center'})")
+    await asyncio.sleep(3)  # the card's photos
+    await page.shot("05-trip-card")
 
-    # Follow-ups revise the existing plan in place.
-    await page.type(".tv-chat__composer textarea", "Can you add the Arashiyama bamboo grove on the morning of day 2?", enter=True)
-    await page.idle(300)
-    await page.js("[...document.querySelectorAll('.tv-msg2--agent')].at(-1).scrollIntoView({block: 'start'})")
-    await asyncio.sleep(0.5)
-    await page.shot("05b-one-shot-revision")
+    # Changes: asked for, offered and agreed to, and the budget. Each one leaves a receipt.
+    await say(page, "Can you add the Arashiyama bamboo grove on the morning of day 2?")
+    await page.shot("05b-change-receipt")
+    await say(page, "Day 1 looks busy. Is there anything you'd move to another day?")
+    await page.shot("05c-offer")
+    await say(page, "yes")
+    await page.shot("05d-yes-applied")
+    await say(page, "My budget is 150,000 INR")
+    await page.shot("05e-budget-from-chat")
 
     await open_studio(page)
     await page.click("Plan", "[role=tab]")
@@ -187,12 +217,22 @@ async def one_shot(page: Page):
     await asyncio.sleep(5)  # the guide draws the overview
     await page.shot("07-studio-sketch")
     await page.click("", "[aria-label='Next page']")
-    await asyncio.sleep(1.2)
-    await page.shot("07b-sketch-drawing")  # mid-draw: the guide's pen on the page
-    await asyncio.sleep(4)
+    await asyncio.sleep(5)  # the guide draws the day
     await page.shot("07c-sketch-day")
-    await page.click("Map", "[role=tab]")
-    await asyncio.sleep(15)  # base-map tiles are slow in headless Chrome
+    # Base-map tiles are slow in headless Chrome and sometimes never arrive: wait for real tiles, and
+    # reopen the tab once if they don't come.
+    tiles = """[...document.querySelectorAll('.tv-studio .gm-style img')]
+        .filter(img => img.complete && img.naturalWidth >= 128).length >= 6"""
+    for attempt in range(2):
+        await page.click("Map", "[role=tab]")
+        try:
+            await page.wait(tiles, 45, "map tiles")
+            break
+        except TimeoutError:
+            if attempt:
+                raise
+            await page.click("Plan", "[role=tab]")
+    await asyncio.sleep(3)
     await page.shot("08-studio-map")
     await page.click("3D", "[role=tab]")
     await asyncio.sleep(8)
@@ -201,6 +241,11 @@ async def one_shot(page: Page):
     await page.click("Plan", "[role=tab]")
     await page.click("Export", ".tv-export__trigger")
     await page.shot("10-export-menu")
+    # A scripted click isn't a user's click, so the menu holds the file behind its Save button:
+    # the same state a slow export ends in.
+    await page.click("Everything (.json)", ".tv-export__panel button")
+    await page.wait("!!document.querySelector('.tv-export__status a')", 30, "export ready")
+    await page.shot("10b-export-ready")
     await page.js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}))")
     await asyncio.sleep(0.5)
 
@@ -210,7 +255,7 @@ async def one_shot(page: Page):
     await page.click("Suggest amounts")
     await page.wait("[...document.querySelectorAll('button')].some(b => b.textContent.includes('Use all suggestions'))", 180, "suggestions")
     await page.shot("12-budget-suggestions")
-    await page.js("document.querySelector('.tv-budget__body').scrollTop = 520")
+    await page.js("document.querySelector('.tv-budget__body').scrollTop = 620")
     await page.shot("13-budget-rows")
     await page.click("Close ×")
 
@@ -223,38 +268,44 @@ async def build(page: Page):
     await asyncio.sleep(3)
     await start_trip(page, "3 days in Tokyo from Delhi")
     await page.brief("Start date", TOKYO_START)
+    await next_step(page)
     await page.brief("Total budget", "60000")
     await page.brief("Currency", "JPY")
+    await next_step(page)
     await page.brief("What interests you?", "food, quiet gardens")
     await page.brief("Anything to avoid?", "nightclubs")
+    await next_step(page)
     await page.click("Beni", ".tv-onboarding__guide")
     await page.click("Continue to planning options")
     await page.idle()
     await page.wait("!!document.querySelector('.tv-planning-choice')", 60, "planning choice")
     await page.click("Build with Beni")
     await page.idle(300)
-    await page.wait("!!document.querySelector('.tv-copilot')", 60, "copilot panel")
+    await page.wait("!!document.querySelector('.tv-copilot')", 60, "build dock")
     await page.scroll_chat("bottom")
     await page.shot("14-build-day-1")
 
-    await page.click("+", ".tv-copilot__chips button")
+    await page.click("", ".tv-copilot__chips button")  # the first suggestion
     await page.idle()
     await page.scroll_chat("bottom")
     await page.shot("15-build-added")
 
-    await page.click("D2", ".tv-copilot__days button")  # local switch: no request
-    await page.shot("16-build-day-2-switch")
-    await page.click("+", ".tv-copilot__chips button")
+    await page.click("Day plan", ".tv-copilot__toggle")
+    await page.shot("16-build-day-plan")
+    planned = await page.js("document.querySelector('.tv-copilot__plan li > span')?.firstChild?.textContent")
+    await page.click("Day plan", ".tv-copilot__toggle")  # closed again: the conversation keeps the screen
+
+    await page.click("", "[aria-label='Next day']")  # a local switch: no request
+    await page.click("", ".tv-copilot__chips button")
     await page.idle()
-    await page.type(".tv-chat__composer textarea",
-                    "I never want museums on this trip. Also add a great local lunch spot today.", enter=True)
-    await page.idle(300)
-    await page.scroll_chat("bottom")
+    await say(page, "I never want museums on this trip. Also add a great local lunch spot today.")
     await page.shot("17-build-preferences")
 
-    await page.click("D1", ".tv-copilot__days button")
-    await page.click("Agent's notes for day 1")
-    await page.shot("18-build-day-1-held")
+    # A move onto another day, then a place that breaks the traveler's own rule.
+    await say(page, f"Move {planned} to day 3")
+    await page.shot("17b-build-move")
+    await say(page, "Add the Tokyo National Museum to day 2")
+    await page.shot("18-build-add-anyway")
 
     await page.click("Budget", ".tv-chat__bar button")
     await page.wait("!!document.querySelector('.tv-budget__summary')", 60, "budget")
@@ -263,9 +314,7 @@ async def build(page: Page):
     await page.click("Close ×")
 
     # The studio with the chat open beside the sketch: a change drawn live.
-    await page.click("Open studio", ".tv-chat__bar button")
-    await page.wait("!!document.querySelector('.tv-studio')", 30, "studio")
-    await asyncio.sleep(2)
+    await open_studio(page)
     await page.click("Sketch", "[role=tab]")
     await page.click("DAY 1", ".tv-studio__daywin button")
     await asyncio.sleep(5)
@@ -285,12 +334,19 @@ async def build(page: Page):
     trip_path = await page.js("location.pathname")
     await page.click("", "[aria-label='Back to the chat']")
     await asyncio.sleep(2)
+    await page.click("Day plan", ".tv-copilot__toggle")
     await page.click("Finish itinerary")
     await page.idle(300)
+    await page.click("Day plan", ".tv-copilot__toggle")
     await page.scroll_chat("bottom")
     await page.shot("22-build-complete")
 
-    # The same studio on a phone held upright: portrait sketch pages and bottom sheets.
+    # Two trips now exist for this guest: the library has something to show.
+    await page.js("location.href = '/trips'")
+    await asyncio.sleep(8)
+    await page.shot("25-trips")
+
+    # The same trip on a phone held upright: portrait sketch pages, bottom sheets, and the chat.
     await page.send("Emulation.setDeviceMetricsOverride", width=390, height=844, deviceScaleFactor=2, mobile=True)
     await page.js(f"localStorage.setItem('tripverse-studio-tab', 'sketch'); location.href = {json.dumps(trip_path)}")
     await page.wait("!!document.querySelector('.tv-sketch__page')", 60, "phone sketch")
@@ -298,7 +354,20 @@ async def build(page: Page):
     await page.click("", "[aria-label='Next page']")
     await asyncio.sleep(5)
     await page.shot("23-phone-sketch")
+    await page.js("location.href = '/create'")
+    await page.wait("!!document.querySelector('.tv-copilot')", 60, "phone chat")
+    await page.idle(60)
+    await page.scroll_chat("bottom")
+    await page.shot("23b-phone-chat")
     await page.send("Emulation.setDeviceMetricsOverride", width=1440, height=900, deviceScaleFactor=1, mobile=False)
+
+
+async def pages(page: Page):
+    """The site's other pages. No planning, so this takes seconds."""
+    for path, name, settle in (("/", "00-home", 6), ("/explore", "24-explore", 6), ("/credits", "26-credits", 4)):
+        await page.js(f"location.href = {json.dumps(path)}")
+        await asyncio.sleep(settle)  # entrance motion and photography
+        await page.shot(name)
 
 
 async def main(only: str | None):
@@ -316,7 +385,9 @@ async def main(only: str | None):
                 break
             except Exception:
                 time.sleep(0.5)
-        async with websockets.connect(target["webSocketDebuggerUrl"], max_size=None) as ws:
+        # No keepalive pings: a heavy page (the home page's scroll scenes under software GL) can keep Chrome
+        # from answering one in time, and the run died mid-shoot.
+        async with websockets.connect(target["webSocketDebuggerUrl"], max_size=None, ping_interval=None) as ws:
             page = Page(ws)
             await page.send("Page.enable")
             await page.send("Emulation.setDeviceMetricsOverride", width=1440, height=900, deviceScaleFactor=1, mobile=False)
@@ -327,6 +398,8 @@ async def main(only: str | None):
                     await one_shot(page)
                 if only in (None, "build"):
                     await build(page)
+                if only in (None, "pages"):
+                    await pages(page)
             except Exception:
                 await page.shot("_failure")  # what the page showed when a step gave up; not used by the guide
                 raise
@@ -337,5 +410,5 @@ async def main(only: str | None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--only", choices=["one_shot", "build"])
+    parser.add_argument("--only", choices=["one_shot", "build", "pages"])
     asyncio.run(main(parser.parse_args().only))

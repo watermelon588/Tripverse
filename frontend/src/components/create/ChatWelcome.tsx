@@ -1,16 +1,16 @@
 /*
- * ChatWelcome — the planner's empty state.
+ * ChatWelcome — the planner's opening, shown until the traveler says something.
  *
- * A composed opening rather than a blank canvas: assistant identity, an
- * editorial headline, and four starter routes that populate the composer.
- * (`&bull;` in the old subtitles rendered literally — plain separators now.)
+ * A greeting by name and time of day (the traveler's own clock, which only the browser knows),
+ * what happens next in one honest paragraph, and four starter trips that send themselves.
  */
 import React, { useRef } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 
 import { AssistantAvatar } from './AssistantAvatar';
-import { ArrowUpRightIcon, CompassIcon } from '../home/v2/IconsV2';
+import { ArrowUpRightIcon } from '../home/v2/IconsV2';
+import { useAuth } from '../../context/AuthContext';
 import { EASE, prefersReducedMotion, splitLines } from '../home/v2/motion';
 
 interface ChatWelcomeProps {
@@ -44,7 +44,14 @@ const STARTER_PROMPTS = [
   },
 ];
 
+function greeting(hour = new Date().getHours()): string {
+  return hour >= 4 && hour < 12 ? 'Good morning' : hour >= 12 && hour < 17 ? 'Good afternoon' : 'Good evening';
+}
+
 export const ChatWelcome: React.FC<ChatWelcomeProps> = ({ onSelectPrompt }) => {
+  const { user } = useAuth();
+  // First name when signed in; a guest just gets the greeting.
+  const name = String(user?.user_metadata?.full_name || '').trim().split(/\s+/)[0];
   const root = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
 
@@ -55,12 +62,11 @@ export const ChatWelcome: React.FC<ChatWelcomeProps> = ({ onSelectPrompt }) => {
       const split = titleRef.current ? splitLines(titleRef.current) : null;
       const tl = gsap.timeline({ defaults: { ease: EASE } });
 
-      tl.from('.tv-welcome__mark', { scale: 0.85, opacity: 0, duration: 0.8 })
-        .from('.tv-welcome__eyebrow', { y: 12, opacity: 0, duration: 0.6 }, '-=0.5');
+      tl.from('.tv-welcome__mark', { scale: 0.85, opacity: 0, duration: 0.8 });
 
       if (split) tl.from(split.lines, { yPercent: 115, duration: 1, stagger: 0.08 }, '-=0.4');
 
-      // The lead paragraph is the page's largest text (its LCP), so it rises with the eyebrow
+      // The lead paragraph is the page's largest text (its LCP), so it rises early
       // instead of waiting ~1.3 s for the headline; Chrome doesn't count it while at opacity 0.
       tl.from('.tv-welcome__lead', { y: 14, opacity: 0, duration: 0.7 }, 0.25)
         .from('.tv-welcome__label', { y: 10, opacity: 0, duration: 0.5 }, '-=0.45')
@@ -83,18 +89,13 @@ export const ChatWelcome: React.FC<ChatWelcomeProps> = ({ onSelectPrompt }) => {
         <AssistantAvatar size={72} />
       </div>
 
-      <span className="tv-label tv-welcome__eyebrow">
-        <CompassIcon width={13} height={13} />
-        TripVerse agent
-      </span>
-
       <h2 className="tv-display tv-welcome__title" ref={titleRef}>
-        Where are we <em>going?</em>
+        {greeting()}{name ? `, ${name}` : ''}. <em>Where are we going?</em>
       </h2>
 
       <p className="tv-lead tv-welcome__lead">
-        Describe the trip in your own words — dates, budget, who is coming, how you like to move.
-        The agent will resolve the cities, wire the route and price every segment while you read along.
+        Tell me the place, or just the kind of trip you’re in the mood for. I’ll ask three quick things
+        (where from, where to, how many days), then plan it day by day: all at once, or one day at a time with you.
       </p>
 
       <span className="tv-label tv-welcome__label">Or start from one of these</span>

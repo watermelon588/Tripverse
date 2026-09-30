@@ -258,3 +258,47 @@ async def test_streamed_turn_updates_map_and_panel_before_the_reply(client: Asyn
     done = events[-1]["assistant_message"]
     assert done["content"] == "Nezu is lovely."
     assert done["payload"]["copilot"]["days"][0]["reply"] == "Nezu is lovely."  # held for day switches
+
+
+def test_preference_receipts_read_like_a_person_wrote_them():
+    copilot = _copilot()
+    events, _, _ = engine.apply_ops(copilot, [
+        {"op": "pref", "kind": "avoid", "value": "museums"}, {"op": "pref", "kind": "must", "value": "Tokyo Tower"},
+        {"op": "pref", "kind": "like", "value": "quiet gardens"}, {"op": "pref", "kind": "dislike", "value": "shopping"}])
+    assert events == ["Rule saved: no museums", "Rule saved: Tokyo Tower is a must",
+                      "Noted: you like quiet gardens", "Noted: you'd rather skip shopping"]
+
+
+def test_a_change_request_that_changed_nothing_says_so_in_the_receipt():
+    """Seen live: the interpreter dropped "Add the Tokyo National Museum" itself, so the reply refused with no receipt."""
+    from app.agents.trip_planner.copilot.graph import INTERPRET_INSTRUCTION, turn_changes
+
+    nothing = {"events": [], "blocked": []}
+    assert turn_changes({**nothing, "user_message": "Add the Tokyo National Museum to day 2"}) == [
+        {"status": "skipped", "text": "Nothing in the plan changed"}]
+    assert turn_changes({**nothing, "user_message": "What should I add to day 2?"}) == []  # a question, not a request
+    assert turn_changes({**nothing, "user_message": ""}) == []  # a day switch or a tap with nothing to report
+    assert "even when it breaks a rule in PROFILE" in INTERPRET_INSTRUCTION  # the planner decides, not the interpreter
+
+
+async def test_research_retries_on_the_main_model_when_the_fast_one_returns_nothing():
+    """Seen live: the fast model returned broken JSON twice, and build-with-agent opened with nothing to suggest."""
+    from app.agents.trip_planner.copilot.research import research
+
+    models = []
+
+    async def fake(prompt, system_instruction=None, **kwargs):
+        models.append(kwargs.get("model"))
+        if kwargs.get("model"):
+            return '{"candidates": [{"name": "Nezu Mus'  # truncated
+        return json.dumps({"rates": {}, "candidates": [{"name": "Nezu Museum", "base": "Tokyo", "area": "Aoyama",
+                                                         "category": "attraction", "tags": [], "est_cost": 1300,
+                                                         "duration_hours": 2, "why": "Quiet garden", "source": None}]})
+
+    copilot = engine.new_copilot(destination="Tokyo", duration_days=3, currency="JPY", preferences={}, places=[],
+                                 budget_target=None, overrides={})
+    with patch("app.agents.trip_planner.copilot.research.community_search", new=AsyncMock(return_value=[])), \
+            patch.object(llm_service, "generate", new=fake):
+        added = await research(copilot, ["Tokyo 3 day itinerary advice"])
+    assert added == 1 and copilot["pool"][0]["name"] == "Nezu Museum"
+    assert models[0] and models[1] is None  # the fast model first, then the main one

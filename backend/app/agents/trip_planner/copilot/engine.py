@@ -33,6 +33,9 @@ COMFORT = ("budget", "mid_range", "comfortable")
 PREF_LISTS = {"must": ("hard", "must"), "avoid": ("hard", "avoid"),
               "like": ("soft", "likes"), "dislike": ("soft", "dislikes")}
 OPPOSITE = {"must": "avoid", "avoid": "must", "like": "dislike", "dislike": "like"}
+# How a saved preference reads in the receipt under the reply.
+PREF_SAVED = {"must": "Rule saved: {} is a must", "avoid": "Rule saved: no {}",
+              "like": "Noted: you like {}", "dislike": "Noted: you'd rather skip {}"}
 POOL_LIMIT = 60
 _STOP = {"with", "and", "the", "long", "late", "early", "very", "lots", "much", "many", "heavy",
          "places", "place", "things", "stuff", "spots", "areas", "area", "too", "any", "more"}
@@ -451,7 +454,7 @@ def apply_ops(copilot: dict, ops: list[Any]) -> tuple[list[str], list[dict], lis
             profile[other_group][other_field][:] = [t for t in profile[other_group][other_field] if key(t) != key(value)]
             if not existing:
                 target.append(value)
-                events.append(f"Noted {'hard' if group == 'hard' else 'soft'} preference ({op['kind']}): {value}")
+                events.append(PREF_SAVED[op["kind"]].format(value))
             if op["kind"] == "avoid":
                 clashes = [i["name"] for _, i in scheduled(copilot) if matches(value, i)]
                 if clashes:

@@ -163,7 +163,7 @@ export const CreateSidebar: React.FC<CreateSidebarProps> = ({
           {onNavigateExplore && (
             <button type="button" className="tv-btn tv-btn--ghost tv-btn--sm" style={{ width: '100%' }} onClick={onNavigateExplore}>
               <CompassIcon width={14} height={14} />
-              <span>Explore routes</span>
+              <span>Explore destinations</span>
             </button>
           )}
           <button type="button" className="tv-btn tv-btn--ghost tv-btn--sm" style={{ width: '100%' }} onClick={openGuide}>

@@ -74,8 +74,6 @@ export function FooterV2({ onStartPlanning, onNavigateExplore }: FooterV2Props) 
           <span className="tv-meta">© {year} TripVerse</span>
           <span className="tv-meta tv-hide-mobile">Built with LangGraph, React Three Fiber, and FastAPI</span>
           <div className="tv-footer__legal">
-            <a href="#privacy" className="tv-meta">Privacy</a>
-            <a href="#terms" className="tv-meta">Terms</a>
             <a
               href="/credits"
               className="tv-meta"
