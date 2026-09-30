@@ -80,10 +80,12 @@ async def research(copilot: dict, queries: list[str], *, plan_bases: bool = Fals
           for i, r in enumerate(evidence, 1)),
     ])
     parsed: dict = {}
-    for attempt in range(2):  # the fast model occasionally returns truncated JSON; one retry fixes it
+    # The fast model occasionally returns truncated JSON, sometimes twice running, which left the first
+    # build-with-agent turn with nothing to suggest. So the one retry goes to the main model.
+    for attempt in range(2):
         try:
             raw = await llm_service.generate(prompt=prompt, system_instruction=EXTRACT_INSTRUCTION,
-                                             temperature=0.2, **model_for("fast"))
+                                             temperature=0.2, **(model_for("fast") if attempt == 0 else {}))
         except Exception as exc:
             logger.warning("Copilot research extraction failed: %s", exc)
             return 0

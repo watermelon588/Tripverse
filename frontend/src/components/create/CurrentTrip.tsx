@@ -86,10 +86,11 @@ export const CurrentTrip: React.FC<CurrentTripProps> = ({ trip, onExploreSpatial
         </div>
       )}
 
-      {onExploreSpatial && (
+      {/* Only once there is a plan to open, and under the name every other entry point uses. */}
+      {onExploreSpatial && trip.status === 'ROUTING' && (
         <button type="button" className="tv-btn tv-btn--primary tv-btn--sm" style={{ width: '100%' }} onClick={onExploreSpatial}>
           <LayersIcon width={14} height={14} />
-          <span>Open spatial view</span>
+          <span>Open studio</span>
         </button>
       )}
     </section>

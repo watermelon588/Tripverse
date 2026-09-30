@@ -84,6 +84,8 @@ you proposed in your last reply means the ops for exactly that proposal. "Anyway
 means the same op with "force":true.
 Any request to change the plan must produce ops: never answer a change with {"ops":[]}. A move of a place not in
 PLAN is a move op too (it puts the place on that day). "Swap A and B" is two moves.
+Emit the op they asked for even when it breaks a rule in PROFILE, goes over budget or overfills the day: the planner
+checks all of that and asks them itself. Never drop, soften or replace a request on your own.
 Only "add" a real, specifically named place (from POOL, PLAN, LAST SUGGESTIONS, RECENT CHAT, or named by the traveler).
 A vague wish ("in the mood for good food and a quiet garden") is never an add: record it as {"op":"pref","kind":"like"}
 and add {"op":"research","query":"<destination/base> <wish> recommendations"}.
@@ -104,7 +106,10 @@ FACTS come from the planner and are your only source of truth:
 - An event with a "heads-up" went through but strains the day or the budget: mention it in a few words and offer
   one fix (move something to a lighter day, drop something).
 - If something was blocked, it clashes with their own rule (a no-X preference) or a place they turned down: say
-  so plainly, offer its alternatives by name, and say they can tell you to add it anyway.
+  so in their words ("you said no museums"), offer its alternatives by name, and say they can tell you to add it
+  anyway. Never say "hard", "soft", "avoid rule", "blocked" or "preference" to them: those are planner words.
+- Totals come from FACTS only: the trip total is budget.committed and a day's total is its cost. Never add
+  numbers up yourself.
 - Mention a money_moves entry only when it saves something meaningful, as a friendly tip.
 - The traveler can already see hours and totals in the day panel. Only bring up the budget when it changed a
   lot, is over, or they asked. If budget.baseline (stay + food) alone exceeds the budget, say so kindly and
@@ -343,6 +348,7 @@ def _turn_input(state: dict[str, Any], defer_reply: bool = False) -> dict:
                                          "places_to_visit", "user_name", "recent")}}
 
 
+_ASKS_FOR_CHANGE = re.compile(r"\b(add|swap|move|replace|remove|delete|drop|switch|shift|put)\b", re.I)
 REASON_WORDS = {"hard_avoid": "it clashes with your no-{} rule", "rejected_before": "you turned it down before"}
 
 
@@ -353,7 +359,13 @@ def turn_changes(facts: dict | None) -> list[dict]:
         REASON_WORDS[r["code"]].format(", ".join(r.get("detail") or [])) for r in b["reasons"] if r["code"] in REASON_WORDS),
         "retry": {"op": "add", "name": b["name"], "day": b["day"], "force": True}}  # the "Add anyway" button
         for b in facts.get("blocked") or []]
-    return [{"status": "done", "text": event} for event in facts.get("events") or []] + skipped
+    changes = [{"status": "done", "text": event} for event in facts.get("events") or []] + skipped
+    # A request to change the plan that changed nothing (the interpreter found no operation in it) says so,
+    # rather than leaving the reply's own account as the only record.
+    message = (facts.get("user_message") or "").strip()
+    if not changes and _ASKS_FOR_CHANGE.search(message) and not message.endswith("?"):
+        changes = [{"status": "skipped", "text": "Nothing in the plan changed"}]
+    return changes
 
 
 def _turn_output(result: dict) -> dict:

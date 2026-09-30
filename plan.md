@@ -11,9 +11,9 @@ _Six problems found by using the app end to end. Order agreed: **F4 first** (the
 | F4 | Changing a finished trip ("move X from day 5 to day 3") doesn't update the studio; the agent suggests instead of doing, can't be told to finalize, and makes things up. The budget is vague. | ✅ Done 2026-09-30 (not committed yet) |
 | F6 | The chat is hard to use: the transcript, your message and the suggestions don't fit on screen together; it's unclear how to change, finalize, or get to the studio and budget. | ✅ Done 2026-09-30 (not committed yet) |
 | F3 | Exports: only the JSON export works. | ✅ Done 2026-09-30 (not committed yet) |
-| F5 | The welcome is vague ("where do you want to go?", no name or greeting), and the trip brief arrives as one long form that scares people off. | To do |
-| F2 | The home page still has setup-era placeholder text and screenshots. | To do |
-| F1 | The `/guide` page is broken and out of date. | To do |
+| F5 | The welcome is vague ("where do you want to go?", no name or greeting), and the trip brief arrives as one long form that scares people off. | ✅ Done 2026-09-30 |
+| F2 | The home page still has setup-era placeholder text and screenshots. | ✅ Done 2026-09-30 |
+| F1 | The `/guide` page is broken and out of date. | ✅ Done 2026-09-30 |
 
 ### F4: trip updates that actually happen (the core fix)
 
@@ -103,13 +103,41 @@ Only JSON downloads today. Reproduce each entry of the studio's Export menu in t
 - The first message greets you by name with the time of day ("Good evening, Rohit"), says in one line what TripVerse does, and offers two or three starting points.
 - The brief comes in small steps (where and when → who's going and budget → pace and interests → review) instead of one long form; the agent asks only for what's missing. Keep the existing form component for "edit details".
 
+**Done (2026-09-30).**
+- **The opening screen was never shown.** The planner has a composed welcome (portrait, headline, starter trips), but a new trip always arrives with one server greeting, and "has a message" hid the welcome. It now stays until you send something. It greets by local time and first name ("Good evening, Rohit. *Where are we going?*"; a guest gets the greeting without a name), and its paragraph says what really happens next (the old one promised to "price every segment").
+- **The server's first message** uses your first name when you're signed in, and says up front that a draft needs three quick things and the rest is optional.
+- **The brief is four small steps** instead of one page of 17 fields: where and how long (the only required step) → who and budget → how you travel → your guide. A progress line shows "Step 2 of 4"; each step is a question; **Skip the rest** works from step 1 and sends the brief with sensible defaults. Enter means Next, never Skip. A problem found while skipping takes you back to the step it's on. Same fields and the same submitted data, so nothing changed on the server.
+- **The agent's line above the form** asks only for what it doesn't know yet ("I can start a draft for Japan for 5 days. I just need where you're travelling from.").
+- **"Edit details"** keeps the one-page form, since everything is already filled in.
+- **Checked in the browser:** "I want to go to Japan for 5 days" → the form opens on step 1 with Japan and 5 filled in; Skip with no origin shows the error; typing the origin and pressing Enter moves to step 2 with focus on the new question; Skip the rest saves the brief and shows the planning choice; Edit details shows all four sections. 174 backend and 45 frontend tests pass.
+- **Not done:** the agent sending each step as its own chat message. The steps live in one form; doing it as separate agent turns would add a server round trip (about 5–10 s here) between every step.
+
 ### F2: home page content
 
 Keep the design and layout. Replace placeholder copy and screenshots with what the app really does now (chat planning, build with the agent, the Trip Studio, the sketchbook, map & 3D, weather and holidays, budget, exports). New sections are allowed; nothing existing is removed. Screenshots come from real trips. Load `design-taste-frontend` and `emil-design-eng` for copy and imagery.
 
+**Done (2026-09-30).** Same sections, same layout and components; only the words, numbers and pictures changed (`components/home/v2/content.ts` and the copy in `HeroBento`, `SectionsV2`, `SidebarV2`, `FooterV2`).
+- **Copy says what the app does now:** the hero, the four steps, the capability panels, the "while it plans" agent section and the FAQ describe the chat, the two ways to plan, receipts, the studio, the sketchbook, map & 3D, budget and exports. Claims the app can't back up (pricing every segment, re-checking trains and bookings, handing over booking links) are gone.
+- **Real numbers:** the hero's budget card, the agent transcript and the itinerary table come from the Kyoto trip planned for the guide (₹98,520 suggested against a ₹150,000 budget, 14 places over 3 days).
+- **Real pictures:** the capability panels and the step thumbnails are crops of the guide's screenshots, cut by `frontend/scripts/home_crops.py` into `public/home/`. Re-run it after a re-shoot.
+- **Footer:** dead Privacy and Terms links removed; the columns link to real pages (Explore, My trips, Sign in, the guide, Credits).
+- **Planner labels made consistent with the home page:** "Open studio" (shown only once a plan exists) and "Explore destinations" in the sidebar.
+
 ### F1: the `/guide` page
 
 Rebuild it end to end so a first-time user can learn the whole app from it: every page, how to move between them, every feature, with a fresh screenshot for each (extend `frontend/scripts/capture_guide.py`). Done last so the screenshots show F2–F6.
+
+**Done (2026-09-30).**
+- **Why it was broken:** the page's classes were `tv-guide*`, and the guide character's portrait (`guide-character.css`, added with the PFP guides) also uses `.tv-guide` / `.tv-guide__body` with `border-radius: 50%; overflow: hidden`. The whole page was clipped into an ellipse. The page is now `tv-howto*`.
+- **Rewritten from one tested run:** 18 sections (how it works, finding your way around with a table of every page, starting a trip, the full itinerary, changing the plan with receipts, the studio, sketchbook, map & 3D, exports, budget, building with your guide, the day dock, rules and "Add anyway", how it all connects, phone, phrases, FAQ, what's new) and 38 screenshots, each caption checked against its picture.
+- **The capture script** (`capture_guide.py`) follows the new app: the 4-step brief, receipts, offers and "yes", budget from chat, the day dock, Add anyway, the studio with the chat open, the phone, and a `pages` mode for Home, Explore, Credits and My trips. It waits for real map tiles, waits for the send button before sending (a click while a trip loads was dropped silently), and no longer dies on a websocket keepalive.
+- **Bugs the run found, fixed:**
+  - Building with a guide, the interpreter sometimes dropped a request that broke the traveler's own rule instead of passing it on, so there was no receipt and no Add anyway. It now always emits what was asked; the engine decides. If a change was asked for and nothing happened, the receipt says "Nothing in the plan changed".
+  - Replies said "hard-avoid… blocked" and did their own (wrong) sums; they now say "you said no museums" and take totals from the planner only.
+  - Preference receipts read "Rule saved: no museum" / "Noted: you like …".
+  - Research on the fast model sometimes returned nothing twice, leaving the first build turn with no suggestions; the retry now uses the main model (test added).
+- **Checked:** the page renders at 1440 px and 390 px with no console errors. 177 backend and 45 frontend tests pass.
+- **Still true, and the guide says so:** a reply can occasionally mention a change that didn't happen (shot 17 names a lunch spot that is only a suggestion). The receipt is always right, and the guide teaches reading it.
 
 ## The idea in one paragraph
 

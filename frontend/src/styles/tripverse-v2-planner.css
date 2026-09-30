@@ -519,6 +519,22 @@
 .tv-onboarding__guide-line { margin: .7rem 0 0; color: var(--tv-muted); font-size: .8rem; }
 @media (prefers-reduced-motion: reduce) { .tv-onboarding__guide { transition: none; } .tv-onboarding__guide:hover { transform: none; } }
 @media (max-width: 640px) { .tv-onboarding__grid, .tv-onboarding__grid--3 { grid-template-columns: 1fr; } }
+/* The brief one step at a time: the step's question is the heading, so its legend is for screen readers only. */
+.tv-onboarding__progress { display: flex; align-items: center; gap: .6rem; margin: 0 0 .2rem; color: var(--tv-muted); font: .66rem var(--tv-mono); font-variant-numeric: tabular-nums; }
+.tv-onboarding__progress > span { display: flex; gap: 4px; }
+.tv-onboarding__progress i { width: 28px; height: 3px; background: var(--tv-line-strong); transition: background-color .25s var(--tv-ease); }
+.tv-onboarding__progress i.is-done { background: var(--tv-ink); }
+.tv-onboarding__heading h2:focus { outline: none; }
+.tv-onboarding--steps .tv-onboarding__section { padding-top: 0; border-top: 0; transition: opacity .2s var(--tv-ease), transform .2s var(--tv-ease); }
+@starting-style { .tv-onboarding--steps .tv-onboarding__section { opacity: 0; transform: translateY(6px); } }
+.tv-onboarding--steps .tv-onboarding__section legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.tv-onboarding--steps .tv-onboarding__section .tv-onboarding__grid, .tv-onboarding--steps .tv-onboarding__guides { margin-top: 0; }
+.tv-onboarding__nav { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
+.tv-onboarding__nav > :is(.tv-onboarding__skip, .tv-btn--primary:not(.tv-onboarding__skip + *)) { margin-left: auto; }
+.tv-onboarding__skip { padding: .4rem .2rem; color: var(--tv-ink-soft); font-size: .82rem; text-decoration: underline; text-underline-offset: 3px; }
+.tv-onboarding__skip:hover { color: var(--tv-ink); }
+.tv-onboarding__skip:focus-visible { outline: 2px solid var(--tv-blue-fg); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .tv-onboarding--steps .tv-onboarding__section, .tv-onboarding__progress i { transition: none; } }
 
 .tv-planning-choice { width: min(100%, 720px); padding: clamp(1.25rem, 4vw, 2.5rem); border: 1px solid var(--tv-line-strong); background: var(--tv-surface); }
 .tv-planning-choice__intro h2 { margin: .45rem 0; font-size: clamp(1.5rem, 3vw, 2.25rem); line-height: 1.15; }

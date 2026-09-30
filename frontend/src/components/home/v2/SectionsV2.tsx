@@ -189,10 +189,10 @@ export function Capabilities() {
             <h2 className="tv-display tv-d2 tv-cap__intro-title">
               Most planners write you a list.
               <br />
-              <em>This one holds a model of the trip.</em>
+              <em>This one keeps a plan you can change.</em>
             </h2>
             <p className="tv-lead">
-              Four things follow from that difference. Keep scrolling — this section moves sideways.
+              Four things follow from that difference. Keep scrolling: this section moves sideways.
             </p>
             <span className="tv-cap__hint tv-meta">
               <ArrowUpRightIcon width={14} height={14} />
@@ -305,24 +305,24 @@ export function AgentPreview() {
       <div className="tv-container">
         <div className="tv-agent tv-collapse">
           <div className="tv-agent__copy">
-            <span className="tv-label">Live reasoning</span>
+            <span className="tv-label">While it plans</span>
             <h2 className="tv-display tv-d3 tv-agent__title">
-              You can read every decision <em>before you accept it.</em>
+              You watch the plan arrive, <em>not a spinner.</em>
             </h2>
             <p className="tv-lead tv-agent__lead">
-              The agent streams its working: which constraints it parsed, which cities it scored,
-              which routes it threw away and why. When it hits a conflict it stops and says so,
-              instead of quietly producing a plan that does not hold together.
+              Your guide says what it is doing as it goes: researching stops, reading what travelers
+              recommend, checking the weather and public holidays for your dates, then writing the days.
+              The draft streams in, and the route draws itself alongside.
             </p>
 
             <dl className="tv-agent__stats">
               <div>
-                <dt className="tv-label">Graph size</dt>
-                <dd className="tv-meta">23 nodes · 31 edges</dd>
+                <dt className="tv-label">Weather</dt>
+                <dd className="tv-meta">A forecast near your dates, the month’s typical beyond</dd>
               </div>
               <div>
-                <dt className="tv-label">Replan scope</dt>
-                <dd className="tv-meta">Affected branch only</dd>
+                <dt className="tv-label">Traveler tips</dt>
+                <dd className="tv-meta">Linked to the post they came from</dd>
               </div>
             </dl>
           </div>
@@ -334,7 +334,7 @@ export function AgentPreview() {
                 <span className="tv-window__dot" />
                 <span className="tv-window__dot" />
               </div>
-              <span className="tv-meta tv-window__title">tripverse — japan, 14 nights</span>
+              <span className="tv-meta tv-window__title">tripverse · kyoto, 3 days</span>
             </div>
 
             <div className="tv-window__body">
@@ -358,10 +358,10 @@ export function AgentPreview() {
               <table className="tv-table">
                 <thead>
                   <tr>
-                    <th className="tv-label">Days</th>
-                    <th className="tv-label">Place</th>
-                    <th className="tv-label tv-hide-mobile">Transit</th>
-                    <th className="tv-label tv-table__num">Segment</th>
+                    <th className="tv-label">Day</th>
+                    <th className="tv-label">Planned</th>
+                    <th className="tv-label tv-hide-mobile">Date</th>
+                    <th className="tv-label tv-table__num">Places</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -412,13 +412,13 @@ export function Destinations({ onNavigateExplore }: { onNavigateExplore?: () => 
       <div className="tv-container">
         <header className="tv-sec__head tv-sec__head--row">
           <div>
-            <span className="tv-label">Recently planned</span>
+            <span className="tv-label">Places to start</span>
             <h2 className="tv-display tv-d2 tv-sec__title">
-              Six routes people built <em>this month.</em>
+              Six places worth <em>a first draft.</em>
             </h2>
           </div>
           <button type="button" className="tv-link tv-hide-mobile" onClick={onNavigateExplore}>
-            <span>Explore all trips</span>
+            <span>Explore destinations</span>
             <ArrowUpRightIcon width={15} height={15} />
           </button>
         </header>
@@ -551,15 +551,15 @@ export function CtaBand({ onStartPlanning }: { onStartPlanning?: () => void }) {
           Describe the trip. <em>Watch it get built.</em>
         </h2>
         <p className="tv-lead tv-cta__lead">
-          Start with a short trip brief. Add the places and travel pace that matter to you,
-          then generate a day-by-day first draft you can review.
+          Three quick questions, then a day-by-day first draft: all at once,
+          or one day at a time with your guide.
         </p>
         <button type="button" className="tv-btn tv-btn--primary" onClick={onStartPlanning}>
           <span>Start planning</span>
           <ArrowUpRightIcon width={15} height={15} />
         </button>
         <p className="tv-meta tv-cta__note">
-          <PinIcon width={13} height={13} /> Guest planning available — no account required to try it.
+          <PinIcon width={13} height={13} /> Guest planning available. No account required to try it.
         </p>
       </div>
     </section>
