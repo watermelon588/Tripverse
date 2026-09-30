@@ -29,6 +29,14 @@
 .tv-export__days a:hover { text-decoration-color: currentColor; }
 .tv-export__status { min-height: 1em; margin: 0; padding: .2rem .65rem .35rem; color: var(--tv-ink-soft); font-size: .7rem; line-height: 1.4; }
 .tv-export__status:empty { display: none; }
+.tv-export__status a { margin-left: .35rem; color: var(--tv-ink); text-decoration: underline; text-underline-offset: 2px; }
+/* A file the browser wouldn't save on its own: the link is the action, so it looks like one. */
+.tv-export__status a.is-waiting { display: flex; align-items: center; justify-content: center; min-height: 34px; margin: .4rem 0 0; border-radius: var(--tv-r-sm, 6px);
+  background: var(--tv-ink); color: var(--tv-canvas); font-weight: 600; text-decoration: none; }
+.tv-export__date { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: 0 .65rem .45rem; color: var(--tv-ink-soft); font-size: .72rem; }
+.tv-export__date input { min-height: 30px; padding: 0 .45rem; border: 1px solid var(--tv-line-strong); border-radius: var(--tv-r-sm, 6px); background: var(--tv-surface);
+  color: var(--tv-ink); font: .72rem var(--tv-sans); color-scheme: light dark; }
+.tv-export__date input:focus-visible { outline: 2px solid var(--tv-ink); outline-offset: 2px; }
 
 @keyframes tv-export-in { from { opacity: 0; transform: scale(.97) translateY(-4px); } }
 @media (prefers-reduced-motion: reduce) { .tv-export__panel { animation: none; } .tv-export__trigger { transition: none; } }

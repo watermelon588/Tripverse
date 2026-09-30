@@ -51,6 +51,13 @@ function describe(item: Item, day: TripDocument['days'][number], currency: strin
   ].filter(Boolean).join('\n');
 }
 
+/** The trip with every day dated from `start` (YYYY-MM-DD): a trip planned without dates still gets a calendar. */
+export function datedFrom(doc: TripDocument, start: string): TripDocument {
+  let date = start;
+  const days = doc.days.map((day, index) => ({ ...day, date: index ? (date = nextDay(date)) : date }));
+  return { ...doc, start_date: start, end_date: date, days };
+}
+
 /** The trip as an .ics calendar, or null when it has no start date to anchor the days. */
 export function toIcs(doc: TripDocument, now = new Date()): string | null {
   if (!doc.start_date) return null;

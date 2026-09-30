@@ -10,7 +10,7 @@ _Six problems found by using the app end to end. Order agreed: **F4 first** (the
 |---|---|---|
 | F4 | Changing a finished trip ("move X from day 5 to day 3") doesn't update the studio; the agent suggests instead of doing, can't be told to finalize, and makes things up. The budget is vague. | ✅ Done 2026-09-30 (not committed yet) |
 | F6 | The chat is hard to use: the transcript, your message and the suggestions don't fit on screen together; it's unclear how to change, finalize, or get to the studio and budget. | ✅ Done 2026-09-30 (not committed yet) |
-| F3 | Exports: only the JSON export works. | To do |
+| F3 | Exports: only the JSON export works. | ✅ Done 2026-09-30 (not committed yet) |
 | F5 | The welcome is vague ("where do you want to go?", no name or greeting), and the trip brief arrives as one long form that scares people off. | To do |
 | F2 | The home page still has setup-era placeholder text and screenshots. | To do |
 | F1 | The `/guide` page is broken and out of date. | To do |
@@ -89,6 +89,14 @@ _Six problems found by using the app end to end. Order agreed: **F4 first** (the
 ### F3: exports
 
 Only JSON downloads today. Reproduce each entry of the studio's Export menu in the browser (calendar, Google Maps links, GPX, KML, budget CSV, PDF), read the console and network errors, and fix the root cause (likely shared, e.g. the download helper or the points request). Add a test per format where one is missing.
+
+**Done (2026-09-30).** Every exporter already built a correct file (checked in the browser: CSV, JSON, GPX, KML and a 9-page PDF). The files were being lost on the way out:
+- **Root cause: the download fired too late to count as yours.** JSON is the only export that saves inside the click. The others wait first: a first place lookup took 13 s here (the menu itself says "up to a minute"), a cold budget fetch 5.5 s, and the PDF loads its fonts. A browser only treats a download as the user's for about 5 s after the click (measured: `navigator.userActivation.isActive` was true at 1 s and false at 6 s). After that it is an "automatic download", which Chrome blocks silently once its multiple-downloads prompt has been dismissed, while the menu still said "downloaded". I couldn't see your browser block one, so this is the explanation that fits the evidence rather than something I watched happen.
+- **Fix:** every export goes through one path. The menu holds the finished file; while the click is fresh it saves at once, and otherwise it says "… is ready" and shows a **Save file** button (a fresh click, which always works). A "Save it again" link stays after a normal download. The PDF returns its file to the menu instead of saving itself.
+- **Calendar was a dead end:** it needs a start date, and the brief can't be edited after planning. The menu now has a "Trip starts on" date field for undated trips (`datedFrom`, with a test).
+- **Found on the way: the first request after a pause failed.** The hosted database drops idle connections, and the next request died with "connection is closed" (a 500, shown by the browser as a CORS error). That can break the budget and place lookups behind an export too. The engine now checks a pooled connection before using it (`pool_pre_ping`, about 200 ms per request).
+- **Checked with real clicks:** calendar from a picked date (events start on that day), PDF through the new path, and a budget fetch slowed to 6 s ends in "Budget is ready" with the Save button focused and no blocked download. 45 frontend and 172 backend tests pass.
+- **Not done:** the picked start date is used for the calendar file only; it isn't saved to the trip (so weather and holidays stay undated). Saving it needs a trip-update endpoint.
 
 ### F5: a warmer start and a shorter brief
 
