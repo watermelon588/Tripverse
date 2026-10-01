@@ -1,7 +1,8 @@
 /*
- * Variant A — The index.
+ * Explore — the index.
  *
- * The list is the interface: one line per place, set like a departures board.
+ * Opens on Fuji, then six moods run sideways in a pinned chapter (from the
+ * moodboard design), then the list: one line per place, set like a departures board.
  * Photographs stay out of the way until asked for. On a mouse, the picture for
  * the line you point at follows the cursor; on touch, each line carries a small
  * thumbnail. Then one chapter pins: pick the month first, and the photograph
@@ -18,7 +19,7 @@ import { Flip } from 'gsap/Flip';
 
 import { ArrowUpRightIcon } from '../../components/home/v2/IconsV2';
 import { EASE, prefersReducedMotion, splitLines } from '../../components/home/v2/motion';
-import { KINDS, PLACES, placeById, placeImage, planFrom, type Kind } from './places';
+import { KINDS, MOODS, PLACES, moodImage, placeById, placeImage, planFrom, type Kind } from './places';
 
 gsap.registerPlugin(useGSAP, ScrollTrigger, Flip);
 
@@ -57,6 +58,7 @@ export function ExploreIndex({ onStartPlanning }: { onStartPlanning: () => void 
   const flip = useRef<Flip.FlipState | null>(null);
   const [filter, setFilter] = useState<Filter>('All');
   const [active, setActive] = useState<string | null>(null);
+  const [current, setCurrent] = useState(0);
 
   const visible = useMemo(() => (filter === 'All' ? PLACES : PLACES.filter((p) => p.kind === filter)), [filter]);
   const plan = (id: string) => planFrom(placeById(id), onStartPlanning);
@@ -143,6 +145,43 @@ export function ExploreIndex({ onStartPlanning }: { onStartPlanning: () => void 
       scrollTrigger: { trigger: q('.xi-window')[0], start: 'top bottom', end: 'bottom top', scrub: true },
     });
 
+    const mm = gsap.matchMedia();
+
+    // Moods: pinned, running sideways. The horizontal tween must stay linear; reveals key off it.
+    mm.add('(min-width: 900px)', () => {
+      const track = q('.xm-track')[0] as HTMLElement;
+      const distance = () => track.scrollWidth - window.innerWidth;
+      const run = gsap.to(track, {
+        x: () => -distance(), ease: 'none',
+        scrollTrigger: {
+          trigger: q('.xm-moods__pin')[0], pin: true, start: 'top 60px', end: () => `+=${distance()}`,
+          scrub: 0.6, invalidateOnRefresh: true, anticipatePin: 1,
+          onUpdate: (self) => {
+            const index = Math.min(MOODS.length - 1, Math.round(self.progress * (MOODS.length - 1)));
+            setCurrent((prev) => (prev === index ? prev : index));
+          },
+        },
+      });
+      gsap.to(q('.xm-progress__bar'), {
+        scaleX: 1, ease: 'none',
+        scrollTrigger: { trigger: q('.xm-moods__pin')[0], start: 'top 60px', end: () => `+=${distance()}`, scrub: true },
+      });
+      q('.xm-panel').forEach((panel) => {
+        gsap.fromTo(panel.querySelector('.xm-panel__main img'), { xPercent: -6 }, {
+          xPercent: 6, ease: 'none',
+          scrollTrigger: { trigger: panel, containerAnimation: run, start: 'left right', end: 'right left', scrub: true },
+        });
+        gsap.from(panel.querySelector('.xm-panel__inset'), {
+          yPercent: 30, rotation: 6, opacity: 0, duration: 1.1, ease: EASE,
+          scrollTrigger: { trigger: panel, containerAnimation: run, start: 'left 70%' },
+        });
+        gsap.from(panel.querySelectorAll('.xm-panel__copy > *'), {
+          y: 24, opacity: 0, duration: 1, ease: EASE, stagger: 0.07,
+          scrollTrigger: { trigger: panel, containerAnimation: run, start: 'left 60%' },
+        });
+      });
+    });
+
     // Index lines: the hairline draws, then the line lifts.
     ScrollTrigger.batch(q('.xi-row'), {
       start: 'top 92%', once: true,
@@ -154,7 +193,6 @@ export function ExploreIndex({ onStartPlanning }: { onStartPlanning: () => void 
     });
 
     // Seasons: each photograph wipes up over the last while its copy passes the middle.
-    const mm = gsap.matchMedia();
     mm.add('(min-width: 900px)', () => {
       q('.xi-season').forEach((season, i) => {
         if (i === 0) return;
@@ -213,6 +251,60 @@ export function ExploreIndex({ onStartPlanning }: { onStartPlanning: () => void 
           <figcaption className="tv-meta">Mount Fuji at dusk · 35.36° N 138.73° E</figcaption>
         </figure>
       </div>
+
+      <section className="xm-moods" aria-labelledby="xm-moods-title">
+        <div className="xm-moods__pin">
+          <div className="tv-container xm-moods__head">
+            <h2 className="tv-display xm-h2" id="xm-moods-title">Six moods, <em>one at a time.</em></h2>
+            <div className="xm-progress" aria-hidden="true">
+              <ol>
+                {MOODS.map((m, i) => (
+                  <li key={m.id} className={i === current ? 'is-on' : ''}>{m.name}</li>
+                ))}
+              </ol>
+              <span className="xm-progress__track"><span className="xm-progress__bar" /></span>
+            </div>
+          </div>
+
+          <div className="xm-track">
+            {MOODS.map((m, i) => (
+              <article key={m.id} className="xm-panel" aria-labelledby={`xm-mood-${m.id}`}>
+                <div className="xm-panel__media">
+                  <figure className="xm-panel__main tv-figure">
+                    <img className="tv-img" src={moodImage(m.images[0])} alt={m.alts[0]} loading="lazy" />
+                  </figure>
+                  <figure className="xm-panel__inset">
+                    <img className="tv-img" src={moodImage(m.images[1])} alt={m.alts[1]} loading="lazy" />
+                  </figure>
+                </div>
+                <div className="xm-panel__copy">
+                  <span className="tv-meta">{i + 1} of {MOODS.length}</span>
+                  <h3 className="tv-display xm-panel__name" id={`xm-mood-${m.id}`}>{m.name}, <em>{m.turn}</em></h3>
+                  <p className="tv-body">{m.line}</p>
+                  <ul className="xm-panel__places">
+                    {m.places.map((id) => {
+                      const place = placeById(id);
+                      return (
+                        <li key={id}>
+                          <button type="button" onClick={() => plan(id)} aria-label={`Plan ${place.city}: ${place.title}`}>
+                            <img src={placeImage(id)} alt="" loading="lazy" />
+                            <span className="xm-place__text">
+                              <span className="xm-place__city">{place.city}</span>
+                              <span className="tv-meta">{place.title}</span>
+                            </span>
+                            <span className="tv-meta xm-place__months">{place.months}</span>
+                            <ArrowUpRightIcon width={14} height={14} aria-hidden="true" />
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
 
       <section className="tv-container xi-index" id="xi-index" aria-labelledby="xi-index-title">
         <div className="xi-index__head">

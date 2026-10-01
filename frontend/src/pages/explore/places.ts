@@ -1,5 +1,5 @@
 /*
- * What both Explore variants show. Every description says what its photograph
+ * What the Explore page shows. Every description says what its photograph
  * shows; months are general travel knowledge, labelled as "good months", not
  * a forecast. Images are WebP derivatives made by `scripts/explore_assets.py`.
  */
@@ -33,7 +33,6 @@ export interface Mood {
 
 export const placeImage = (id: string) => `/images/explore/places/${id}.webp`;
 export const moodImage = (name: string) => `/images/explore/moods/${name}.webp`;
-export const cutout = (name: string) => `/images/explore/cutouts/${name}.webp`;
 
 export const PLACES: Place[] = [
   {
