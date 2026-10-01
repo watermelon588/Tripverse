@@ -26,6 +26,7 @@ import {
   Questions,
 } from './SectionsV2';
 import { HeroBento } from './heroes/HeroBento';
+import { TravelJournals } from './journal/TravelJournals';
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -127,6 +128,7 @@ export function HomeV2({
         <Marquee />
         <AgentPreview />
         <Destinations onNavigateExplore={onNavigateExplore} />
+        <TravelJournals />
         <Questions />
         <CtaBand onStartPlanning={onStartPlanning} />
       </main>

@@ -281,6 +281,33 @@ def test_a_change_request_that_changed_nothing_says_so_in_the_receipt():
     assert "even when it breaks a rule in PROFILE" in INTERPRET_INSTRUCTION  # the planner decides, not the interpreter
 
 
+def test_a_reply_never_claims_a_change_the_planner_didnt_make():
+    """Seen live (guide shot 17): Ootoya was added, but the reply also said "I've added Omide Yokocho"."""
+    from app.agents.trip_planner.copilot.graph import ClaimGuard, guard_reply
+
+    facts = {
+        "events": ["Rule saved: no museum", "Added Ootoya to day 2"],
+        "suggestions": [{"name": "Omide Yokocho"}, {"name": "Shiba Park"}],
+        "blocked": [], "current_day": {"items": [{"name": "Mejiro Garden"}, {"name": "Ootoya"}]},
+        "days_overview": [{"items": ["Kyu-Yasuda Garden"]}],
+    }
+    reply = ("Your no-museum rule is saved, and Ootoya is now on day 2. I've added Omide Yokocho for a local lunch "
+             "today (≈¥2,000, 1 hr). With the rain forecast, pack an umbrella. Want me to add Shiba Park too? "
+             "Shiba Park is nearby, and I couldn't add a museum for you.\n- I'll move Kyu-Yasuda Garden to day 3.\n"
+             "Does that work for you?")
+    assert guard_reply(reply, facts) == (
+        "Your no-museum rule is saved, and Ootoya is now on day 2. With the rain forecast, pack an umbrella. "
+        "Want me to add Shiba Park too? Shiba Park is nearby, and I couldn't add a museum for you.\n"
+        "Does that work for you?")
+
+    # Streaming gives the same result whatever the token boundaries are.
+    guard = ClaimGuard(facts)
+    streamed = "".join(guard.feed(reply[i:i + 7]) for i in range(0, len(reply), 7)) + guard.flush()
+    assert streamed.strip() == guard_reply(reply, facts)
+    # On a turn that changed nothing, any "I've moved it" is false even without a name.
+    assert guard_reply("I've moved it to day 3. Anything else?", {"events": []}) == "Anything else?"
+
+
 async def test_research_retries_on_the_main_model_when_the_fast_one_returns_nothing():
     """Seen live: the fast model returned broken JSON twice, and build-with-agent opened with nothing to suggest."""
     from app.agents.trip_planner.copilot.research import research

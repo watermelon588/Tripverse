@@ -2,15 +2,78 @@
 
 _Written 2026-09-28 from the planning discussion. Seven build sessions, each medium to hard and each leaving the app working. The last section lists future work that is deliberately out of scope._
 
-## Fix list: hands-on review (added 2026-09-29) — the next tasks
+## Next up (agreed 2026-09-30): free with a daily cap, more free providers, then deploy
+
+_From the discussion after F1. Dropped for now: **long-term memory** (an LLM-written memory would bring back made-up facts), **bring your own key** (keeping someone else's key safely is security work we don't want yet), and **payments** (no demand signal yet; see "Later" below)._
+
+| # | Task | Status |
+|---|---|---|
+| N1 | Measure tokens per call and per trip | To do (next session) |
+| N2 | Chain free providers: Groq → Cerebras → Gemini → OpenRouter | To do |
+| N3 | Daily allowance per traveler | To do |
+| N4 | "Come back tomorrow" message + "I'd pay for more" interest button | To do |
+| N5 | Short Privacy and Terms pages | To do |
+| D1 | Production config (CORS, API URL, no reload, tracing off) | To do |
+| D2 | Frontend on Cloudflare Pages | To do |
+| D3 | Backend on a host that doesn't sleep | To do |
+| D4 | Domain | To do |
+| D5 | Secrets on the host | To do |
+| D6 | Smoke test on the live URL | To do |
+| Later | Paid credits via Dodo Payments (only if N4 shows demand) | Parked |
+
+### The problem
+
+Every request runs on the owner's free Groq key, with Gemini as the fallback. Groq's limits are per organization, not per key: five keys on one account share one daily cap. Rough estimates from the code, **not measured yet**:
+
+| Flow | Tokens (rough) |
+|---|---|
+| Full itinerary, 10 days (write + extract) | ~30–50K |
+| One revision of a full itinerary | ~20–35K |
+| Build with your guide, per message | ~8–12K |
+| Build with your guide, a whole 10-day trip | ~300–400K |
+
+### Tasks
+
+- **N1. Measure.** Log prompt and completion tokens per LLM call, per node and per trip. Run one real 10-day trip each way and replace the estimates above.
+- **N2. Chain free providers.** Turn the single Groq→Gemini fallback into an ordered chain, each link on its own account and free quota:
+  - Groq → Cerebras (same gpt-oss models) → Gemini → OpenRouter free models.
+  - Each provider maps our "main" and "fast" roles to a model known to handle the JSON steps.
+  - On a rate-limit or quota error, try the next link. Remember an exhausted provider until its reset, so we don't retry it on every call.
+  - Check each provider's current free limits and terms when adding it. Don't use several accounts on one provider.
+- **N3. Daily allowance per traveler.** Count tokens (or turns) per `user_id` (guests: `guest_id`) per day, sized from N1 so one person can finish one trip a day. Past it, the API returns a clear "allowance used up" error instead of calling a model.
+- **N4. The message at the cap:** "You've used today's free planning. Your trip is saved; come back tomorrow to continue." Plus an **"I'd pay for more"** button that only records interest (user or guest, date). That tells us whether payments are worth building.
+- **N5. Short Privacy and Terms pages** (what's stored, that trip text goes to the AI providers, prices are estimates, how to delete your data), linked from the footer.
+
+### Then: deployment
+
+- **D1. Production config:** CORS origins from an environment variable, `VITE_API_URL` for the frontend, uvicorn without `--reload`, LangSmith tracing off.
+- **D2. Frontend on Cloudflare Pages,** with a single-page-app fallback to `index.html` for `/trips/…`, `/guide` and `/explore`.
+- **D3. Backend on a host that doesn't sleep** (not Render/Railway). Options:
+  - Your PC + Cloudflare Tunnel (free, no card).
+  - Oracle Cloud Always Free + tunnel.
+  - Google Cloud Run, if the Google AI plan includes Cloud credits (check its benefits page).
+- **D4. Domain:** a cheap TLD (`.xyz` / `.click`; check the renewal price), with `api.` for the backend.
+- **D5. Secrets** on the host (database, LLM, Supabase, Google Maps restricted to the domain).
+- **D6. Smoke test on the live URL.**
+
+### Later, only if N4 shows demand
+
+- **Paid credits via Dodo Payments** (UPI; verify current India terms and fees):
+  - checkout
+  - a verified webhook that adds credits to a ledger
+  - better paid models for credit holders
+  - refund, Terms and Privacy pages
+- Before building it, find an LLM provider you can prepay without a card (e.g. check whether Google Cloud accepts UPI or prepaid top-ups on your account).
+
+## Fix list: hands-on review (added 2026-09-29) — done
 
 _Six problems found by using the app end to end. Order agreed: **F4 first** (the core agent fix), then F6 (chat layout, which shows F4's results), then F3, F5, F2 and F1 (the guide last, so its screenshots show the fixed app). Each fix ends with a real-browser check against the running app._
 
 | # | Problem | Status |
 |---|---|---|
-| F4 | Changing a finished trip ("move X from day 5 to day 3") doesn't update the studio; the agent suggests instead of doing, can't be told to finalize, and makes things up. The budget is vague. | ✅ Done 2026-09-30 (not committed yet) |
-| F6 | The chat is hard to use: the transcript, your message and the suggestions don't fit on screen together; it's unclear how to change, finalize, or get to the studio and budget. | ✅ Done 2026-09-30 (not committed yet) |
-| F3 | Exports: only the JSON export works. | ✅ Done 2026-09-30 (not committed yet) |
+| F4 | Changing a finished trip ("move X from day 5 to day 3") doesn't update the studio; the agent suggests instead of doing, can't be told to finalize, and makes things up. The budget is vague. | ✅ Done 2026-09-30 |
+| F6 | The chat is hard to use: the transcript, your message and the suggestions don't fit on screen together; it's unclear how to change, finalize, or get to the studio and budget. | ✅ Done 2026-09-30 |
+| F3 | Exports: only the JSON export works. | ✅ Done 2026-09-30 |
 | F5 | The welcome is vague ("where do you want to go?", no name or greeting), and the trip brief arrives as one long form that scares people off. | ✅ Done 2026-09-30 |
 | F2 | The home page still has setup-era placeholder text and screenshots. | ✅ Done 2026-09-30 |
 | F1 | The `/guide` page is broken and out of date. | ✅ Done 2026-09-30 |
@@ -137,7 +200,12 @@ Rebuild it end to end so a first-time user can learn the whole app from it: ever
   - Preference receipts read "Rule saved: no museum" / "Noted: you like …".
   - Research on the fast model sometimes returned nothing twice, leaving the first build turn with no suggestions; the retry now uses the main model (test added).
 - **Checked:** the page renders at 1440 px and 390 px with no console errors. 177 backend and 45 frontend tests pass.
-- **Still true, and the guide says so:** a reply can occasionally mention a change that didn't happen (shot 17 names a lunch spot that is only a suggestion). The receipt is always right, and the guide teaches reading it.
+- **Found by the run, fixed after:** a build-with-your-guide reply could claim a change that didn't happen (shot 17: Ootoya was added, the reply also said "I've added Omide Yokocho"). The reply now streams through `ClaimGuard` (`copilot/graph.py`): a sentence that says a place was added, moved or removed when the turn's events don't show it is dropped before it's sent; offers, questions and "I couldn't add…" are kept. The instruction also says a place you mention but didn't add is an option, never something you did. Test added. Shot 17 still shows the old reply, and its caption says so; the next re-shoot replaces it.
+
+### After F1: the home menu and Explore (2026-09-30)
+
+- **The home page's menu** listed the page's own sections (How it works, Destinations, Questions), which the top bar already has, plus Plan a trip, which is the button under it. It now lists pages: My trips, Explore destinations, and How to use TripVerse (the guide was unreachable from the home page except the footer).
+- **Explore** said its places were "routes people have built in TripVerse" that the agent would "rebuild around your dates". The list is curated and a card only opens the planner; the copy now says that, and the hotel card no longer says the agent "puts you" in a room.
 
 ## The idea in one paragraph
 

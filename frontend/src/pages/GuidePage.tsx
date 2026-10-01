@@ -167,14 +167,14 @@ export function GuidePage(props: GuidePageProps) {
                     <tr><th scope="row">My trips</th><td>Every trip you've started, to reopen or continue</td><td><strong>My trips</strong> in the top bar</td></tr>
                     <tr><th scope="row">Explore</th><td>Destinations to browse when you don't know where to go yet</td><td><strong>Explore</strong> in the top bar, or <strong>Explore destinations</strong> in the planner</td></tr>
                     <tr><th scope="row">Account</th><td>Your name and photo; signing in keeps your trips across devices</td><td><strong>Account</strong> in the top bar, or <strong>Sign in</strong></td></tr>
-                    <tr><th scope="row">Guide</th><td>This page</td><td><strong>Guide</strong> in the top bar, or <strong>How to use TripVerse</strong> in the planner</td></tr>
+                    <tr><th scope="row">Guide</th><td>This page</td><td><strong>Guide</strong> in the top bar, or <strong>How to use TripVerse</strong> in the planner and in the home page's menu</td></tr>
                     <tr><th scope="row">Credits</th><td>The data, photos, fonts and code TripVerse is built on</td><td>The footer of the home page</td></tr>
                   </tbody>
                 </table>
               </div>
               <Shot src="00-home" alt="The TripVerse home page">
-                <strong>Home.</strong> <strong>Start planning</strong> opens the planner; the menu on the left and the
-                links in the middle jump to the sections of the page.
+                <strong>Home.</strong> <strong>Start planning</strong> opens the planner, and the links in the middle
+                jump to the sections of the page. The menu on the left opens My trips, Explore and this guide.
               </Shot>
               <Shot src="25-trips" alt="The My trips page listing two journeys">
                 <strong>My trips.</strong> Every trip with where it stands. Pick one to see its summary on the right and
@@ -476,8 +476,9 @@ export function GuidePage(props: GuidePageProps) {
               <Shot src="17-build-preferences" alt="A typed request that sets a rule and asks for a lunch spot">
                 Typing works too, and it applies to the day on screen. We typed <q>I never want museums on this trip.
                 Also add a great local lunch spot today.</q> The receipt shows both halves: the rule was saved, and
-                a lunch spot (Ootoya) was added to day 2. The reply also talks up Omide Yokocho, but that one is
-                still only a suggestion in the dock. When a reply and its receipt differ, go by the receipt.
+                a lunch spot (Ootoya) was added to day 2. This shot predates a fix: the reply also claims Omide
+                Yokocho was added, though it is still only a suggestion in the dock. Replies are now checked against
+                the receipt before you see them, and a sentence claiming a change that didn't happen is left out.
               </Shot>
               <Shot src="17b-build-move" alt="A place moved to another day, with a receipt">
                 <q>Move Kyu-Yasuda Garden to day 3</q> moves it, even though the dock is on day 2. You can see your

@@ -180,8 +180,13 @@ export const MARQUEE = [
   { src: blossomFuji, label: 'Fujiyoshida' },
 ];
 
-/** Thumbnails for the How-it-works index: the app at each step (crops made by scripts/home_crops.py). */
-export const STEP_IMAGES = ['/home/step-1.png', '/home/step-2.png', '/home/step-3.png', '/home/step-4.png'];
+/** Generated TripVerse artwork and app mockups, matched to the four planning steps. */
+export const STEP_IMAGES = [
+  '/home/how-it-works/destination.webp',
+  '/home/how-it-works/build-together.webp',
+  '/home/how-it-works/trip-studio.webp',
+  '/home/how-it-works/take-with-you.webp',
+];
 
 export const STEPS = [
   {
