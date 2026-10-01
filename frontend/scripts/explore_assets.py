@@ -3,7 +3,7 @@
     python frontend/scripts/explore_assets.py
 
 Writes WebP derivatives to public/images/explore/ (committed), so the page doesn't depend on media/,
-which Git ignores. Long edges are capped and orientation is corrected; cut-outs keep their alpha.
+which Git ignores. Long edges are capped and orientation is corrected.
 """
 from pathlib import Path
 
@@ -52,13 +52,10 @@ MOODS = {
     'crosswalk-shadows': '7c19ca78',
 }
 
-# Poster cut-outs from the TripVerse design pack (transparent PNG).
-CUTOUTS = ['alpine-world', 'floral-world', 'ocean-perspective', 'traveler-faces']
 
-
-def save(image: Image.Image, target: Path, edge: int, alpha: bool = False) -> None:
+def save(image: Image.Image, target: Path, edge: int) -> None:
     image = ImageOps.exif_transpose(image)
-    image = image.convert('RGBA' if alpha else 'RGB')
+    image = image.convert('RGB')
     image.thumbnail((edge, edge), Image.Resampling.LANCZOS)
     target.parent.mkdir(parents=True, exist_ok=True)
     image.save(target, quality=82, method=6)
@@ -67,15 +64,10 @@ def save(image: Image.Image, target: Path, edge: int, alpha: bool = False) -> No
 if __name__ == '__main__':
     for name, file in PLACES.items():
         with Image.open(MEDIA / 'web' / file) as source:
-            # The contrail opens to the full window in variant B, so it keeps its full width.
-            save(source, OUT / 'places' / f'{name}.webp', 2700 if name == 'contrail' else 1600)
+            save(source, OUT / 'places' / f'{name}.webp', 1600)
     for name, prefix in MOODS.items():
         source_path = next((MEDIA / 'mmm' / 'photography').glob(prefix + '*'))
         with Image.open(source_path) as source:
             save(source, OUT / 'moods' / f'{name}.webp', 1400)
-    for name in CUTOUTS:
-        source_path = MEDIA / 'mmm' / 'tripverse-design-pack' / 'posters' / 'cutouts' / f'{name}-trimmed.png'
-        with Image.open(source_path) as source:
-            save(source, OUT / 'cutouts' / f'{name}.webp', 1100, alpha=True)
     total = sum(f.stat().st_size for f in OUT.rglob('*.webp'))
-    print(f'Prepared {len(PLACES) + len(MOODS) + len(CUTOUTS)} images, {total // 1024} kB, in {OUT}')
+    print(f'Prepared {len(PLACES) + len(MOODS)} images, {total // 1024} kB, in {OUT}')

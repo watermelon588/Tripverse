@@ -1,70 +1,17 @@
 /*
- * Explore — the two candidate designs (xi- = A, the index; xm- = B, the moodboard).
- * Built only from the house tokens in tripverse-v2.css: same type, palette, radii,
- * gutter and section rhythm as the rest of the app.
+ * Explore — the index (xi-), plus the six-moods chapter carried over from the
+ * moodboard design (xm-). Built only from the house tokens in tripverse-v2.css:
+ * same type, palette, radii, gutter and section rhythm as the rest of the app.
  */
 
-/* --------------------------------------------------------------------------
- * The variant switch (temporary, until one is picked)
- * -------------------------------------------------------------------------- */
-
-.xp-switch {
-  position: fixed;
-  left: 50%;
-  bottom: 1.1rem;
-  z-index: 60;
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.3rem 0.3rem 0.3rem 0.9rem;
-  transform: translateX(-50%);
-  border: 1px solid var(--tv-line);
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--tv-canvas) 90%, transparent);
-  backdrop-filter: blur(14px) saturate(1.4);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
-  box-shadow: 0 6px 20px -8px rgba(17, 17, 17, 0.18);
-}
-
-.xp-switch__label { margin-right: 0.35rem; }
-
-.xp-switch__btn {
-  min-height: 34px;
-  padding: 0 0.9rem;
-  border: 1px solid transparent;
-  border-radius: 9999px;
-  background: transparent;
-  color: var(--tv-muted);
-  font-family: var(--tv-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: color 0.2s var(--tv-ease), background 0.2s var(--tv-ease);
-}
-
-.xp-switch__btn:hover { color: var(--tv-ink); }
-.xp-switch__btn.is-on { background: var(--tv-ink); color: var(--tv-canvas); }
-.xp-switch__btn:focus-visible { outline: 2px solid var(--tv-ink); outline-offset: 2px; }
-
-@media (max-width: 520px) {
-  .xp-switch__label { display: none; }
-  /* Off to the right, clear of the guide's bubble in the bottom-left corner. */
-  .xp-switch { left: auto; right: 0.75rem; padding-left: 0.3rem; transform: none; }
-}
-
 /* Shared: headline second clauses are muted, as everywhere in the system. */
-.xi em,
-.xm em { color: var(--tv-muted); }
+.xi em { color: var(--tv-muted); }
 
 .xi-row__btn,
 .xi-season__places button,
-.xm-panel__places button,
-.xm-shot button { font: inherit; color: inherit; }
+.xm-panel__places button { font: inherit; color: inherit; }
 
-.xi button:focus-visible,
-.xm button:focus-visible { outline: 2px solid var(--tv-ink); outline-offset: 4px; border-radius: var(--tv-r-sm); }
+.xi button:focus-visible { outline: 2px solid var(--tv-ink); outline-offset: 4px; border-radius: var(--tv-r-sm); }
 
 /* ==========================================================================
  * A — The index
@@ -379,52 +326,8 @@
 }
 
 /* ==========================================================================
- * B — The moodboard
+ * Six moods (carried over from the moodboard design)
  * ========================================================================== */
-
-.xm-hero {
-  position: relative;
-  display: grid;
-  place-items: center;
-  min-height: calc(100dvh - 60px);
-  padding: clamp(4rem, 8vw, 6rem) var(--tv-gutter);
-  overflow: hidden;
-  background: var(--tv-canvas-warm);
-}
-
-.xm-collage { position: absolute; inset: 0; pointer-events: none; }
-
-.xm-cut { position: absolute; will-change: transform; }
-
-.xm-cut img {
-  display: block;
-  width: 100%;
-  height: auto;
-  filter: drop-shadow(0 18px 22px rgba(17, 17, 17, 0.12));
-  will-change: transform;
-}
-
-.xm-cut--alpine { left: -1.5%; top: 3%; width: clamp(15rem, 25vw, 25rem); }
-.xm-cut--floral { right: -0.5%; top: 9%; width: clamp(11rem, 17vw, 17rem); }
-.xm-cut--ocean { left: 5%; bottom: -3%; width: clamp(14rem, 22vw, 22rem); }
-.xm-cut--faces { right: 7%; bottom: 4%; width: clamp(12rem, 19vw, 19rem); }
-
-.xm-hero__copy {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.3rem;
-  max-width: 34rem;
-  text-align: center;
-}
-
-.xm-hero__title { font-size: clamp(3.2rem, 8.6vw, 6rem); line-height: 0.96; }
-
-.xm-hero__copy .tv-lead { margin-inline: auto; }
-
-.xm-hero__hint { margin-top: 0.6rem; }
 
 /* Moods: pinned and sideways on wide screens */
 
@@ -569,104 +472,7 @@
 .xm-panel__places button:hover img { transform: scale(1.06); filter: saturate(1) contrast(1.02); }
 .xm-panel__places button:hover svg { color: var(--tv-ink); transform: translate(2px, -2px); }
 
-/* Contact sheet */
-
-.xm-sheet { padding-top: var(--tv-section); padding-bottom: clamp(3rem, 6vw, 5rem); }
-
-.xm-sheet__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1.5rem 2rem;
-  margin-bottom: clamp(2rem, 4vw, 3rem);
-}
-
-.xm-sheet__head .tv-seg { max-width: 100%; }
-
-.xm-grid { margin: 0; padding: 0; list-style: none; columns: 3 17rem; column-gap: 1.25rem; }
-
-.xm-shot { margin-bottom: 1.75rem; break-inside: avoid; }
-
-.xm-shot button {
-  position: relative;
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  text-align: left;
-  cursor: pointer;
-}
-
-.xm-shot__fig { margin: 0; }
-
-.xm-shot__fig .tv-img {
-  height: auto;
-  transition: transform 1s var(--tv-ease), filter 0.8s var(--tv-ease);
-}
-
-.xm-shot button:hover .tv-img { transform: scale(1.04); filter: saturate(1) contrast(1.02); }
-
-.xm-shot__meta { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.8rem 2rem 0 0; }
-
-.xm-shot__title { font-weight: 500; letter-spacing: -0.015em; line-height: 1.35; }
-
-.xm-shot__meta .tv-meta { font-size: 0.72rem; }
-
-.xm-shot__go {
-  position: absolute;
-  right: 0;
-  bottom: 0.25rem;
-  color: var(--tv-faint);
-  transition: color 0.25s var(--tv-ease), transform 0.35s var(--tv-ease);
-}
-
-.xm-shot button:hover .xm-shot__go { color: var(--tv-ink); transform: translate(2px, -2px); }
-
-/* The close: a frame that opens to the whole window */
-
-.xm-close { position: relative; height: 230vh; background: #111111; }
-
-.xm-close__sticky {
-  position: sticky;
-  top: 60px;
-  display: flex;
-  align-items: flex-end;
-  height: calc(100dvh - 60px);
-  overflow: hidden;
-}
-
-.xm-close__fig { position: absolute; inset: 0; margin: 0; overflow: hidden; }
-
-.xm-close__fig img { position: absolute; inset: 0; transform-origin: 50% 40%; }
-
-/* A scrim from the lower left, where the words sit, so they read over the sky. */
-.xm-close__fig::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(28deg, rgba(10, 14, 24, 0.72) 0%, rgba(10, 14, 24, 0.3) 45%, rgba(10, 14, 24, 0) 70%);
-}
-
-.xm-close__copy {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1.4rem;
-  width: 100%;
-  max-width: calc(var(--tv-max));
-  margin-inline: auto;
-  padding: 0 var(--tv-gutter) clamp(3rem, 8vh, 5rem);
-}
-
-.xm-close__title { max-width: 15ch; font-size: clamp(2.3rem, 5vw, 4.2rem); line-height: 1; }
-
-.xm-close__copy .tv-lead { max-width: 34ch; }
-
-/* B — phones, tablets and reduced motion: nothing pins, everything stacks */
+/* Moods — phones, tablets and reduced motion: nothing pins, the moods stack */
 
 @media (max-width: 899px), (prefers-reduced-motion: reduce) {
   .xm-moods__pin { height: auto; overflow: visible; padding-top: var(--tv-section); }
@@ -682,18 +488,9 @@
   .xm-panel__media { aspect-ratio: 4 / 5; height: auto; }
   .xm-panel__main { position: absolute; inset: 0; height: auto; }
 
-  .xm-close { height: auto; }
-  .xm-close__sticky { position: relative; top: auto; height: auto; min-height: 85vh; }
 }
 
 @media (max-width: 899px) {
-  .xm-hero { display: flex; flex-direction: column; min-height: 0; padding: 1.5rem var(--tv-gutter) clamp(3rem, 12vw, 4.5rem); }
-  .xm-collage { position: relative; inset: auto; width: 100%; height: min(72vw, 24rem); }
-  .xm-cut--alpine { left: 50%; top: 0; width: min(78vw, 22rem); margin-left: max(-39vw, -11rem); }
-  .xm-cut--floral { right: -6%; top: 6%; width: 30vw; }
-  .xm-cut--ocean,
-  .xm-cut--faces { display: none; }
-  .xm-hero__copy { padding-bottom: 1rem; }
   .xm-panel__copy { gap: 0.85rem; }
 }
 

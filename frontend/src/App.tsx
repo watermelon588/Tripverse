@@ -3,6 +3,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { Companion } from './components/guide/Companion';
 import { RouteCurtain, type RouteCurtainHandle } from './components/common/RouteCurtain';
 import { HomeV2 } from './components/home/v2/HomeV2';
+import { FooterV2 } from './components/home/v2/FooterV2';
 import { useAuth } from './context/AuthContext';
 
 // Home is the landing page and ships in the main bundle. Every other page loads on demand,
@@ -195,6 +196,13 @@ export const App: React.FC = () => {
           />
         )}
       </React.Suspense>
+      {/* One footer for every page. Home renders its own (it scrolls to its sections); the planner
+          is a full-height workspace with nowhere for a footer to go. */}
+      {view !== 'home' && view !== 'create' && (
+        <div className="tv2 tv-footer-shell">
+          <FooterV2 onStartPlanning={() => navigateTo('create')} onNavigateExplore={() => navigateTo('explore')} />
+        </div>
+      )}
       <Companion view={view} />
     </div>
   );

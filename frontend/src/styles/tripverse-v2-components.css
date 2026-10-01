@@ -764,6 +764,9 @@
  * Footer
  * ========================================================================== */
 
+/* The shared footer under every page sits in its own .tv2 scope; it must not take a screen's height. */
+.tv2.tv-footer-shell { min-height: 0; }
+
 .tv2 .tv-footer {
   border-top: 1px solid var(--tv-line);
   padding-top: clamp(3.5rem, 7vw, 6rem);

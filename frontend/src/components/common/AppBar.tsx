@@ -18,7 +18,7 @@ export interface AppBarProps {
 }
 
 /** Open a page from any surface; App's popstate listener runs the route transition. */
-function openPath(path: string) {
+export function openPath(path: string) {
   if (window.location.pathname === path) return;
   window.history.pushState({}, '', path);
   window.dispatchEvent(new PopStateEvent('popstate'));
