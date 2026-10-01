@@ -102,7 +102,10 @@ FACTS come from the planner and are your only source of truth:
   those changes in plain words ("Kagurazaka is on day 1 now."). Never say something was done, added, moved or
   removed unless events says so. If they asked for a change and events has nothing for it, say plainly that
   nothing changed and why (see blocked), or ask what they meant. Don't ask them to confirm or finalize a change
-  that is in events. If they asked a question, answer it before anything else.
+  that is in events. If they asked a question, answer it before anything else. When they asked for a kind of
+  place ("a lunch spot") and events added one, name that one: every other place you mention is an option they
+  can pick, never something you did ("Omide Yokocho is another good lunch option", not "I've added Omide
+  Yokocho").
 - An event with a "heads-up" went through but strains the day or the budget: mention it in a few words and offer
   one fix (move something to a lighter day, drop something).
 - If something was blocked, it clashes with their own rule (a no-X preference) or a place they turned down: say
@@ -279,6 +282,71 @@ def reply_prompt(facts: dict) -> str:
     return "FACTS:\n" + json.dumps(facts, ensure_ascii=False, default=str)
 
 
+# A clause that says the plan changed ("I've added X", "X is now on day 2", "I'll move X")...
+_CLAIM = re.compile(r"\b(added|moved|removed|swapped|dropped|replaced|scheduled|booked|slotted|penciled|pencilled|"
+                    r"put|(is|are) now (on|in|part of)|now (sits|lives)|I'?ll (add|move|remove|put|swap|drop)|"
+                    r"I will (add|move|remove|put|swap|drop))\b", re.I)
+# ...unless it's an offer, a question or a denial ("want me to add X?", "I couldn't add X").
+_NOT_A_CLAIM = re.compile(r"\?\s*$|\b(could|can|would|might|may|should|shall|want|how about|if you|not|never|"
+                          r"cannot)\b|n't\b", re.I)
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+|\n+")
+
+
+def _false_claim(sentence: str, facts: dict) -> bool:
+    """True when a sentence says a place changed that the planner didn't change (events is the only record)."""
+    changed = " ".join(map(str, facts.get("events") or [])).lower()
+    names = {i["name"] for i in facts.get("suggestions") or []}
+    for b in facts.get("blocked") or []:
+        names |= {b["name"], *(a["name"] for a in b.get("alternatives") or [])}
+    names |= {i["name"] for i in (facts.get("current_day") or {}).get("items") or []}
+    for day in facts.get("days_overview") or []:
+        names |= set(day.get("items") or [])
+    for clause in re.split(r"[,;:()—–]| and | but ", sentence):
+        if not _CLAIM.search(clause) or _NOT_A_CLAIM.search(clause):
+            continue
+        mentioned = [n for n in names if n and n.lower() in clause.lower()]
+        # A named place that isn't in events, or any change claimed on a turn that changed nothing.
+        if any(n.lower() not in changed for n in mentioned) or not changed:
+            return True
+    return False
+
+
+class ClaimGuard:
+    """Streams the reply a sentence at a time and drops sentences that claim a change that didn't happen.
+
+    ponytail: pattern-based, so an oddly worded false claim can still slip through; the receipt stays the record.
+    """
+
+    def __init__(self, facts: dict):
+        self.facts, self.buffer, self.dropped = facts, "", 0
+
+    def _keep(self, sentence: str) -> bool:
+        if sentence.strip() and _false_claim(sentence, self.facts):
+            self.dropped += 1
+            logger.info("Dropped a reply sentence claiming a change that didn't happen: %r", sentence.strip())
+            return False
+        return True
+
+    def feed(self, token: str) -> str:
+        self.buffer += token
+        out, start = "", 0
+        for match in _SENTENCE_END.finditer(self.buffer):
+            piece = self.buffer[start:match.end()]
+            out += piece if self._keep(piece[:match.start() - start]) else ""
+            start = match.end()
+        self.buffer = self.buffer[start:]
+        return out
+
+    def flush(self) -> str:
+        rest, self.buffer = self.buffer, ""
+        return rest if self._keep(rest) else ""
+
+
+def guard_reply(text: str, facts: dict) -> str:
+    guard = ClaimGuard(facts)
+    return (guard.feed(text) + guard.flush()).strip()
+
+
 def hold_reply(copilot: dict, text: str) -> str:
     """Keep the reply on its day so switching back replays it without a model call."""
     engine.day_of(copilot, copilot["current_day"])["reply"] = text
@@ -299,7 +367,7 @@ async def respond(state: CopilotState) -> dict:
     except Exception as exc:
         logger.warning("Copilot respond failed: %s", exc)
         text = ""
-    text = hold_reply(copilot, str(text or "").strip() or _fallback_reply(facts))
+    text = hold_reply(copilot, guard_reply(str(text or ""), facts) or _fallback_reply(facts))
     return {"copilot": copilot, "assistant_response": text}
 
 

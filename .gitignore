@@ -70,3 +70,11 @@ vite.config.js.timestamp*
 # Project documentation / AI agent memory
 docs/
 local/
+# Local working material, not part of the app
+output/
+skills/
+founder/
+.claude/
+PROJECT_ANALYSIS.md
+SKILL.md
+backend/scripts/delete_user_trips.py

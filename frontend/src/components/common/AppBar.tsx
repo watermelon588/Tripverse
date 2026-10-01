@@ -25,6 +25,7 @@ function openPath(path: string) {
 }
 
 export const openGuide = () => openPath('/guide');
+export const openTrips = () => openPath('/trips');
 export const openCredits = () => openPath('/credits');
 
 export function AppBar({

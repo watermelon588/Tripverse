@@ -73,8 +73,6 @@ export function HowItWorks() {
           ease: EASE,
           scrollTrigger: { trigger: row, start: 'top 88%' },
         });
-        const thumb = row.querySelector<HTMLElement>('.tv-steps__thumb img');
-        if (thumb) parallaxImage(thumb, { trigger: row, amount: 10 });
       });
 
       return () => split?.revert();
@@ -98,7 +96,7 @@ export function HowItWorks() {
               <span className="tv-steps__n tv-meta">{s.n}</span>
 
               <figure className="tv-steps__thumb">
-                <img src={STEP_IMAGES[i]} alt="" aria-hidden="true" className="tv-img tv-img--drift" loading="lazy" />
+                <img src={STEP_IMAGES[i]} alt="" aria-hidden="true" className="tv-img" loading="lazy" decoding="async" />
               </figure>
 
               <div className="tv-steps__body">

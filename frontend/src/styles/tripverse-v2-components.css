@@ -426,6 +426,11 @@
   align-items: start;
 }
 
+.tv2 .tv-steps__thumb .tv-img {
+  object-fit: contain;
+  filter: none;
+}
+
 .tv2 .tv-steps__title {
   font-size: clamp(1.15rem, 1.9vw, 1.5rem);
   font-weight: 500;

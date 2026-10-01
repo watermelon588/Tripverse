@@ -4,6 +4,8 @@
  * Rebuilt from the first pass, which left a large dead zone between the five
  * links and the footer buttons and repeated a chevron on every row. Now:
  *
+ *   - the index lists pages only (My trips, Explore, the guide); the page's own
+ *     sections live in the top bar, so repeating them here was noise
  *   - the index is numbered and set in the display serif, so the drawer reads
  *     as part of the editorial system rather than as a generic app menu
  *   - the dead space carries a featured trip with real imagery
@@ -15,16 +17,16 @@ import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 
 import { useAuth } from '../../../context/AuthContext';
+import { openGuide, openTrips } from '../../common/AppBar';
 import { img } from './content';
 import { ArrowUpRightIcon, CloseIcon, LogoMark, ClockIcon } from './IconsV2';
 import { EASE, prefersReducedMotion } from './motion';
 
+// Pages only: the sections of this page are already in the top bar, and planning is the button below.
 const LINKS = [
-  { n: '01', label: 'Plan a trip', hint: 'Open the agent', key: 'plan' },
+  { n: '01', label: 'My trips', hint: 'Every trip you started', key: 'trips' },
   { n: '02', label: 'Explore destinations', hint: 'Places to start', key: 'explore' },
-  { n: '03', label: 'How it works', hint: 'Four steps', key: 'how' },
-  { n: '04', label: 'Destinations', hint: 'Six cities', key: 'destinations' },
-  { n: '05', label: 'Questions', hint: 'Common answers', key: 'questions' },
+  { n: '03', label: 'How to use TripVerse', hint: 'The full guide', key: 'guide' },
 ] as const;
 
 export interface SidebarV2Props {
@@ -79,15 +81,11 @@ export function SidebarV2({
     { scope: panelRef, dependencies: [open] },
   );
 
-  const go = (key: string) => {
+  const go = (key: (typeof LINKS)[number]['key']) => {
     onClose();
-    if (key === 'plan') return onStartPlanning?.();
-    if (key === 'explore') return onNavigateExplore?.();
-
-    const id = key === 'how' ? 'how-it-works' : key;
-    window.setTimeout(() => {
-      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 220);
+    if (key === 'trips') openTrips();
+    else if (key === 'explore') onNavigateExplore?.();
+    else openGuide();
   };
 
   return (
