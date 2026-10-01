@@ -95,6 +95,22 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [editingBrief, setEditingBrief] = useState(false);
+  // A place picked on Explore arrives typed into the box, ready to send (read once).
+  const [draft] = useState(() => {
+    try {
+      return sessionStorage.getItem('tripverse-draft') || '';
+    } catch {
+      return '';
+    }
+  });
+  // Cleared after mount, not in the initializer: StrictMode runs initializers twice.
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem('tripverse-draft');
+    } catch {
+      // nothing to clear
+    }
+  }, []);
   const hasMessages = messages.length > 0;
   // Until the traveler says something, the opening screen stands in for the lone server greeting.
   const fresh = !isLoading && messages.length <= 1 && !messages.some((msg) => msg.sender !== 'assistant');
@@ -217,6 +233,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
       {showComposer && <div className="tv-chat__composer">
         <ChatComposer
           onSendMessage={onSendMessage}
+          initialValue={draft}
           isLoading={isLoading}
           placeholder={
             planned ? 'Change the plan, or ask a question…'

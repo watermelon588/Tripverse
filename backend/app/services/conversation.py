@@ -164,7 +164,7 @@ class ConversationService:
         """One build-with-agent turn: live stages, then the map and day panel, then the reply as it's written."""
         import json
         from app.agents.trip_planner.copilot.graph import (
-            RESPOND_INSTRUCTION, _fallback_reply, hold_reply, reply_prompt, stream_build_with_agent,
+            RESPOND_INSTRUCTION, ClaimGuard, _fallback_reply, hold_reply, reply_prompt, stream_build_with_agent,
         )
         from app.services.llm.service import llm_service
 
@@ -195,14 +195,20 @@ class ConversationService:
         if text:
             yield sse({"type": "token", "delta": text})
         else:
+            # Sentences that claim a change the planner didn't make never reach the traveler.
+            guard = ClaimGuard(result["facts"])
             try:
                 async for token in llm_service.generate_stream(
                     prompt=reply_prompt(result["facts"]), system_instruction=RESPOND_INSTRUCTION, temperature=0.6,
                 ):
-                    text += token
-                    yield sse({"type": "token", "delta": token})
+                    if safe := guard.feed(token):
+                        text += safe
+                        yield sse({"type": "token", "delta": safe})
             except Exception as exc:
                 logger.warning("Copilot reply stream failed: %s", exc)
+            if tail := guard.flush():
+                text += tail
+                yield sse({"type": "token", "delta": tail})
             if not text.strip():
                 text = _fallback_reply(result["facts"])
                 yield sse({"type": "token", "delta": text})
