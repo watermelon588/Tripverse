@@ -77,11 +77,14 @@ class Settings(BaseSettings):
             v_trimmed = v.strip()
             if v_trimmed.startswith("[") and v_trimmed.endswith("]"):
                 try:
-                    return json.loads(v_trimmed)
+                    v = json.loads(v_trimmed)
                 except Exception:
-                    pass
-            return [origin.strip() for origin in v_trimmed.split(",") if origin.strip()]
-        return v
+                    v = v_trimmed.strip("[]").split(",")
+            else:
+                v = v_trimmed.split(",")
+        # A browser's Origin header never has a trailing slash or quotes, and CORS needs an exact match:
+        # "https://tripverse-0.vercel.app/" pasted into Render blocked every request from the site.
+        return [o for o in (str(origin).strip().strip("'\"").strip().rstrip("/") for origin in v) if o]
 
 
 settings = Settings()

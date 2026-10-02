@@ -324,3 +324,4 @@ async def test_second_groq_key_is_used_before_gemini():
         assert isinstance(fallback._fallback_provider, GeminiProvider)
     with patch.object(svc.settings, "GROQ_API_KEY2", ""):
         assert isinstance(svc.default_fallback(), GeminiProvider)
+
