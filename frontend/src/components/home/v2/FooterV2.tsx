@@ -7,6 +7,7 @@
 import { openCredits, openPath } from '../../common/AppBar';
 import { FOOTER_NAV } from './content';
 import { LogoMark, ArrowUpRightIcon } from './IconsV2';
+import { FeedbackForm } from './FeedbackForm';
 
 export interface FooterV2Props {
   onStartPlanning?: () => void;
@@ -77,6 +78,7 @@ export function FooterV2({ onStartPlanning, onNavigateExplore }: FooterV2Props) 
           </div>
         </div>
 
+        <FeedbackForm />
         <hr className="tv-rule" />
 
         <div className="tv-footer__meta">

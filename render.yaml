@@ -23,6 +23,12 @@ services:
         value: "false"
       - key: LOG_LEVEL
         value: INFO
+      - key: RESEND_API_KEY
+        sync: false
+      - key: FEEDBACK_TO_EMAIL
+        value: maityrohit021@gmail.com
+      - key: FEEDBACK_FROM_EMAIL
+        value: TripVerse <onboarding@resend.dev>
       # Over its monthly limit; it only logs warnings. Turn back on with a new key if needed.
       - key: LANGSMITH_TRACING
         value: "false"

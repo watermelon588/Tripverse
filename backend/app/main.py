@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, exports, health, places, sketch_notes, trips, upload
+from app.api.routes import auth, exports, feedback, health, places, sketch_notes, trips, upload
 from app.core.config import settings
 from app.core.database import close_db, init_db
 
@@ -40,6 +40,7 @@ app.add_middleware(
 
 # Include Routers
 app.include_router(health.router)
+app.include_router(feedback.router)
 app.include_router(auth.router)
 app.include_router(trips.router)
 app.include_router(upload.router)

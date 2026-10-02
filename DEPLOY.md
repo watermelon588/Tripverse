@@ -45,6 +45,27 @@ The paid Starter plan ($7/month) doesn't sleep.
 Open the Vercel URL and try: the home page, Explore, `/guide`, sign in, then one trip each way
 (full itinerary and build with your guide), the studio, and an export. Watch Render's logs while you do.
 
+## Feedback email
+
+The footer accepts a 1–5 experience rating and an optional comment. `POST /api/feedback`
+sends a plain-text email through Resend; it reports success only when the provider
+accepts the message. No feedback or email credentials are stored in the browser.
+
+1. Create a Resend account with `maityrohit021@gmail.com` and a sending API key.
+2. In the Render backend's Environment settings, set `RESEND_API_KEY` and redeploy.
+   Never put this key in GitHub or a `VITE_` variable.
+3. The default recipient is `maityrohit021@gmail.com`, and the sender is
+   `TripVerse <onboarding@resend.dev>`. Resend permits that sender only when the
+   recipient is your Resend account email. For another recipient, verify your own
+   domain and set `FEEDBACK_FROM_EMAIL` to an address on it.
+4. Submit a rating on the live site and confirm the message arrives in the inbox.
+
+Render's free plan blocks standard SMTP ports, so delivery uses HTTPS. Blank or
+invalid credentials leave the form's content intact and show an error, rather
+than claiming delivery. The endpoint includes a honeypot, input size limits,
+three requests per IP per ten minutes, and twenty total requests per hour.
+These limits are in memory on the single backend instance and reset on restart.
+
 ## Rolling back
 
 Both hosts keep earlier deploys: Vercel → Deployments → **Promote** an older one; Render → the service →

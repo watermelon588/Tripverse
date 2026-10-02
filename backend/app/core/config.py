@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     VERSION: str = "0.1.0"
 
+    # Feedback delivery: server-only credentials, sent over HTTPS on Render.
+    RESEND_API_KEY: str = ""
+    FEEDBACK_TO_EMAIL: str = "maityrohit021@gmail.com"
+    FEEDBACK_FROM_EMAIL: str = "TripVerse <onboarding@resend.dev>"
+
     # CORS configuration strictly restricted to frontend origins
     CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:5173",
