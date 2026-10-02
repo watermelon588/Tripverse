@@ -6,10 +6,18 @@
 .tv2 .tv-feedback__ratings { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .5rem; margin-bottom: 1.25rem; }
 .tv2 .tv-feedback__ratings label { position: relative; cursor: pointer; }
 .tv2 .tv-feedback__ratings input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.tv2 .tv-feedback__ratings span { display: flex; flex-direction: column; align-items: center; gap: .3rem; padding: .7rem .25rem; border: 1px solid var(--tv-line-strong); border-radius: 4px; font-size: .7rem; }
-.tv2 .tv-feedback__ratings b { font-size: .9rem; font-weight: 500; }
-.tv2 .tv-feedback__ratings input:checked + span { background: var(--tv-ink); color: var(--tv-canvas); border-color: var(--tv-ink); }
+.tv2 .tv-feedback__ratings span { display: flex; flex-direction: column; align-items: center; gap: .4rem; padding: .6rem .15rem; border: 1px solid transparent; border-radius: 4px; font-size: .7rem; color: var(--tv-muted); }
+.tv2 .tv-feedback__reaction { display: block; width: min(64px, 100%); height: auto; aspect-ratio: 1; object-fit: contain; user-select: none; transition: transform 180ms ease; }
+.tv2 .tv-feedback__ratings input:checked + span { background: var(--tv-surface); color: var(--tv-ink); border-color: var(--tv-line-strong); }
+.tv2 .tv-feedback__ratings input:checked + span .tv-feedback__reaction { animation: tv-feedback-pop 240ms ease-out; }
 .tv2 .tv-feedback__ratings input:focus-visible + span { outline: 2px solid var(--tv-ink); outline-offset: 3px; }
+.tv2 .tv-feedback__ratings input:focus-visible + span .tv-feedback__reaction { animation: none; }
+.tv2 .tv-feedback fieldset:disabled .tv-feedback__ratings label { cursor: default; }
+@keyframes tv-feedback-pop { 0% { transform: scale(.94); } 55% { transform: scale(1.07); } 100% { transform: scale(1); } }
+@media (hover: hover) and (pointer: fine) {
+  .tv2 .tv-feedback fieldset:not(:disabled) .tv-feedback__ratings label:hover .tv-feedback__reaction { transform: translateY(-3px) rotate(-3deg); }
+}
+.tv2 .tv-feedback fieldset:not(:disabled) .tv-feedback__ratings label:active .tv-feedback__reaction { transform: scale(.94); }
 .tv2 .tv-feedback__message { display: block; }
 .tv2 .tv-feedback__message span { color: var(--tv-muted); }
 .tv2 .tv-feedback textarea { display: block; width: 100%; padding: .75rem; border: 1px solid var(--tv-line-strong); border-radius: 4px; background: var(--tv-surface); color: var(--tv-ink); font: .85rem/1.6 var(--tv-sans); resize: vertical; min-height: 100px; }
@@ -24,4 +32,10 @@
   .tv2 .tv-feedback { grid-template-columns: 1fr; gap: 1.5rem; }
   .tv2 .tv-feedback textarea { font-size: 16px; }
   .tv2 .tv-feedback__actions { align-items: flex-start; flex-direction: column; gap: .75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tv2 .tv-feedback__reaction { transition: none; }
+  .tv2 .tv-feedback__ratings input:checked + span .tv-feedback__reaction { animation: none; }
+  .tv2 .tv-feedback fieldset:not(:disabled) .tv-feedback__ratings label:hover .tv-feedback__reaction,
+  .tv2 .tv-feedback fieldset:not(:disabled) .tv-feedback__ratings label:active .tv-feedback__reaction { transform: none; }
 }

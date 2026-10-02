@@ -2,7 +2,13 @@ import { useRef, useState, type FormEvent } from 'react';
 import { apiFetch } from '../../../services/apiClient';
 import './feedback-form.css';
 
-const RATINGS = ['Poor', 'Fair', 'Okay', 'Good', 'Great'];
+const RATINGS = [
+  { label: 'Rough', sticker: 'rough' },
+  { label: 'Meh', sticker: 'meh' },
+  { label: 'Okay', sticker: 'okay' },
+  { label: 'Happy', sticker: 'happy' },
+  { label: 'Loved it', sticker: 'love' },
+];
 
 export function FeedbackForm() {
   const [rating, setRating] = useState<number | null>(null);
@@ -38,17 +44,20 @@ export function FeedbackForm() {
     <div className="tv-feedback" id="feedback">
       <div className="tv-feedback__intro">
         <h3>How was your experience?</h3>
-        <p>A quick rating or a few words help us make TripVerse better.</p>
+        <p>A quick reaction or a few words help us make TripVerse better.</p>
       </div>
       <form onSubmit={submit} className="tv-feedback__form" aria-label="Share your feedback">
         <fieldset disabled={status === 'sending'}>
           <legend>Rate your experience</legend>
           <div className="tv-feedback__ratings">
-            {RATINGS.map((label, index) => (
+            {RATINGS.map(({ label, sticker }, index) => (
               <label key={label}>
                 <input type="radio" name="rating" value={index + 1} required checked={rating === index + 1}
                   onChange={() => { setRating(index + 1); setStatus('idle'); }} />
-                <span><b>{index + 1}</b>{label}</span>
+                <span>
+                  <img className="tv-feedback__reaction" src={`/images/feedback/${sticker}.webp`} alt="" width={64} height={64} draggable={false} />
+                  {label}
+                </span>
               </label>
             ))}
           </div>
