@@ -13,9 +13,9 @@ _From the discussion after F1. Dropped for now: **long-term memory** (an LLM-wri
 | N3 | Daily allowance per traveler | To do |
 | N4 | "Come back tomorrow" message + "I'd pay for more" interest button | To do |
 | N5 | Short Privacy and Terms pages | To do |
-| D1 | Production config (CORS, API URL, no reload, tracing off) | To do |
-| D2 | Frontend on Cloudflare Pages | To do |
-| D3 | Backend on a host that doesn't sleep | To do |
+| D1 | Production config (CORS, API URL, no reload, tracing off) | ✅ Ready 2026-10-02 (`render.yaml`, `vercel.json`, pinned requirements) |
+| D2 | Frontend on **Vercel** (changed from Cloudflare Pages) | Ready; deploy per `DEPLOY.md` |
+| D3 | Backend on **Render** (free plan sleeps; Starter doesn't) | Ready; deploy per `DEPLOY.md` |
 | D4 | Domain | To do |
 | D5 | Secrets on the host | To do |
 | D6 | Smoke test on the live URL | To do |
