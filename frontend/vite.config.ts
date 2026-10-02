@@ -9,7 +9,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@media': path.resolve(__dirname, './media'),
+      // Only the photos the app uses, committed; the full library in media/ is not in git.
+      '@media': path.resolve(__dirname, './src/assets/photos'),
     },
   },
   server: {

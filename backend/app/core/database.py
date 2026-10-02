@@ -25,6 +25,11 @@ else:
     # before use replaces a dead one. ponytail: one ~200 ms ping per request; pool_recycle is free but only
     # covers idle drops, so switch to it if the ping ever matters more than the rare stale connection.
     engine_kwargs["pool_pre_ping"] = True
+    # Supabase's transaction pooler (port 6543) can't keep asyncpg's prepared statements between queries;
+    # without this every second query fails with "prepared statement does not exist". The session pooler
+    # (port 5432) doesn't need it.
+    if ":6543/" in database_url:
+        engine_kwargs["connect_args"] = {"statement_cache_size": 0}
 
 engine = create_async_engine(database_url, **engine_kwargs)
 
