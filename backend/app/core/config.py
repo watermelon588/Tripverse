@@ -32,6 +32,8 @@ class Settings(BaseSettings):
 
     # Groq LLM Configuration (Primary)
     GROQ_API_KEY: str = ""
+    # Optional second key from another Groq account: used when the first hits its rate or daily limit.
+    GROQ_API_KEY2: str = ""
     GROQ_MODEL: str = "openai/gpt-oss-120b"
     # Smaller Groq model for JSON extraction/intent nodes; empty uses GROQ_MODEL.
     GROQ_FAST_MODEL: str = "openai/gpt-oss-20b"

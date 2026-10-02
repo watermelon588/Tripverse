@@ -42,6 +42,9 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      # Second key from another Groq account; used when the first hits its limit, before Gemini.
+      - key: GROQ_API_KEY2
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
       - key: TAVILY_API_KEY

@@ -29,10 +29,24 @@ def model_for(role: str) -> dict[str, str]:
     return {"model": model} if model else {}
 
 
+def default_fallback() -> Any:
+    """What runs when the first Groq key hits a limit: the second Groq key, then Gemini.
+
+    The fallback is itself an LLMService, so the chain is Groq key 1 -> Groq key 2 -> Gemini, each step
+    taken only on a rate-limit or quota error. Without a second key it goes straight to Gemini.
+    ponytail: every call still tries key 1 first, so once it's out each call pays one fast 429 before
+    key 2; add a cooldown on the exhausted key if that round trip ever shows up in latency.
+    """
+    if settings.GROQ_API_KEY2:
+        return LLMService(primary_provider=GroqProvider(api_key=settings.GROQ_API_KEY2),
+                          fallback_provider=GeminiProvider())
+    return GeminiProvider()
+
+
 class LLMService:
     """
     Application-level LLM Service.
-    Coordinates primary (Groq) and fallback (Gemini) LLM providers, builds structured prompts,
+    Coordinates primary (Groq) and fallback (second Groq key, then Gemini) providers, builds structured prompts,
     and provides transparent fallback when the primary provider encounters rate limits or quota limits.
     """
 
@@ -47,7 +61,7 @@ class LLMService:
             self._fallback_provider = fallback_provider if fallback_provider is not _UNSET else None
         else:
             self._primary_provider = primary_provider if primary_provider is not _UNSET else GroqProvider()
-            self._fallback_provider = fallback_provider if fallback_provider is not _UNSET else GeminiProvider()
+            self._fallback_provider = fallback_provider if fallback_provider is not _UNSET else default_fallback()
 
     @property
     def _provider(self) -> LLMProvider:

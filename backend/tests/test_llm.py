@@ -130,8 +130,11 @@ async def test_groq_provider_generate_stream():
 # ==============================================================================
 
 def test_llm_service_default_providers():
-    """Verify LLMService defaults to GroqProvider as primary and GeminiProvider as fallback."""
-    service = LLMService()
+    """Verify LLMService defaults to GroqProvider as primary and, with no second Groq key, Gemini as fallback."""
+    from app.services.llm import service as svc
+
+    with patch.object(svc.settings, "GROQ_API_KEY2", ""):
+        service = LLMService()
     assert isinstance(service._primary_provider, GroqProvider)
     assert isinstance(service._fallback_provider, GeminiProvider)
 
@@ -271,3 +274,53 @@ async def test_gemini_provider_generate():
         result = await provider.generate("Plan trip", system_instruction="Travel Guide")
         assert result == "Generated travel response"
         mock_client.aio.models.generate_content.assert_called_once()
+
+
+class LimitedProvider:
+    """Answers, or fails with a Groq-style 429, and records who was asked."""
+
+    def __init__(self, name: str, calls: list[str], limited: bool = False):
+        self.name, self.calls, self.limited = name, calls, limited
+
+    def _check(self):
+        self.calls.append(self.name)
+        if self.limited:
+            raise Exception("Error code: 429 - rate_limit_exceeded: tokens per day (TPD)")
+
+    async def generate(self, prompt, system_instruction=None, temperature=0.7, max_output_tokens=None, **kwargs):
+        self._check()
+        return self.name
+
+    async def generate_stream(self, prompt, system_instruction=None, temperature=0.7, max_output_tokens=None, **kwargs):
+        self._check()
+        yield self.name
+
+
+@pytest.mark.asyncio
+async def test_second_groq_key_is_used_before_gemini():
+    """Groq key 1 -> Groq key 2 -> Gemini, each step only on a limit error, for calls and streams alike."""
+    from app.services.llm import service as svc
+
+    async def run(key1_limited: bool, key2_limited: bool):
+        calls: list[str] = []
+        chain = LLMService(
+            primary_provider=LimitedProvider("groq-1", calls, key1_limited),
+            fallback_provider=LLMService(primary_provider=LimitedProvider("groq-2", calls, key2_limited),
+                                         fallback_provider=LimitedProvider("gemini", calls)))
+        text = await chain.generate("hi")
+        streamed = [t async for t in chain.generate_stream("hi")]
+        assert streamed == [text]
+        return text, calls[: len(calls) // 2]
+
+    assert await run(False, False) == ("groq-1", ["groq-1"])
+    assert await run(True, False) == ("groq-2", ["groq-1", "groq-2"])
+    assert await run(True, True) == ("gemini", ["groq-1", "groq-2", "gemini"])
+
+    # The real default wiring: with a second key the fallback is that key, then Gemini; without one, Gemini.
+    with patch.object(svc.settings, "GROQ_API_KEY2", "gsk-second"):
+        fallback = svc.default_fallback()
+        assert isinstance(fallback, LLMService)
+        assert fallback._primary_provider._api_key == "gsk-second"
+        assert isinstance(fallback._fallback_provider, GeminiProvider)
+    with patch.object(svc.settings, "GROQ_API_KEY2", ""):
+        assert isinstance(svc.default_fallback(), GeminiProvider)
