@@ -2,338 +2,369 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="frontend/public/brand/logo-light.svg">
-  <img src="frontend/public/brand/logo.svg" alt="TripVerse mark: an arc horizon that breaks downward into a trailing line" width="120">
+  <img src="frontend/public/brand/logo.svg" alt="TripVerse horizon mark" width="80">
 </picture>
 
 # TripVerse
 
-**Plan a trip by talking to it.** An AI travel planner that drafts an itinerary, builds it day by day with you, and keeps a live map, sketchbook, 3D route and budget in sync, all in one *Trip Studio*.
+### Your next trip, taking shape.
 
-![React](https://img.shields.io/badge/React-18-61dafb?logo=react&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript&logoColor=white)
-![Vite](https://img.shields.io/badge/Vite-5-646cff?logo=vite&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi&logoColor=white)
-![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1c3c3c)
-![Supabase](https://img.shields.io/badge/Supabase-Auth%20%2B%20Postgres-3ecf8e?logo=supabase&logoColor=white)
+Talk through the idea. Build the days. Keep the whole journey in view.
+
+**An AI travel planner with a map, a sketchbook, a budget, and a little room for wonder.**
+
+[Open TripVerse](https://tripverse-0.vercel.app) · [Visual tour](#visual-tour) · [Product mockups](#product-mockups) · [Design gallery](#design-gallery) · [Run locally](#run-locally) · [MIT license](#mit-license)
+
+React · TypeScript · GSAP · Three.js · FastAPI · LangGraph · Supabase
 
 </div>
 
-![TripVerse home](frontend/public/guide/00-home.png)
+![TripVerse planning desk mockup: a desktop itinerary beside a phone conversation, paper textures, and mountain photography](assets/readme/mockups/01-planning-desk.jpg)
 
----
+TripVerse brings the conversation and the trip into the same workspace. Describe where you want to go, choose a guide, and either ask for a complete itinerary or build it one day at a time. Open the result in **Trip Studio** to move between the plan, sketchbook, map, and 3D route, with the budget close at hand.
 
-## Contents
+The interface takes its cues from printed travel journals: warm paper, fine rules, expressive serif headlines, handwritten notes, and photographs that carry the color.
 
-1. [What it does](#what-it-does)
-2. [Screens](#screens)
-3. [The agent](#the-agent)
-4. [Tech stack and frameworks](#tech-stack-and-frameworks)
-5. [Architecture](#architecture)
-6. [Folder structure](#folder-structure)
-7. [Installation](#installation)
-8. [Running locally](#running-locally)
-9. [Configuration](#configuration)
-10. [API overview](#api-overview)
-11. [Testing](#testing)
-12. [Deployment](#deployment)
-13. [Brand](#brand)
-14. [Current status and roadmap](#current-status-and-roadmap)
+## Visual tour
 
----
+These are application screenshots. The compositions in [Product mockups](#product-mockups) and [Design gallery](#design-gallery) show the wider visual identity.
 
-## What it does
+### Home — somewhere between the idea and the journey
 
-TripVerse starts with a conversation, not a form. Tell it where you're thinking of going and it replies like a travel companion; when you want a draft it asks three things (where from, where to, how many days) and everything else is optional.
+The homepage combines destination photography, six illustrated guides, a planning preview, and a glimpse of the budget. Small pictures sit inside the headline; the surrounding interface stays quiet.
 
-You then choose how to plan:
+![Current TripVerse homepage with inline photograph typography, Seoul photography, guide portraits, a planning preview, and a budget example](assets/readme/screens/home.webp)
 
-- **One-shot itinerary.** The agent researches the destination on the web and writes a full day-by-day plan.
-- **Build with your guide.** You and a guide character plan one day at a time. Ask to add, move or drop a stop and the agent proposes it, checks it against your pacing and budget, tells you exactly what changed, and only then applies it.
+### The destination gallery
 
-Either way the result lands in **Trip Studio**, where one itinerary is shown four ways:
+Six places form a horizontal photo rail, with staggered image heights, short descriptions, and suggested stays. The gallery gives the conversation somewhere to begin.
 
-| View | What you get |
+![TripVerse destination gallery showing staggered photographic cards and city captions](assets/readme/screens/destination-gallery.webp)
+
+### The memory stack
+
+A slate-blue canvas, layered pages, travel photographs, art prints, and handwritten captions. The central sheet turns in 3D to reveal another chapter; the surrounding pages give the gallery the feel of a collection you can hold.
+
+![The memory stack journal, with receding photographic pages and a central travel collage on a blue background](assets/readme/screens/memory-stack.webp)
+
+### The field journal
+
+A different way to keep the same memories: an open notebook with cream ruled paper, a spiral spine, taped photographs, field notes, and a postmark. Its two-page spread becomes a single readable page on a phone.
+
+![The field journal, an open spiral notebook with mountain photographs, taped art, handwriting, and a travel postmark](assets/readme/screens/field-journal.webp)
+
+Both journals have eight chapters and independent page positions. Click either side, use the previous and next buttons, swipe, or navigate with the arrow keys. A thumbnail browser opens the whole collection; reset returns to the first page. Reduced-motion preferences switch chapters without the page-turn animation.
+
+### The chapter gallery
+
+Mountains, sea air, small detours, quiet afternoons, rain, camping, and company. Browse the photographs directly, then open a moment as a journal page.
+
+![The journal chapter gallery expanded beneath the notebook, showing all eight photographic chapters](assets/readme/screens/journal-gallery.webp)
+
+### Explore — places worth the journey
+
+Explore opens with Mount Fuji, moves through six travel moods, and presents destinations as an editorial index. Point at a place to preview its photograph, filter by kind, or choose a destination to open a planning prompt. Seasonal chapters offer another way to browse, starting from when you can travel.
+
+![Current Explore page with its editorial heading and Mount Fuji photograph](assets/readme/screens/explore.webp)
+
+![Explore's six-moods chapter combining large travel photographs, inset imagery, mood descriptions, and destination suggestions](assets/readme/screens/explore-moods.webp)
+
+<details>
+<summary><strong>See the destination index</strong></summary>
+
+![Explore destination index with place names, descriptions, general good months, stay lengths, and category filters](assets/readme/screens/explore-index.webp)
+
+Good months are general guidance. The planner handles the dates and conditions for an individual trip.
+
+</details>
+
+### Trip Studio — one trip, four ways to see it
+
+| Plan | Sketchbook |
 |---|---|
-| **Plan** | The day-by-day itinerary with seasonality and conditions for your dates |
-| **Sketchbook** | A hand-drawn notebook page per day you can annotate, saved per trip |
-| **Map** | Google / MapLibre map with numbered stops, nearby places and road distance and drive time between stops |
-| **3D** | A spatial graph of the trip (React Three Fiber): stops and legs as nodes and edges |
+| ![Trip Studio Plan view with day cards, day navigation, and trip details](frontend/public/guide/06-studio-plan.png) | ![Trip Studio Sketchbook view with handwritten day pages](frontend/public/guide/07-studio-sketch.png) |
+| **Follow the days.** Read the itinerary and open a day in detail. | **Picture the moments.** Browse notebook-style pages and add annotations. |
 
-Plus a persistent **budget ledger**, **PDF / image exports**, saved trips, Explore (destination moods), and sign-in with trips claimed from guest sessions.
-
-## Screens
-
-| | |
+| Map | 3D route |
 |---|---|
-| ![Brief](frontend/public/guide/02-brief-step-1.png) **Three-question brief** | ![Guide picker](frontend/public/guide/02d-guide-picker.png) **Pick your guide** |
-| ![Planning choice](frontend/public/guide/03-planning-choice.png) **One-shot or build together** | ![Itinerary](frontend/public/guide/04-one-shot-itinerary.png) **Full itinerary from chat** |
-| ![Change receipt](frontend/public/guide/05b-change-receipt.png) **Receipts for every change** | ![Budget from chat](frontend/public/guide/05e-budget-from-chat.png) **Budget from chat** |
-| ![Studio plan](frontend/public/guide/06-studio-plan.png) **Trip Studio: Plan** | ![Studio sketch](frontend/public/guide/07-studio-sketch.png) **Trip Studio: Sketchbook** |
-| ![Studio map](frontend/public/guide/08-studio-map.png) **Trip Studio: Map** | ![Studio 3D](frontend/public/guide/09-studio-3d.png) **Trip Studio: 3D** |
-| ![Budget rows](frontend/public/guide/13-budget-rows.png) **Budget ledger** | ![Exports](frontend/public/guide/10b-export-ready.png) **Exports** |
-| ![Build day](frontend/public/guide/16-build-day-plan.png) **Build a day with the agent** | ![Live sketch](frontend/public/guide/21-build-live-sketch-done.png) **Sketch fills in live** |
-| ![Explore](frontend/public/guide/24-explore.png) **Explore** | ![Phone](frontend/public/guide/23-phone-sketch.png) **On a phone** |
+| ![Trip Studio map with numbered itinerary stops](frontend/public/guide/08-studio-map.png) | ![Trip Studio 3D view showing the itinerary as a spatial route graph](frontend/public/guide/09-studio-3d.png) |
+| **Understand the route.** Inspect stops, nearby places, and available road metrics. | **Change perspective.** Explore connected places and travel legs. |
 
-The full annotated walkthrough lives in the app at `/guide`.
+The studio views use the same itinerary graph. The budget ledger keeps entered costs alongside that plan, and PDF and image exports let you take it with you.
 
-## The agent
+<details>
+<summary><strong>See the conversation, budget, and export workflow</strong></summary>
 
-TripVerse's agent is a **LangGraph state machine** (`backend/app/agents/trip_planner/`) that owns the whole conversation. It is deliberately split so the model never invents facts about the trip:
-
-```
-START ─ greet / understand message ─ onboarding form ─ validate ─ planning choice
-                                                                    │
-                    ┌───────────────────────────────────────────────┴────────────┐
-                    ▼                                                            ▼
-        one-shot: research → write → extract graph          build-with-agent (copilot subgraph)
-                                                            interpret ─ apply ─ research ─ recommend ─ respond ─ render
-```
-
-- **Understand.** A fast model turns each message into intent and structured *operations* (add stop, move day, set budget…).
-- **Apply and recommend are deterministic.** `copilot/engine.py` applies operations to the itinerary and computes pacing, conflicts and budget effects in plain code. The model only puts those computed facts into words, so a reply can't claim a change that didn't happen (the reply guard checks this).
-- **Research.** Tavily web search plus traveler posts feed the planning and recommendations, with source-supported transit claims and explicit unknowns.
-- **Extract.** Every draft is parsed into an *itinerary graph* (stops, legs, nearby places) that drives the map, 3D view, sketch pages and budget rows.
-- **Enrichment.** Geocoding, Google Places (cached and quota-capped), road metrics from openrouteservice, seasonality and place photos.
-- **Guides.** Six character guides (Aoi, Yuki, Beni, Kaede, Momo, Rin) give the agent a voice; the choice is a persona, the planning logic is shared.
-- **LLM providers.** Groq (`openai/gpt-oss-120b`, with a fast `gpt-oss-20b` for extraction) is primary; Google Gemini is the automatic fallback on rate or quota limits. LangSmith tracing is optional.
-
-## Tech stack and frameworks
-
-| Layer | Technology |
+| Start with a brief | Choose your companion |
 |---|---|
-| Frontend framework | **React 18** + **TypeScript** + **Vite 5** |
-| Styling and motion | Tailwind CSS 4, GSAP (`@gsap/react`), Framer Motion, Lenis smooth scroll |
-| 3D | **Three.js** with **React Three Fiber** and drei |
-| Maps | Google Maps and **MapLibre GL** |
+| ![The first step of the trip brief](frontend/public/guide/02-brief-step-1.png) | ![The six illustrated travel guides in the guide picker](frontend/public/guide/02d-guide-picker.png) |
+
+| Choose how to plan | Build a day together |
+|---|---|
+| ![The choice between a complete itinerary and collaborative day building](frontend/public/guide/03-planning-choice.png) | ![A day plan produced in the collaborative conversation](frontend/public/guide/16-build-day-plan.png) |
+
+| See what changed | Keep costs close |
+|---|---|
+| ![A change receipt describing an itinerary edit](frontend/public/guide/05b-change-receipt.png) | ![The itemized trip budget ledger](frontend/public/guide/13-budget-rows.png) |
+
+| Watch the sketch take shape | Take the trip with you |
+|---|---|
+| ![A completed sketchbook page built from the planning conversation](frontend/public/guide/21-build-live-sketch-done.png) | ![The trip export interface](frontend/public/guide/10b-export-ready.png) |
+
+The in-app [Guide](https://tripverse-0.vercel.app/guide) contains the annotated walkthrough.
+
+</details>
+
+### Small screens, the same character
+
+The field journal condenses into a single page. The planner also adapts its conversation and sketchbook to a phone, preserving the paper, photographs, and legible controls.
+
+<table>
+  <tr>
+    <td align="center"><img src="assets/readme/screens/journal-phone.webp" alt="The field journal on a phone, with a large photograph, handwriting, and chapter controls" width="300"></td>
+    <td align="center"><img src="frontend/public/guide/23-phone-sketch.png" alt="Trip Studio sketchbook on a phone" width="300"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>A journal in your pocket</strong></td>
+    <td align="center"><strong>The plan, close at hand</strong></td>
+  </tr>
+</table>
+
+The footer keeps feedback equally simple: choose a chibi reaction, optionally write a note, and send it. Sticker ratings have a small hover lift and selection pop, with keyboard support and reduced-motion handling.
+
+<p align="center">
+  <img src="frontend/public/images/feedback/rough.webp" alt="Rough experience: crying reaction" width="60">
+  <img src="frontend/public/images/feedback/meh.webp" alt="Meh experience: disappointed reaction" width="60">
+  <img src="frontend/public/images/feedback/okay.webp" alt="Okay experience: calm reaction" width="60">
+  <img src="frontend/public/images/feedback/happy.webp" alt="Happy experience: smiling reaction" width="60">
+  <img src="frontend/public/images/feedback/love.webp" alt="Loved it: heart-eyed reaction" width="60">
+</p>
+
+## Product mockups
+
+The existing ten-piece mockup collection places real application screens into travel-inspired compositions. The planning desk at the top of this README is the first piece; the remaining nine follow here. These are presentation mockups, with application captures shown in the visual tour above.
+
+| Pocket sketchbook | The whole route | Build a day together |
+|---|---|---|
+| ![Phone sketchbook mockup with torn paper and mountain imagery](assets/readme/mockups/02-pocket-sketchbook.jpg) | ![Tablet map mockup with city photography and route-inspired linework](assets/readme/mockups/03-whole-route.jpg) | ![Collaborative day-planning mockup with a conversation and day-plan card](assets/readme/mockups/04-build-together.jpg) |
+
+| Sketch meets studio | A budget with context | Ask. Change. Keep going. |
+|---|---|---|
+| ![Wide sketchbook mockup with notebook UI, landscapes, and paper collage](assets/readme/mockups/05-sketch-meets-studio.jpg) | ![Budget mockup combining the ledger, trip costs, and colorful artwork](assets/readme/mockups/06-budget-context.jpg) | ![Conversation mockup showing an itinerary change and its receipt](assets/readme/mockups/07-ask-change-keep-going.jpg) |
+
+| Take your trip with you | One trip, four views | Inspiration into a plan |
+|---|---|---|
+| ![Export mockup presenting a finished trip on a tablet against an alpine collage](assets/readme/mockups/08-take-trip-with-you.jpg) | ![Dark composition showing the Plan, Sketchbook, Map, and 3D studio views](assets/readme/mockups/09-one-trip-four-views.jpg) | ![Explore and planning mockup against a bright floral composition](assets/readme/mockups/10-inspiration-to-plan.jpg) |
+
+## Design gallery
+
+The existing campaign collection brings together travel photography, paper collage, playful cutouts, illustrated characters, and large editorial type. These are brand illustrations and campaign compositions.
+
+| A world of possibilities | Your city. Your way. |
+|---|---|
+| ![TripVerse campaign artwork combining alpine scenery and swirling clouds](assets/readme/artwork/01-world.jpg) | ![TripVerse campaign artwork with sliced city photographs and a scooter rider](assets/readme/artwork/02-city.jpg) |
+
+<details>
+<summary><strong>Browse the complete campaign collection</strong></summary>
+
+| Let your next trip bloom | The route is yours |
+|---|---|
+| ![Floral TripVerse campaign composition with tulips and a tiny landscape](assets/readme/artwork/03-bloom.jpg) | ![Route campaign collage with travelers, landscapes, and colorful path lines](assets/readme/artwork/04-route.jpg) |
+
+| Make room for detours | Less rush. More wonder. |
+|---|---|
+| ![Dark campaign composition with a winding alpine landscape](assets/readme/artwork/05-detours.jpg) | ![Blue campaign artwork showing a traveler resting among stadium seats](assets/readme/artwork/06-pace.jpg) |
+
+| Different people. Different journeys. | A little planning. A bigger horizon. |
+|---|---|
+| ![Campaign artwork with a group of colorful illustrated faces](assets/readme/artwork/07-company.jpg) | ![Ocean collage with travelers and a hand-drawn smiling horizon](assets/readme/artwork/08-perspective.jpg) |
+
+| One trip. Many ways to see it. | Stay curious. |
+|---|---|
+| ![Campaign landscape assembled from a panorama of travel photographs](assets/readme/artwork/09-many-views.jpg) | ![Yellow campaign collage with birds, a traveler, and an orange sun](assets/readme/artwork/10-curious.jpg) |
+
+</details>
+
+### The visual language
+
+| Element | How it appears in TripVerse |
+|---|---|
+| **Paper and ink** | Warm surfaces, fine borders, and generous space around content. |
+| **Typography** | Instrument Serif for headlines; Geist and Geist Mono for the interface; Caveat and Yomogi for notebook handwriting. |
+| **Photography** | Destination views, candid travel moments, and small pictures woven into typography. |
+| **Motion** | GSAP page turns and scroll chapters, gentle image movement, and small feedback interactions. |
+| **Brand mark** | An arc horizon that breaks into a trailing stroke, reused across the app and artwork. |
+| **Companions** | Aoi, Yuki, Beni, Kaede, Momo, and Rin: six illustrated voices for the same planning engine. |
+
+The [design system](DESIGN.md) documents the interface language and reusable brand mark.
+
+## What you can do
+
+1. **Find a starting point.** Browse destinations, moods, and seasonal inspiration, or bring your own idea.
+2. **Talk through the brief.** Start with where you are leaving from, where you want to go, and how many days you have. Add interests, pace, dates, and budget as needed.
+3. **Choose how to build.** Ask for a complete researched itinerary, or work with a guide one day at a time.
+4. **Revise the trip.** Ask to add, move, or remove a stop. The collaborative engine computes the edit and returns a change receipt.
+5. **Open Trip Studio.** Read the plan, annotate the sketchbook, inspect the map, explore the 3D route, and track costs in the ledger.
+6. **Keep the result.** Save trips to your library, claim guest trips after signing in, and export the plan as a PDF or image.
+
+## Under the hood
+
+### Technology
+
+| Area | Tools |
+|---|---|
+| Interface | React 18, TypeScript, Vite, Tailwind CSS, custom CSS design tokens |
+| Motion | GSAP, `@gsap/react`, ScrollTrigger, Flip, Framer Motion, Lenis |
+| Spatial views | Three.js, React Three Fiber, drei |
+| Maps | Google Maps, MapLibre GL, openrouteservice road metrics |
 | Sketchbook | roughjs, perfect-freehand, Excalidraw |
 | Exports | jsPDF, svg2pdf.js |
-| Backend framework | **FastAPI** (Python 3.12) on Uvicorn, **Pydantic v2** |
-| Agent orchestration | **LangGraph** |
-| LLMs | Groq (primary), Google Gemini (fallback) |
-| Search and data | Tavily, Google Places, openrouteservice |
-| Database and auth | **Supabase** (PostgreSQL via SQLAlchemy 2 + asyncpg, Supabase Auth, JWT); SQLite (aiosqlite) for the local quota ledger |
-| Media | Cloudinary (avatars) |
-| Observability | LangSmith |
-| Tests | pytest + pytest-asyncio, Vitest |
-| Hosting | Vercel (frontend), Render (backend) |
+| API | FastAPI, Pydantic, Uvicorn |
+| Planning | LangGraph; Groq with a second-key option and Gemini fallback |
+| Research and places | Tavily, Google Places, geocoding and enrichment services |
+| Persistence and accounts | Supabase Auth, PostgreSQL, SQLAlchemy, asyncpg |
+| Supporting services | Resend feedback email delivery, Cloudinary avatar uploads, optional LangSmith tracing |
+| Tests | pytest, pytest-asyncio, Vitest, TypeScript checks |
 
-## Architecture
+### One itinerary, shared across the workspace
 
-```
-┌────────────────────────────── Browser (Vercel) ──────────────────────────────┐
-│  React + Vite SPA                                                             │
-│  Home · Explore · Guide · Create/Trip Studio · Trips · Auth · Profile         │
-│  Plan │ Sketchbook │ Map (Google/MapLibre) │ 3D (R3F) │ Budget │ Exports      │
-└───────────────┬───────────────────────────────┬───────────────────────────────┘
-                │ REST + SSE (chat stream)      │ Supabase JS (sign-in)
-                ▼                               ▼
-┌──────────── FastAPI (Render) ────────────┐   ┌────── Supabase ──────┐
-│ routes → services → repositories         │   │ Auth · PostgreSQL    │
-│                                          │◄──►  trips, messages,    │
-│  LangGraph agent ──► LLM service         │   │  budgets, sketch     │
-│   (Groq → Gemini fallback)               │   │  notes               │
-│  enrichment · budget · exports · places  │   └──────────────────────┘
-└───────┬──────────┬───────────┬───────────┘
-        ▼          ▼           ▼
-     Tavily   Google Places   openrouteservice
+```mermaid
+flowchart LR
+    Conversation[Conversation and trip brief] --> API[FastAPI]
+    API --> Planner[LangGraph planner]
+    Planner --> Research[Research and enrichment]
+    Planner --> Edits[Deterministic trip edits]
+    Research --> Document[Itinerary graph and trip document]
+    Edits --> Document
+    Document --> Plan[Plan]
+    Document --> Sketch[Sketchbook]
+    Document --> Map[Map]
+    Document --> Spatial[3D route]
+    Document --> Budget[Budget ledger]
+    API <--> Storage[PostgreSQL and Supabase Auth]
 ```
 
-- **Request path.** Routes validate with Pydantic, services hold the logic, repositories own SQL. Chat uses a Server-Sent-Events stream (`/messages/stream`) that sends stage labels (researching, writing) and a final `done` frame.
-- **Trip document.** The latest itinerary graph is the source of truth; `/trips/{id}/document` assembles it for the studio and exports. Budget rows are re-seeded from each new graph and keep entered amounts.
-- **Cost control.** Google Places is called only when a stop is opened, cached for an hour and capped per trip and per day in a local SQLite ledger.
-- **Guest-first.** Anyone can plan without an account; `/auth/claim-guest-trips` attaches those trips after sign-up.
+The planner turns the conversation into structured intent. In collaborative mode, a deterministic engine applies itinerary operations and computes their effects; the language model explains those results. Research and enrichment add place context, available route metrics, and conditions. A shared itinerary graph supplies the studio views and budget reconciliation.
 
-Deeper notes: `docs/architecture/` (system design, database, API reference) and [DEPLOY.md](DEPLOY.md).
+Chat responses can stream through Server-Sent Events. Guest sessions support planning before sign-in, and trips can be claimed by an account afterward. Budget amounts are traveler-entered values in one trip currency; estimates are distinct from confirmed booking prices.
 
-## Folder structure
+### Repository layout
 
 ```text
 TripVerse/
+├── assets/readme/              # Published screenshots, mockups, and artwork
 ├── backend/
-│   ├── app/
-│   │   ├── main.py                    # FastAPI app, CORS, router wiring
-│   │   ├── agents/trip_planner/
-│   │   │   ├── graph.py               # top-level LangGraph
-│   │   │   ├── routing.py, state.py
-│   │   │   ├── nodes/                 # understand, onboarding, validate, planning, extract, respond
-│   │   │   ├── planning/              # one-shot research nodes and tools (web search)
-│   │   │   └── copilot/               # build-with-agent subgraph: engine, graph, research
-│   │   ├── api/routes/                # auth, trips, exports, places, sketch_notes, upload, health
-│   │   ├── core/                      # config, database
-│   │   ├── models/, schemas/          # SQLAlchemy models, Pydantic schemas
-│   │   ├── repositories/              # database access
-│   │   ├── services/                  # trip, budget, enrichment, google_places, route_metrics,
-│   │   │   └── llm/                   #   seasonality, trip_document, conversation, auth
-│   │   │       └── providers/         # groq.py, gemini.py
-│   │   └── data/
-│   ├── tests/                         # pytest suite (auth, trips, budget, LLM, exports, places…)
-│   ├── requirements.txt, pytest.ini, .env.example
+│   ├── app/agents/trip_planner/ # LangGraph planner and collaborative engine
+│   ├── app/api/routes/         # Auth, trips, places, budgets, exports, feedback
+│   ├── app/services/           # LLM providers, enrichment, trip documents
+│   ├── app/repositories/       # Database access
+│   ├── app/models/             # Persistent models
+│   ├── app/schemas/            # Validated API payloads
+│   └── tests/                  # Backend test suite
 ├── frontend/
-│   ├── src/
-│   │   ├── pages/                     # Home, Explore, Guide, CreateTrip, TripLibrary, Auth, Profile, Credits
-│   │   ├── components/
-│   │   │   ├── home/                  # landing page and journal
-│   │   │   ├── create/                # chat planner, brief form, budget, map, 3D graph
-│   │   │   ├── studio/                # Trip Studio: plan, conditions, export menu
-│   │   │   ├── sketch/                # sketchbook pages and annotation
-│   │   │   ├── guide/                 # the six guide characters and companion
-│   │   │   ├── auth/ common/          # forms, Logo, route curtain
-│   │   ├── lib/exporters/             # PDF and image export
-│   │   ├── services/ context/ hooks/  # API clients, auth state, hooks
-│   │   └── styles/, types/, constants/
-│   ├── public/                        # brand/, guide/ screenshots, home/, pfp/, explore images
-│   ├── scripts/                       # screenshot and asset helpers
-│   ├── vite.config.ts, vercel.json, .env.example
-├── docs/                              # architecture, design system, roadmap, session logs
-├── render.yaml                        # Render blueprint (backend)
-├── DEPLOY.md                          # Vercel + Render + Supabase guide
-├── DESIGN.md, plan.md                 # design system and roadmap
-└── package.json                       # root convenience scripts
+│   ├── public/                 # Brand, guide screenshots, and app assets
+│   ├── src/components/home/v2/ # Home, journals, and feedback
+│   ├── src/components/studio/  # Trip Studio
+│   ├── src/components/sketch/  # Sketchbook and annotation
+│   ├── src/pages/explore/      # Destination index, moods, and seasons
+│   ├── src/services/           # API clients
+│   └── src/styles/             # Shared design system and page styles
+├── DESIGN.md                   # Visual system
+├── LICENSE                     # MIT license
+└── README.md
 ```
 
-## Installation
+## Run locally
 
-**Prerequisites:** Node.js 18+ and npm, Python 3.12, git, and accounts or keys for the services below. Supabase and one LLM key (Groq or Gemini) are required; the rest are optional.
+Use **Node.js 20+** and **Python 3.12**. Clone the repository, then install each application's dependencies.
 
 ```bash
 git clone https://github.com/watermelon588/Tripverse.git
 cd Tripverse
 ```
 
-**Backend**
+**Backend** — from the repository root:
 
 ```bash
 cd backend
 python -m venv .venv
-# Windows PowerShell: .venv\Scripts\Activate.ps1
-# macOS / Linux:      source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env        # then fill in the values (see Configuration)
 ```
 
-**Frontend**
+Activate with `.venv\Scripts\Activate.ps1` on Windows PowerShell or `source .venv/bin/activate` on macOS/Linux, then:
+
+```bash
+pip install -r requirements.txt
+```
+
+Copy `backend/.env.example` to `backend/.env` and fill in your database, Supabase, LLM, and research credentials. The example file documents optional map, media, tracing, and feedback settings.
+
+**Frontend** — in another terminal, from the repository root:
 
 ```bash
 cd frontend
 npm install
-cp .env.example .env        # then fill in the values
 ```
 
-## Running locally
+Copy `frontend/.env.example` to `frontend/.env`. Set `VITE_API_URL` to `http://localhost:8000`, plus your Supabase URL and public key. The Google Maps key is optional; the app also supports MapLibre. Keep secret keys in the backend environment.
 
-In two terminals:
+From the repository root, run these in separate terminals:
 
 ```bash
-# Terminal 1: API on http://localhost:8000
-cd backend
-uvicorn app.main:app --reload --port 8000
+npm run dev:backend
 ```
 
 ```bash
-# Terminal 2: app on http://localhost:5173
-cd frontend
-npm run dev
+npm run dev:frontend
 ```
 
-Check the API at <http://localhost:8000/api/health> (it should report the database as connected), then open <http://localhost:5173>. From the repo root, `npm run dev:backend` and `npm run dev:frontend` do the same.
+Open [localhost:5173](http://localhost:5173). Interactive API documentation is available at [localhost:8000/docs](http://localhost:8000/docs).
 
-Production build: `npm run build` inside `frontend/`.
+### Useful commands
 
-## Configuration
+| Directory | Command | Purpose |
+|---|---|---|
+| Repository root | `npm run dev:frontend` | Start the web app |
+| Repository root | `npm run dev:backend` | Start the API |
+| Repository root | `npm run build:frontend` | Build the frontend |
+| `frontend/` | `npm run lint` | Check TypeScript |
+| `frontend/` | `npm test` | Run Vitest |
+| `backend/` | `pytest` | Run backend tests |
 
-**`backend/.env`**
+## Credits
 
-| Variable | Purpose |
-|---|---|
-| `DATABASE_URL` | Supabase Postgres, `postgresql+asyncpg://…` (use the *session pooler* URL when hosting) |
-| `SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SECRET`, `SUPABASE_JWT_SECRET` | Auth |
-| `LLM_PROVIDER`, `GROQ_API_KEY`, `GROQ_MODEL`, `GROQ_FAST_MODEL` | Primary LLM |
-| `GEMINI_API_KEY`, `GEMINI_MODEL` | Fallback LLM |
-| `TAVILY_API_KEY` | Web research |
-| `ORS_API_KEY`, `GOOGLE_MAPS_API_KEY`, `GOOGLE_ROUTES_ENABLED` | Optional road metrics and Places |
-| `LANGSMITH_*` | Optional tracing |
-| `CORS_ORIGINS` | Allowed frontend origins |
+Built by **Rohit Maity**. The mockups and campaign artwork come from the existing TripVerse design collections; home, journal, gallery, and Explore captures show the current local application. Guide screenshots illustrate a sample trip.
 
-**`frontend/.env`**: `VITE_API_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_GOOGLE_MAPS_API_KEY` (optional; MapLibre is used without it). Never commit `.env` files.
+Travel photography and other third-party media retain their original licenses and attribution requirements. The [Credits page](https://tripverse-0.vercel.app/credits) lists photography credits. The software license below does not relicense third-party photographs, fonts, or illustrations.
 
-## API overview
+## MIT license
 
-| Area | Endpoints (trip routes are under `/api/trips`) |
-|---|---|
-| Health | `GET /api/health` |
-| Auth | `POST /api/auth/signup · login · logout · forgot-password · reset-password · claim-guest-trips`, `GET /api/auth/me` |
-| Trips | `POST /api/trips`, `GET /api/trips`, `GET /api/trips/{id}`, `DELETE /api/trips/{id}` |
-| Chat | `POST /trips/{id}/messages`, `POST /trips/{id}/messages/stream` (SSE), `GET /trips/{id}/messages` |
-| Document | `GET /trips/{id}/document`, `POST /trips/{id}/itinerary-graph` |
-| Budget | `GET /trips/{id}/budget`, `PUT …/budget/settings`, `POST/PUT/DELETE …/budget/items`, `POST …/budget/estimates[/accept]` |
-| Map data | `POST /trips/{id}/route-metrics · geocode · nearby-places` |
-| Sketchbook | `GET /trips/{id}/sketch-notes`, `PUT/DELETE …/sketch-notes/{page_id}` |
-| Places and media | `POST /api/places/media`, `GET /api/places/around`, `POST /api/places/season` |
-| Exports, upload | `POST /api/exports/points`, `POST /api/upload/avatar` |
+Copyright © 2026 **Rohit Maity**. TripVerse's code is available under the [MIT License](LICENSE).
 
-Interactive docs while running: <http://localhost:8000/docs>.
+<details>
+<summary>Read the complete MIT license</summary>
 
-## Testing
+```text
+MIT License
 
-```bash
-cd backend && pytest        # backend suite
-cd frontend && npm test     # Vitest
-cd frontend && npx tsc --noEmit
+Copyright (c) 2026 Rohit Maity
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ```
 
-## Deployment
-
-Frontend on **Vercel** (root `frontend`, config in `frontend/vercel.json`), backend on **Render** (blueprint `render.yaml`), database and auth on **Supabase**. Step-by-step: [DEPLOY.md](DEPLOY.md).
-
-## Brand
-
-TripVerse's mark is a single stroke: an **arc horizon that breaks downward into a trailing line**, a journey that leaves the horizon. It is drawn once, in `frontend/src/components/common/Logo.tsx`, and every surface imports it; the stroke inherits `currentColor`, so it takes the ink of whatever it sits on.
-
-| On paper | On dark |
-|---|---|
-| <img src="frontend/public/brand/logo.svg" width="96" alt="Mark, dark"> | <img src="frontend/public/brand/logo-light.svg" width="96" alt="Mark, light"> |
-
-Visual language: warm paper, hand-drawn sketchbook pages, Caveat and Yomogi handwriting faces, and six illustrated guides.
-
-<p>
-<img src="frontend/public/pfp/5ebc2b293bd93a26c5a67eb0d7c7c37a.jpg" width="72" alt="Aoi">
-<img src="frontend/public/pfp/4f9accdea0d0f90f7c828e529b6bcecc.jpg" width="72" alt="Yuki">
-<img src="frontend/public/pfp/084f860e3eb1569fddd7e47d1ab9337f.jpg" width="72" alt="Beni">
-<img src="frontend/public/pfp/f6acbd3ea789240a081bc312c6dc69d5.jpg" width="72" alt="Kaede">
-<img src="frontend/public/pfp/fe325776d3bdd1174fa04644870657cb.jpg" width="72" alt="Momo">
-<img src="frontend/public/pfp/2aa4e37adf102ac2bc180cb30a085da0.jpg" width="72" alt="Rin">
-</p>
-
-Aoi · Yuki · Beni · Kaede · Momo · Rin. Details in [DESIGN.md](DESIGN.md).
-
-## Current status and roadmap
-
-**Working today**
-
-- Chat-first planning, brief form, six guides, one-shot and build-with-agent modes
-- Trip Studio with Plan, Sketchbook, Map and 3D views
-- Persistent per-trip budget ledger with suggestions and chat-driven edits
-- PDF and image exports
-- Supabase auth, guest trips and claiming, saved trips library
-- Explore, home journal, `/guide` walkthrough, credits
-- Quota-capped Google Places, openrouteservice metrics, seasonality
-- Backend test suite, production build checks, Vercel and Render deploy config
-
-**Next**
-
-- Go live: Vercel + Render + Supabase (config is in place; see [DEPLOY.md](DEPLOY.md))
-- Free-provider chain and a daily usage cap for LLM calls
-- A shared quota store when running on more than one backend host
-- Live booking prices (budgets are traveler-entered; no FX conversion yet)
-
-See `plan.md` for the full roadmap.
-
-## Acknowledgements
-
-Photos from Pexels contributors (credited on `/credits`); they are not covered by the code license. Built with React, FastAPI, LangGraph and Supabase.
-
-
-
-## License
-
-[MIT](LICENSE) © 2026 Rohit Maity
+</details>
