@@ -7,7 +7,8 @@
  */
 
 /*
- * Photography resolves to `media/web/` — 1800px-wide, quality-82 derivatives
+ * Photography resolves (alias @media) to `src/assets/photos/`, the committed subset of `media/web/`:
+ * 1800px-wide, quality-82 derivatives
  * of the originals (72.8 MB -> 12.0 MB across the set). The full-resolution
  * sources stay in `media/` for reprocessing.
  */

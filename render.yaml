@@ -1,0 +1,52 @@
+# Render Blueprint for the TripVerse API (FastAPI). Render → New → Blueprint → pick this repo.
+# Values marked `sync: false` are secrets: Render asks for them on the first deploy.
+services:
+  - type: web
+    name: tripverse-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.4
+      # Trust Render's proxy headers, so URLs FastAPI builds (e.g. trailing-slash redirects) use https.
+      # Set here rather than as a --forwarded-allow-ips "*" flag, which a shell can glob-expand.
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: LOG_LEVEL
+        value: INFO
+      # Over its monthly limit; it only logs warnings. Turn back on with a new key if needed.
+      - key: LANGSMITH_TRACING
+        value: "false"
+      # The Vercel URL(s), comma-separated, e.g. https://tripverse.vercel.app
+      - key: CORS_ORIGINS
+        sync: false
+      # Supabase's pooler URL, not db.<ref>.supabase.co (that host is IPv6-only and Render has no IPv6).
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_SECRET
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: ORS_API_KEY
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
