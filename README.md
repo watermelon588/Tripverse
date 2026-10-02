@@ -333,3 +333,7 @@ See `plan.md` for the full roadmap.
 Photos from Pexels contributors (credited on `/credits`); they are not covered by the code license. Built with React, FastAPI, LangGraph and Supabase.
 
 
+
+## License
+
+[MIT](LICENSE) © 2026 Rohit Maity
