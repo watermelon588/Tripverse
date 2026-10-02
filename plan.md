@@ -2,6 +2,69 @@
 
 _Written 2026-09-28 from the planning discussion. Seven build sessions, each medium to hard and each leaving the app working. The last section lists future work that is deliberately out of scope._
 
+## Version 2 (agreed 2026-10-02) — not started
+
+_Version 1 is live (frontend on Vercel, backend on Render; see `DEPLOY.md`). Version 2 makes a trip something you can actually finish: a locked budget, a finalized itinerary, routes that respect real travel times, and a way to send feedback. Build in the order below. Nothing here is built yet._
+
+| # | Task | Status |
+|---|---|---|
+| V1 | Feedback form in the footer, delivered to the owner's email | To do |
+| V2 | One budget: the guide's numbers and the budget panel always agree | To do |
+| V3 | Finalize the budget (button and chat), shown as final in the PDF | To do |
+| V4 | Finalize the trip (offer, button and chat); a final trip can't be edited; full PDF | To do |
+| V5 | Route reality check: no place the day can't physically reach | To do |
+| V6 | Plans and payments: Free / Plus / Pro, pay-as-you-go, long-term history, better models | Later in v2, after V1–V5 |
+
+### V1. Feedback form in the footer
+
+- A small form in the shared footer (every page except the planner): message, optional email for a reply, send. Signed-in users get their email filled in.
+- The backend sends it to the owner's email (`FEEDBACK_TO` env var). Use a free transactional email API (e.g. Resend or Brevo free tiers; check current limits and terms) or Gmail SMTP with an app password. The key or password lives only in Render's environment, never in the frontend.
+- Abuse guards: a length cap, a hidden honeypot field, and a per-IP / per-guest rate limit (e.g. 5 a day).
+- States: sending, sent ("Thanks, it's in my inbox"), and a clear error that keeps the text so nothing is lost.
+
+### V2. One budget everywhere (fix the mismatch first)
+
+**Today:** two sources of numbers. In build-with-your-guide, the panel copies the guide's estimates turn by turn, but only when the guide's currency equals the trip's currency (`services/budget.py`, `_copilot_estimates`). In a full itinerary, the panel's "Suggest amounts" makes its own estimates, separate from anything the chat said. The dock's total (stay + food baseline + places) can also differ from what the panel's rows add up to.
+
+- Reproduce first: one trip in each mode, then compare the chat's numbers, the dock total, and the panel's rows and projected total. Write down every difference and its cause.
+- One source of truth per trip, which the chat, the dock, the panel and the PDF all read. Currency conversion happens in one place, rather than skipping the sync.
+- A test: the guide's total equals the panel's projected total for the same trip.
+
+### V3. Finalize the budget
+
+- **Lock this budget** in the budget panel. It takes the current amounts (entered, plus suggestions the user accepts in the same step) as the final budget. Locked rows become read-only and show "Final"; **Unlock** is available until the trip itself is finalized.
+- From chat: "I'm happy with the budget, lock it in" does the same. The interpreter recognizes it, the change receipt says "Budget locked at ~₹X", and the reply confirms it.
+- The guide offers it once the budget looks complete ("Shall I lock this budget?"), with a button under the reply.
+- The PDF's budget section shows the final budget (marked final) instead of estimates.
+
+### V4. Finalize the trip
+
+**Today:** "Finish" in build-with-your-guide only sets `status = "complete"`, and edits keep working (the guide says so). The full itinerary has no finish step. That's misleading: nothing ever ends.
+
+- After changes settle, the guide asks "Shall we finalize the trip?", with a **Finalize trip** button under the reply. Saying "I'm satisfied, finalize and confirm it" in chat does the same, in both modes.
+- Before finalizing, show a short summary to confirm: days, places, budget (locked or not), dates.
+- A finalized trip is read-only. Edit requests get a plain answer ("This trip is finalized"), and the dock, the Add buttons and the edit controls are hidden. The trip shows "Final" in the studio and in My trips.
+- The PDF becomes the trip document: every day, the locked budget, weather and holidays, and marked final.
+- **Decide when building:** whether a finalized trip can be reopened (e.g. **Reopen trip** with a confirmation), or must be duplicated to change. The owner asked for "no modification", so the default is no reopening.
+
+### V5. Route reality check
+
+**Today:** time between places inside a day is a flat allowance per hop (`engine.HOP_MINUTES` by travel mode), whatever the distance. Nothing checks that a place is reachable in the slot it's put in. A place 40 hours away can sit in the same afternoon. The full itinerary does no check at all.
+
+- Give every place coordinates (geocoding already exists: `services/place_geocoding.py`), and estimate the real travel time between consecutive places and from the day's base. Use road time where available (`services/route_metrics.py`, ORS or Google Routes), with a distance-based fallback.
+- Use that time in the day's hours instead of the flat hop allowance.
+- The reality check: a place too far for its slot (travel alone exceeds the remaining day, or it isn't near the day's base) can't be added there. The receipt says why in plain words ("Too far for one afternoon: about 40 h from Kyoto"), and the guide offers what fits: another day, a change of base, or an overnight stop. In line with F4, the user can still insist ("add it anyway") on soft limits, but impossible ones (travel longer than the day) are refused.
+- Run the same check on the full itinerary's draft and on edits to it. Flag impossible days in the reply and the receipt.
+- Tests: a far place is refused for an afternoon; a near one is accepted; the day's hours include the real travel time.
+
+### V6. Plans, payments and history (later in v2)
+
+Reverses two earlier "not now" decisions (long-term memory, payments), now that v1 is live:
+- **Plans:** Free (the daily cap from N3), plus paid tiers (e.g. Plus and Pro) or pay-as-you-go credits. Price them to cover LLM costs.
+- **Paid tiers get:** a persistent history across trips (long-term memory). Keep it deterministic and visible, as discussed on 2026-09-30: structured facts the user can see and edit, not LLM-written memories, to avoid made-up facts. They also get a choice of better models and higher limits.
+- **Payments:** Dodo Payments (UPI) or another gateway, with a verified webhook that adds credits to a ledger. Also needed: refund, Terms and Privacy pages. Find an LLM provider that can be prepaid without a card first.
+- Still pending from v1 planning: N1 (measure tokens), N2 (more free providers), N3 (daily allowance), N4 (cap message), N5 (Privacy/Terms). N3 and N5 are prerequisites for V6.
+
 ## Next up (agreed 2026-09-30): free with a daily cap, more free providers, then deploy
 
 _From the discussion after F1. Dropped for now: **long-term memory** (an LLM-written memory would bring back made-up facts), **bring your own key** (keeping someone else's key safely is security work we don't want yet), and **payments** (no demand signal yet; see "Later" below)._
