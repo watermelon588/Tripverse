@@ -2,17 +2,17 @@
 
 _Written 2026-09-28 from the planning discussion. Seven build sessions, each medium to hard and each leaving the app working. The last section lists future work that is deliberately out of scope._
 
-## Version 2 (agreed 2026-10-02) — not started
+## Version 2 (agreed 2026-10-02) — in progress
 
-_Version 1 is live (frontend on Vercel, backend on Render; see `DEPLOY.md`). Version 2 makes a trip something you can actually finish: a locked budget, a finalized itinerary, routes that respect real travel times, and a way to send feedback. Build in the order below. Nothing here is built yet._
+_Version 1 is live. V1–V5 are implemented locally: feedback, one ledger-backed budget, reversible budget lock, confirmed trip finalization, and route feasibility checks._
 
 | # | Task | Status |
 |---|---|---|
-| V1 | Feedback form in the footer, delivered to the owner's email | To do |
-| V2 | One budget: the guide's numbers and the budget panel always agree | To do |
-| V3 | Finalize the budget (button and chat), shown as final in the PDF | To do |
-| V4 | Finalize the trip (offer, button and chat); a final trip can't be edited; full PDF | To do |
-| V5 | Route reality check: no place the day can't physically reach | To do |
+| V1 | Feedback form in the footer, delivered to the owner's email | Done |
+| V2 | One budget: the guide's numbers and the budget panel always agree | Done locally; ledger is authoritative |
+| V3 | Finalize the budget (button and chat), shown as final in the PDF | Done locally; unlock available |
+| V4 | Finalize the trip (offer, button and chat); a final trip can't be edited; full PDF | Done locally; confirmation required |
+| V5 | Route reality check: no place the day can't physically reach | Done locally; bounded lookups and provisional estimates |
 | V6 | Plans and payments: Free / Plus / Pro, pay-as-you-go, long-term history, better models | Later in v2, after V1–V5 |
 
 ### V1. Feedback form in the footer
@@ -27,21 +27,21 @@ _Version 1 is live (frontend on Vercel, backend on Render; see `DEPLOY.md`). Ver
 **Today:** two sources of numbers. In build-with-your-guide, the panel copies the guide's estimates turn by turn, but only when the guide's currency equals the trip's currency (`services/budget.py`, `_copilot_estimates`). In a full itinerary, the panel's "Suggest amounts" makes its own estimates, separate from anything the chat said. The dock's total (stay + food baseline + places) can also differ from what the panel's rows add up to.
 
 - Reproduce first: one trip in each mode, then compare the chat's numbers, the dock total, and the panel's rows and projected total. Write down every difference and its cause.
-- One source of truth per trip, which the chat, the dock, the panel and the PDF all read. Currency conversion happens in one place, rather than skipping the sync.
+- One source of truth per trip, which the chat, the dock, the panel and the PDF all read. The app does not have a verified exchange-rate provider, so it refuses currency changes after guided planning starts or amounts are entered; it never silently relabels a number.
 - A test: the guide's total equals the panel's projected total for the same trip.
 
 ### V3. Finalize the budget
 
 - **Lock this budget** in the budget panel. It takes the current amounts (entered, plus suggestions the user accepts in the same step) as the final budget. Locked rows become read-only and show "Final"; **Unlock** is available until the trip itself is finalized.
-- From chat: "I'm happy with the budget, lock it in" does the same. The interpreter recognizes it, the change receipt says "Budget locked at ~₹X", and the reply confirms it.
+- From chat: "I'm happy with the budget, lock it in" does the same. The interpreter recognizes it, the change receipt shows the exact locked amount and currency, and the reply confirms it.
 - The guide offers it once the budget looks complete ("Shall I lock this budget?"), with a button under the reply.
 - The PDF's budget section shows the final budget (marked final) instead of estimates.
 
 ### V4. Finalize the trip
 
-**Today:** "Finish" in build-with-your-guide only sets `status = "complete"`, and edits keep working (the guide says so). The full itinerary has no finish step. That's misleading: nothing ever ends.
+**Previous behavior:** "Finish" in build-with-your-guide only set the guide's progress to `complete`, and edits kept working. Trip finalization now uses the trip's durable `COMPLETED` status after confirmation.
 
-- After changes settle, the guide asks "Shall we finalize the trip?", with a **Finalize trip** button under the reply. Saying "I'm satisfied, finalize and confirm it" in chat does the same, in both modes.
+- Once a full itinerary is available or guided planning is marked complete, the assistant offers a **Review & finalize trip** button. The header and Studio also offer finalization. Saying "finalize the trip" in chat shows a summary; "yes, finalize" confirms it.
 - Before finalizing, show a short summary to confirm: days, places, budget (locked or not), dates.
 - A finalized trip is read-only. Edit requests get a plain answer ("This trip is finalized"), and the dock, the Add buttons and the edit controls are hidden. The trip shows "Final" in the studio and in My trips.
 - The PDF becomes the trip document: every day, the locked budget, weather and holidays, and marked final.
@@ -49,7 +49,9 @@ _Version 1 is live (frontend on Vercel, backend on Render; see `DEPLOY.md`). Ver
 
 ### V5. Route reality check
 
-**Today:** time between places inside a day is a flat allowance per hop (`engine.HOP_MINUTES` by travel mode), whatever the distance. Nothing checks that a place is reachable in the slot it's put in. A place 40 hours away can sit in the same afternoon. The full itinerary does no check at all.
+**Previous behavior:** time between places inside a day was a flat allowance per hop (`engine.HOP_MINUTES` by travel mode), whatever the distance. A place 40 hours away could sit in the same afternoon. The full itinerary did no check at all.
+
+**Implemented:** the guided planner uses coordinates and a bounded road lookup when driving or taking a taxi, then a labelled distance estimate when road time is unavailable. It includes base-to-place, between-place, and return travel in day hours. Known impossible adds and moves are refused even with force; soft pace and budget limits remain overridable. Full drafts and revisions carry day-level travel warnings into the receipt, Studio, and PDF. Missing coordinates stay provisional rather than being treated as nearby. The lookup budget is at most 12 place attempts and 6 road pairs per trip, with smaller turn limits; Google Routes remains disabled by default.
 
 - Give every place coordinates (geocoding already exists: `services/place_geocoding.py`), and estimate the real travel time between consecutive places and from the day's base. Use road time where available (`services/route_metrics.py`, ORS or Google Routes), with a distance-based fallback.
 - Use that time in the day's hours instead of the flat hop allowance.

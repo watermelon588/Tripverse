@@ -15,7 +15,7 @@ export interface CurrentTripContext {
   budget?: number;
   currency?: string;
   travelers?: number;
-  status?: 'DISCOVERY' | 'ONBOARDING' | 'CHOOSING' | 'ROUTING' | 'ITINERARY' | 'CONFIRMED';
+  status?: 'DISCOVERY' | 'ONBOARDING' | 'CHOOSING' | 'ROUTING' | 'ITINERARY' | 'CONFIRMED' | 'FINAL';
   interests?: string[];
 }
 
@@ -32,6 +32,7 @@ const STATUS_TONE: Record<NonNullable<CurrentTripContext['status']>, string> = {
   ROUTING: 'tv-tag--yellow',
   ITINERARY: 'tv-tag--yellow',
   CONFIRMED: 'tv-tag--green',
+  FINAL: 'tv-tag--green',
 };
 
 export const CurrentTrip: React.FC<CurrentTripProps> = ({ trip, onExploreSpatial, className = '' }) => {
@@ -87,7 +88,7 @@ export const CurrentTrip: React.FC<CurrentTripProps> = ({ trip, onExploreSpatial
       )}
 
       {/* Only once there is a plan to open, and under the name every other entry point uses. */}
-      {onExploreSpatial && trip.status === 'ROUTING' && (
+      {onExploreSpatial && (trip.status === 'ROUTING' || trip.status === 'CONFIRMED' || trip.status === 'FINAL') && (
         <button type="button" className="tv-btn tv-btn--primary tv-btn--sm" style={{ width: '100%' }} onClick={onExploreSpatial}>
           <LayersIcon width={14} height={14} />
           <span>Open studio</span>

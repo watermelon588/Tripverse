@@ -25,7 +25,9 @@ export const MADE_WITH: Row[] = [
 ];
 
 export function planRows(doc: TripDocument): Row[] {
-  const rows: Row[] = [{ kind: 'title', text: 'Day by day' }];
+  const rows: Row[] = doc.is_final
+    ? [{ kind: 'title', text: 'Final trip plan' }, { kind: 'meta', text: 'Confirmed itinerary · read-only snapshot' }, { kind: 'title', text: 'Day by day' }]
+    : [{ kind: 'title', text: 'Day by day' }];
   const cur = doc.budget.currency;
   for (const day of doc.days) {
     rows.push({ kind: 'heading', text: `${dayTitle(day.day, day.date)}${day.base ? ` · ${day.base}` : ''}` });
@@ -34,6 +36,10 @@ export function planRows(doc: TripDocument): Row[] {
       day.est_cost ? `about ${money(day.est_cost, cur)}` : null,
     ].filter(Boolean).join(' · ');
     if (facts) rows.push({ kind: 'meta', text: facts });
+    if (day.travel_hours != null && day.items.length) rows.push({ kind: 'meta', text:
+      `Travel: about ${day.travel_hours} h from ${day.base} through the places and back${day.travel_distance_km ? ` · ${day.travel_distance_km} km straight line` : ''}${day.unverified_legs ? ` · ${day.unverified_legs} unverified legs` : ` · ${day.travel_basis === 'road' ? 'road time' : 'distance estimate'}`}` });
+    doc.route_warnings?.filter((warning) => warning.day === day.day).forEach((warning) =>
+      rows.push({ kind: 'meta', text: `Travel check (${warning.severity}): ${warning.message}` }));
 
     const weather = doc.enrichment?.weather.find((entry) => entry.day === day.day);
     if (weather) {
@@ -66,13 +72,12 @@ export function planRows(doc: TripDocument): Row[] {
     rows.push({ kind: 'gap', text: '' });
   }
 
-  const { target, planned, entered, projected } = doc.budget;
-  const total = Math.max(projected, planned ?? 0);
-  rows.push({ kind: 'title', text: 'Budget' });
+  const { target, entered, projected, is_locked, locked_total } = doc.budget;
+  const total = is_locked ? locked_total ?? entered : projected;
+  rows.push({ kind: 'title', text: is_locked ? 'Final budget' : 'Budget' });
   if (target != null) rows.push({ kind: 'item', text: `Budget: ${money(target, cur)}` });
-  if (planned != null) rows.push({ kind: 'item', text: `Planned: ${money(planned, cur)}` });
-  if (entered) rows.push({ kind: 'item', text: `Spent so far: ${money(entered, cur)}` });
-  rows.push({ kind: 'item', text: `Total: ${total ? money(total, cur) : 'not costed yet'}${target != null && total > target ? ` (over by ${money(total - target, cur)})` : ''}` });
+  if (!is_locked && entered) rows.push({ kind: 'item', text: `Entered costs: ${money(entered, cur)}` });
+  rows.push({ kind: 'item', text: `${is_locked ? 'Final total' : 'Total'}: ${total ? money(total, cur) : 'not costed yet'}${target != null && total > target ? ` (over by ${money(total - target, cur)})` : ''}` });
   const costed = doc.days.filter((day) => day.est_cost);
   if (costed.length) {
     rows.push({ kind: 'label', text: 'By day' });

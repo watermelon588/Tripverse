@@ -372,6 +372,8 @@ async def test_stream_form_submission(client: AsyncClient):
     generated_events = [json.loads(line[6:]) for line in generated.text.splitlines() if line.startswith("data: ")]
     generated_done = next(event for event in generated_events if event["type"] == "done")
     assert generated_done["assistant_message"]["payload"]["graph"]["nodes"]
+    assert "route_reality" in generated_done["assistant_message"]["payload"]
+    assert any(event.get("label") == "Checking travel time" for event in generated_events)
 
 
 @pytest.mark.asyncio

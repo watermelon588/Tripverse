@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.trip_planner.nodes.extract_itinerary_node import normalize_day_plan
 from app.models.trip import Trip
-from app.schemas.trip_document import DocBudget, DocDay, DocItem, DocLeg, DocTravelers, TripDocument
+from app.models.enums import TripStatus
+from app.schemas.trip_document import DocBudget, DocDay, DocItem, DocLeg, DocRouteWarning, DocTravelers, TripDocument
 from app.services.budget import budget_response, latest_itinerary_payload
 from app.services.enrichment import get_enrichment
 
@@ -26,6 +27,10 @@ def _agent_days(copilot: dict) -> list[DocDay]:
     return [DocDay(
         day=day["day"], base=day["base"],
         est_cost=totals.get(day["day"], {}).get("cost"), hours=totals.get(day["day"], {}).get("hours"),
+        travel_hours=totals.get(day["day"], {}).get("travel_hours"),
+        travel_distance_km=totals.get(day["day"], {}).get("distance_km"),
+        travel_basis=totals.get(day["day"], {}).get("travel_basis"),
+        unverified_legs=totals.get(day["day"], {}).get("unverified_legs", 0),
         items=[DocItem(name=item["name"], category=item.get("category") or "other", area=item.get("area"),
                        est_cost=item.get("est_cost"), duration_hours=item.get("duration_hours"),
                        tip=item.get("why") or None, source_url=item.get("source")) for item in day["items"]],
@@ -60,6 +65,17 @@ async def build_trip_document(db: AsyncSession, trip: Trip) -> TripDocument:
                                          items=[DocItem(**item) for item in entry["items"]]) for entry in raw]
     else:
         mode, days = "none", []
+    if mode == "one_shot":
+        from app.services.route_reality import day_travel
+
+        route = payload.get("route_reality") or {}
+        for day in days:
+            raw = next((entry for entry in payload.get("day_plan") or [] if entry.get("day") == day.day), None)
+            if raw:
+                travel = day_travel(route, day.base, [item for item in raw.get("items", []) if not item.get("option")],
+                                    prefs.get("travel_mode") or "transit")
+                day.travel_hours, day.travel_distance_km = travel["hours"], travel["distance_km"]
+                day.travel_basis, day.unverified_legs = travel["basis"], travel["unverified_legs"]
     for day in days:
         day.date = start + timedelta(days=day.day - 1) if start else None
 
@@ -75,8 +91,19 @@ async def build_trip_document(db: AsyncSession, trip: Trip) -> TripDocument:
                    **{key: edge.get(key) for key in ("mode", "duration", "distance", "cost")})
             for edge in (graph or {}).get("edges", []) if edge.get("source") in names and edge.get("target") in names]
 
+    if copilot:
+        from app.services.route_reality import check_plan_days
+
+        route_warnings = check_plan_days(copilot, copilot.get("days") or [],
+                                         (copilot.get("profile") or {}).get("travel_mode") or "transit",
+                                         {"relaxed": 6.0, "balanced": 8.0, "packed": 11.0}.get(
+                                             (copilot.get("profile") or {}).get("pace"), 8.0))
+    else:
+        route_warnings = (payload.get("route_reality") or {}).get("warnings", [])
+
     return TripDocument(
-        trip_id=trip.id, mode=mode, status=copilot.get("status") if copilot else None,
+        trip_id=trip.id, mode=mode, is_final=trip.status == TripStatus.COMPLETED,
+        status=copilot.get("status") if copilot else None,
         destination=trip.destination, origin=trip.origin_text, duration_days=trip.duration_days,
         start_date=start, end_date=start + timedelta(days=duration - 1) if start and duration else None,
         travelers=DocTravelers(adults=prefs.get("adults") or 1, children=prefs.get("children") or 0),
@@ -84,10 +111,13 @@ async def build_trip_document(db: AsyncSession, trip: Trip) -> TripDocument:
         pace=prefs.get("pace") or "balanced", interests=prefs.get("interests") or [],
         avoid=prefs.get("avoid") or [], must_see=trip.places_to_visit or [], guide=prefs.get("guide"),
         days=days, legs=legs, graph=graph, enrichment=enrichment,
+        route_warnings=[DocRouteWarning.model_validate(warning) for warning in route_warnings],
         budget=DocBudget(
             currency=budget.currency,
             target=float(budget.target_amount) if budget.target_amount is not None else None,
-            planned=(copilot.get("summary") or {}).get("committed") if copilot else None,
+            planned=float(budget.projected_total) if graph else None,
             entered=float(budget.priced_total), projected=float(budget.projected_total),
+            is_locked=budget.is_locked,
+            locked_total=float(budget.locked_total) if budget.locked_total is not None else None,
         ),
     )

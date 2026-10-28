@@ -268,18 +268,17 @@ function overviewPage(doc: TripDocument, f: Frame): SketchPage {
 
 /** The budget as a till receipt; the total is circled in red when it's over the target. */
 function receipt(doc: TripDocument, f: Frame): SketchElement[] {
-  const { currency, target, planned, entered, projected } = doc.budget;
+  const { currency, target, entered, projected, is_locked, locked_total } = doc.budget;
   const { x, y, w, bottom } = f.receipt;
   const lineH = 28;
   const rows: [string, string][] = [];
-  if (planned != null) rows.push(['Planned', money(planned, currency)]);
-  if (entered) rows.push(['Spent so far', money(entered, currency)]);
+  if (!is_locked && entered) rows.push(['Entered', money(entered, currency)]);
   if (target != null) rows.push(['Budget', money(target, currency)]);
   const els: SketchElement[] = [
     { id: 'rc-box', kind: 'box', x, y, w, h: bottom - y, tone: 'ink' },
     { id: 'rc-head', kind: 'text', x: x + w / 2, y: y + 32, lines: ['RECEIPT'], size: 22, tone: 'muted', anchor: 'middle', bold: true },
   ];
-  if (!rows.length && !projected && !planned) {
+  if (!rows.length && !projected && !is_locked) {
     els.push({ id: 'rc-empty', kind: 'text', x: x + w / 2, y: y + 100, lines: ['Nothing costed yet'], size: 22, tone: 'muted', anchor: 'middle' });
     return els;
   }
@@ -290,11 +289,10 @@ function receipt(doc: TripDocument, f: Frame): SketchElement[] {
   });
   const ty = y + 64 + rows.length * lineH + 18;
   els.push({ id: 'rc-rule', kind: 'path', points: [[x + 16, ty - 22], [x + w - 16, ty - 22]], tone: 'muted', dashed: true });
-  // Agent trips have a planned total before anything is logged in the ledger.
-  const sum = Math.max(projected, planned ?? 0);
+  const sum = is_locked ? locked_total ?? entered : projected;
   const over = target != null && sum > target;
   const total = money(sum, currency);
-  els.push({ id: 'rc-total-l', kind: 'text', x: x + 18, y: ty + 6, lines: ['Total'], size: 24, tone: 'ink', bold: true });
+  els.push({ id: 'rc-total-l', kind: 'text', x: x + 18, y: ty + 6, lines: [is_locked ? 'Final total' : 'Total'], size: 24, tone: 'ink', bold: true });
   els.push({ id: 'rc-total-v', kind: 'text', x: x + w - 18, y: ty + 6, lines: [sum ? total : 'not costed yet'], size: sum ? 24 : 20, tone: over ? 'red' : sum ? 'ink' : 'muted', anchor: 'end', bold: !!sum });
   if (over) {
     const tw = textWidth(total, 24);

@@ -11,6 +11,7 @@
  * finish, or a typed message) go to the server, tagged with the day on screen.
  */
 import { useState } from 'react';
+import type { TripBudget } from '../../services/tripService';
 import { ArrowDownIcon, ArrowRightIcon, PlusIcon } from '../home/v2/IconsV2';
 import { MarkdownMessage } from './MarkdownMessage';
 
@@ -46,7 +47,8 @@ export interface CopilotState {
     baseline: number;
     remaining: number | null;
     over: boolean;
-    by_day: { day: number; cost: number; hours: number; capacity_hours: number }[];
+    by_day: { day: number; cost: number; hours: number; capacity_hours: number;
+      travel_hours?: number; distance_km?: number; unverified_legs?: number; travel_basis?: string }[];
   };
 }
 
@@ -54,6 +56,7 @@ export type CopilotOp = Record<string, unknown> & { op: string };
 
 interface Props {
   copilot: CopilotState;
+  budget?: TripBudget;
   viewDay: number;
   onViewDay: (day: number) => void;
   disabled?: boolean;
@@ -68,7 +71,7 @@ function money(amount: number, currency: string): string {
   }
 }
 
-export function CopilotPanel({ copilot, viewDay, onViewDay, disabled, onOps }: Props) {
+export function CopilotPanel({ copilot, budget, viewDay, onViewDay, disabled, onOps }: Props) {
   const [open, setOpen] = useState(false);
   const day = copilot.days[viewDay - 1] || copilot.days[0];
   if (!day) return null;
@@ -76,8 +79,10 @@ export function CopilotPanel({ copilot, viewDay, onViewDay, disabled, onOps }: P
   const suggestions = (day.suggestions ?? (day.day === copilot.current_day ? copilot.last_suggestions : []))
     .map((name) => copilot.pool.find((item) => item.name === name))
     .filter((item): item is CopilotItem => Boolean(item));
-  const committed = copilot.summary?.committed ?? 0;
-  const used = copilot.budget ? Math.min(100, committed / copilot.budget * 100) : 0;
+  const committed = budget ? Number(budget.projected_total) : copilot.summary?.committed ?? 0;
+  const target = budget ? (budget.target_amount === null ? null : Number(budget.target_amount)) : copilot.budget;
+  const currency = budget?.currency || copilot.currency;
+  const used = target ? Math.min(100, committed / target * 100) : 0;
   const complete = copilot.status === 'complete';
   const act = (ops: CopilotOp[], label: string) => onOps(ops, label, day.day);
 
@@ -93,6 +98,7 @@ export function CopilotPanel({ copilot, viewDay, onViewDay, disabled, onOps }: P
             <span>
               {day.items.length ? `${day.items.length} place${day.items.length === 1 ? '' : 's'}` : 'Open day'}
               {stats ? ` · ${stats.hours} of ${stats.capacity_hours} h` : ''}
+              {stats?.travel_hours ? ` · ${stats.travel_hours} h travel` : ''}
             </span>
           </p>
           <button type="button" disabled={day.day >= copilot.days.length} onClick={() => onViewDay(day.day + 1)} aria-label="Next day">
@@ -100,13 +106,13 @@ export function CopilotPanel({ copilot, viewDay, onViewDay, disabled, onOps }: P
           </button>
         </div>
 
-        <div className={`tv-copilot__budget ${copilot.summary?.over ? 'is-over' : ''}`}>
+        <div className={`tv-copilot__budget ${target !== null && committed > target ? 'is-over' : ''}`}>
           <span>
-            {copilot.budget
-              ? `~${money(committed, copilot.currency)} planned of ${money(copilot.budget, copilot.currency)}${copilot.summary?.over ? ' · over budget' : ''}`
-              : `~${money(committed, copilot.currency)} planned · no budget set`}
+            {target !== null
+              ? `${budget?.is_locked ? 'Final ' : '~'}${money(committed, currency)} planned of ${money(target, currency)}${committed > target ? ' · over budget' : ''}`
+              : `~${money(committed, currency)} planned · no budget set`}
           </span>
-          {copilot.budget ? <i role="progressbar" aria-label="Budget used" aria-valuenow={Math.round(used)}
+          {target !== null ? <i role="progressbar" aria-label="Budget used" aria-valuenow={Math.round(used)}
             aria-valuemin={0} aria-valuemax={100}><b style={{ width: `${used}%` }} /></i> : null}
         </div>
 
@@ -130,6 +136,12 @@ export function CopilotPanel({ copilot, viewDay, onViewDay, disabled, onOps }: P
 
       {open && (
         <div className="tv-copilot__detail" id="copilot-detail">
+          {stats && day.items.length > 0 && <p className="tv-copilot__empty">
+            Travel: ~{stats.travel_hours ?? 0} h from {day.base} through these places and back.
+            {stats.distance_km ? ` ${stats.distance_km} km straight line.` : ''}
+            {stats.unverified_legs ? ` ${stats.unverified_legs} leg${stats.unverified_legs === 1 ? '' : 's'} unverified; timing is provisional.`
+              : ` ${stats.travel_basis === 'road' ? 'Road time where available.' : 'Distance-based estimate.'}`}
+          </p>}
           <nav className="tv-copilot__days" aria-label="Trip days">
             {copilot.days.map((entry) => (
               <button key={entry.day} type="button" onClick={() => onViewDay(entry.day)}

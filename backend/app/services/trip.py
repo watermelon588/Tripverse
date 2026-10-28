@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.trip_planner.graph import trip_planner_graph
 from app.core.auth import RequestIdentity
-from app.models.enums import MessageRole, MessageType
+from app.models.enums import MessageRole, MessageType, TripStatus
 from app.models.trip import Trip
 from app.repositories.conversation import ConversationRepository
 from app.repositories.message import MessageRepository
@@ -60,6 +60,26 @@ class TripService:
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Forbidden: You do not have permission to access this guest trip.",
                 )
+
+    async def finalize_trip(self, db: AsyncSession, trip: Trip) -> TripResponse:
+        """Confirm the saved itinerary as the immutable trip document."""
+        from app.services.budget import budget_response, latest_itinerary_payload
+
+        if trip.status == TripStatus.COMPLETED:
+            return TripResponse.model_validate(trip)
+        if trip.status != TripStatus.PLANNING:
+            raise HTTPException(status_code=409, detail="Create an itinerary before finalizing the trip.")
+        payload = await latest_itinerary_payload(db, trip.id) or {}
+        if not (payload.get("graph") or {}).get("nodes"):
+            raise HTTPException(status_code=409, detail="The trip needs a saved itinerary before finalizing.")
+        copilot = payload.get("copilot")
+        if copilot and copilot.get("status") != "complete":
+            raise HTTPException(status_code=409, detail="Finish the guided day plan before finalizing the trip.")
+        await budget_response(db, trip, payload=payload)
+        trip.status = TripStatus.COMPLETED
+        await db.commit()
+        await db.refresh(trip)
+        return TripResponse.model_validate(trip)
 
     async def create_trip(
         self, db: AsyncSession, identity: Optional[RequestIdentity] = None

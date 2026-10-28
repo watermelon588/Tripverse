@@ -668,9 +668,20 @@
   max-width: 34ch;
 }
 
-/* Beside the title once a plan exists: there is no "finalize" step to look for. */
+/* Compact trip status beside the title. */
 .tv-chat__saved { flex: none; padding-left: 0.6rem; border-left: 1px solid var(--tv-line); font-size: 0.68rem; white-space: nowrap; }
 @media (max-width: 900px) { .tv-chat__saved { display: none; } }
+
+.tv-finalize { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 1rem; background: rgba(17, 17, 17, .58); }
+.tv-finalize__card { width: min(100%, 32rem); max-height: min(90vh, 44rem); overflow: auto; padding: clamp(1.25rem, 3vw, 2rem); background: var(--tv-surface); border: 1px solid var(--tv-line-strong); color: var(--tv-ink); box-shadow: 0 24px 72px rgba(0, 0, 0, .18); }
+.tv-finalize__card h2 { margin: .5rem 0; font-family: var(--tv-font-display, Georgia, serif); font-size: clamp(1.7rem, 4vw, 2.4rem); font-weight: 400; }
+.tv-finalize__card p { margin: 0 0 1.25rem; color: var(--tv-muted); line-height: 1.5; }
+.tv-finalize__card dl { margin: 0; border-top: 1px solid var(--tv-line); }
+.tv-finalize__card dl > div { display: grid; grid-template-columns: 5rem 1fr; gap: 1rem; padding: .8rem 0; border-bottom: 1px solid var(--tv-line); }
+.tv-finalize__card dt { color: var(--tv-muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; }
+.tv-finalize__card dd { margin: 0; font-size: .9rem; line-height: 1.4; }
+.tv-finalize__actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .65rem; margin-top: 1.25rem; }
+.tv-finalize__error { color: #ae3c2e !important; margin-top: 1rem !important; }
 
 .tv-chat__scroll {
   flex: 1;

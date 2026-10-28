@@ -30,6 +30,19 @@ class DocDay(BaseModel):
     items: list[DocItem] = Field(default_factory=list)
     est_cost: Optional[float] = None  # whole party, from the agent's day total
     hours: Optional[float] = None
+    travel_hours: Optional[float] = None
+    travel_distance_km: Optional[float] = None
+    travel_basis: Optional[str] = None
+    unverified_legs: int = 0
+
+
+class DocRouteWarning(BaseModel):
+    day: int
+    severity: Literal["impossible", "tight", "unverified"]
+    message: str
+    travel_hours: float = 0
+    distance_km: float = 0
+    basis: str = "distance estimate"
 
 
 class DocLeg(BaseModel):
@@ -44,9 +57,11 @@ class DocLeg(BaseModel):
 class DocBudget(BaseModel):
     currency: str
     target: Optional[float] = None
-    planned: Optional[float] = None  # the agent's running total (stay, food, plans, local travel)
+    planned: Optional[float] = None  # canonical ledger projection for planned trips
     entered: float = 0.0  # amounts the traveler entered or accepted in the budget planner
     projected: float = 0.0  # entered + suggestions still pending
+    is_locked: bool = False
+    locked_total: Optional[float] = None
 
 
 class DocTravelers(BaseModel):
@@ -113,6 +128,7 @@ class DocEnrichment(BaseModel):
 class TripDocument(BaseModel):
     trip_id: UUID
     mode: Literal["agent", "one_shot", "none"]
+    is_final: bool = False
     status: Optional[Literal["building", "complete"]] = None  # build-with-the-agent progress
     destination: Optional[str] = None
     origin: Optional[str] = None
@@ -128,6 +144,7 @@ class TripDocument(BaseModel):
     must_see: list[str] = Field(default_factory=list)
     guide: Optional[str] = None
     days: list[DocDay] = Field(default_factory=list)
+    route_warnings: list[DocRouteWarning] = Field(default_factory=list)
     legs: list[DocLeg] = Field(default_factory=list)
     budget: DocBudget
     graph: Optional[dict] = None  # the itinerary graph the map and 3D views render

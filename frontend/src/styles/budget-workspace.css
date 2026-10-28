@@ -81,3 +81,10 @@
 .tv-budget__estimate div { display: flex; flex-wrap: wrap; gap: .5rem; }
 .tv-budget__estimate button { min-height: 36px; padding: .45rem .8rem; border: 1px solid var(--tv-line-strong); border-radius: 4px; color: var(--tv-ink); font: .69rem var(--tv-sans); }
 .tv-budget__estimate button.is-primary { border-color: var(--tv-ink); background: var(--tv-ink); color: var(--tv-surface); }
+.tv-budget__locked, .tv-budget__lock-action { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .8rem; margin: 1rem 0; padding: .9rem 1rem; border: 1px solid var(--tv-line-strong); background: var(--tv-surface); }
+.tv-budget__locked > div, .tv-budget__lock-action > div:first-child { display: grid; gap: .25rem; }
+.tv-budget__locked strong, .tv-budget__lock-action strong { font-size: .82rem; }
+.tv-budget__locked span, .tv-budget__lock-action span { max-width: 48ch; color: var(--tv-muted); font-size: .69rem; line-height: 1.45; }
+.tv-budget__locked button, .tv-budget__lock-action button { min-height: 36px; padding: .45rem .75rem; border: 1px solid var(--tv-line-strong); color: var(--tv-ink); font-size: .69rem; }
+.tv-budget__lock-action > div:last-child { display: flex; flex-wrap: wrap; gap: .45rem; }
+.tv-budget__lock-action button:first-child { border-color: var(--tv-ink); background: var(--tv-ink); color: var(--tv-surface); }

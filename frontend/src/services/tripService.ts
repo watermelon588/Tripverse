@@ -69,6 +69,9 @@ export interface TripBudget {
   trip_id: string;
   currency: BudgetCurrency;
   target_amount: string | null;
+  is_locked: boolean;
+  locked_at: string | null;
+  locked_total: string | null;
   priced_total: string;
   remaining: string | null;
   unpriced_count: number;
@@ -113,6 +116,8 @@ export interface TripDocumentItem {
 }
 
 export interface TripNote { tone: 'good' | 'warn' | 'info'; text: string }
+export interface RouteWarning { day: number; severity: 'impossible' | 'tight' | 'unverified'; message: string;
+  travel_hours: number; distance_km: number; basis: string }
 
 /** Weather, holidays and exchange rates around the trip's dates (backend `services/enrichment.py`). */
 export interface TripEnrichment {
@@ -143,6 +148,7 @@ export interface TripEnrichment {
 export interface TripDocument {
   trip_id: string;
   mode: 'agent' | 'one_shot' | 'none';
+  is_final?: boolean;
   status: 'building' | 'complete' | null;
   destination: string | null;
   origin: string | null;
@@ -157,9 +163,12 @@ export interface TripDocument {
   avoid: string[];
   must_see: string[];
   guide: string | null;
-  days: { day: number; date: string | null; base: string; items: TripDocumentItem[]; est_cost: number | null; hours: number | null }[];
+  days: { day: number; date: string | null; base: string; items: TripDocumentItem[]; est_cost: number | null; hours: number | null;
+    travel_hours?: number | null; travel_distance_km?: number | null; travel_basis?: string | null; unverified_legs?: number }[];
+  route_warnings?: RouteWarning[];
   legs: { source: string; target: string; mode: string | null; duration: string | null; distance: string | null; cost: string | null }[];
-  budget: { currency: string; target: number | null; planned: number | null; entered: number; projected: number };
+  budget: { currency: string; target: number | null; planned: number | null; entered: number; projected: number;
+    is_locked?: boolean; locked_total?: number | null };
   graph: ItineraryGraph | null;
   /** Null when every source failed, enrichment is off, or the trip has nothing to look up yet. */
   enrichment: TripEnrichment | null;
@@ -171,8 +180,17 @@ export async function getTripDocument(tripId: string): Promise<TripDocument> {
   return response.data;
 }
 
+export async function finalizeTrip(tripId: string): Promise<TripModelResponse> {
+  const response = await apiFetch<TripModelResponse>(`/api/trips/${tripId}/finalize`, { method: 'POST' });
+  if (!response.ok || !response.data) throw new Error(response.error || 'Could not finalize the trip');
+  return response.data;
+}
+
 export const estimateBudget = (tripId: string) => budgetRequest(tripId, '/estimates', 'POST');
 export const acceptBudgetEstimates = (tripId: string) => budgetRequest(tripId, '/estimates/accept', 'POST');
+export const lockTripBudget = (tripId: string, acceptSuggestions = false) =>
+  budgetRequest(tripId, '/lock', 'POST', { accept_suggestions: acceptSuggestions });
+export const unlockTripBudget = (tripId: string) => budgetRequest(tripId, '/unlock', 'POST');
 
 export async function getRoadMetrics(
   tripId: string,

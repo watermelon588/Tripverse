@@ -4,7 +4,7 @@
  * to find what the guide should draw.
  */
 import type { CopilotState } from '../create/CopilotPanel';
-import type { TripDocument } from '../../services/tripService';
+import type { TripBudget, TripDocument } from '../../services/tripService';
 import type { SketchPage } from './types';
 
 const addDays = (iso: string | null, days: number) => {
@@ -16,7 +16,7 @@ const addDays = (iso: string | null, days: number) => {
 };
 
 /** The same mapping as the backend's `trip_document._agent_days`, applied to a streamed copilot state. */
-export function withCopilot(doc: TripDocument, copilot: CopilotState | null): TripDocument {
+export function withCopilot(doc: TripDocument, copilot: CopilotState | null, budget?: TripBudget): TripDocument {
   if (!copilot || doc.mode === 'one_shot') return doc;
   const totals = new Map((copilot.summary?.by_day ?? []).map((entry) => [entry.day, entry]));
   const dates = new Map(doc.days.map((day) => [day.day, day.date]));
@@ -34,7 +34,13 @@ export function withCopilot(doc: TripDocument, copilot: CopilotState | null): Tr
         source_url: item.source ?? null, option: false,
       })),
     })),
-    budget: { ...doc.budget, target: copilot.budget ?? doc.budget.target, planned: copilot.summary?.committed ?? doc.budget.planned },
+    budget: budget ? { ...doc.budget, currency: budget.currency,
+      target: budget.target_amount === null ? null : Number(budget.target_amount),
+      entered: Number(budget.priced_total), projected: Number(budget.projected_total),
+      planned: Number(budget.projected_total), is_locked: budget.is_locked,
+      locked_total: budget.locked_total === null ? null : Number(budget.locked_total) }
+      : { ...doc.budget, target: copilot.budget ?? doc.budget.target,
+        planned: copilot.summary?.committed ?? doc.budget.planned },
   };
 }
 

@@ -70,6 +70,8 @@ export function StudioPlan({ document, day, onSelectDay }: Props) {
               {entry.items.filter((item) => !item.option).slice(0, 3).map((item) => item.name).join(', ')
                 || (entry.items.length ? `${entry.items.length} options to choose from` : 'Open day')}
             </span>
+            {document.route_warnings?.some((warning) => warning.day === entry.day) &&
+              <small>Travel check needs review</small>}
           </button>
         ))}
       </div>
@@ -87,6 +89,14 @@ export function StudioPlan({ document, day, onSelectDay }: Props) {
         <h2>{current.base}</h2>
         {current.date && <p>{dayDate(current.date, 'long')}</p>}
       </header>
+      {current.travel_hours != null && current.items.length > 0 && <p className="tv-plan__meta">
+        About {current.travel_hours} h travel from {current.base} through the planned places and back
+        {current.travel_distance_km ? ` · ${current.travel_distance_km} km straight line` : ''}
+        {current.unverified_legs ? ` · ${current.unverified_legs} unverified leg${current.unverified_legs === 1 ? '' : 's'}`
+          : ` · ${current.travel_basis === 'road' ? 'road time' : 'distance estimate'}`}
+      </p>}
+      {document.route_warnings?.filter((warning) => warning.day === current.day).map((warning, index) =>
+        <p key={index} className="tv-plan__tip" role="note">Travel check: {warning.message}</p>)}
       {SLOTS.map((slot) => {
         const items = planned.filter((item) => item.time_of_day === slot.key);
         return items.length ? (

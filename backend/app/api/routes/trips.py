@@ -16,7 +16,7 @@ from app.schemas.trip import (
     GeocodeRequest,
     NearbyPlacesRequest,
 )
-from app.schemas.budget import BudgetItemInput, BudgetResponse, BudgetSettingsUpdate
+from app.schemas.budget import BudgetItemInput, BudgetLockRequest, BudgetResponse, BudgetSettingsUpdate
 from app.schemas.trip_document import TripDocument
 from app.services.trip_document import build_trip_document
 from app.services.budget import (
@@ -197,6 +197,16 @@ async def get_trip_document(
     return document
 
 
+@router.post("/{trip_id}/finalize", response_model=TripResponse)
+async def finalize_trip(
+    trip_id: uuid.UUID,
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    trip = await _owned_trip(db, trip_id, identity)
+    return await trip_service.finalize_trip(db, trip)
+
+
 @router.post("/{trip_id}/budget/estimates", response_model=BudgetResponse)
 async def post_trip_budget_estimates(
     trip_id: uuid.UUID,
@@ -217,6 +227,28 @@ async def post_accept_trip_budget_estimates(
     """Copy suggestions into every row that has no traveler-entered amount yet."""
     trip = await _owned_trip(db, trip_id, identity)
     return await accept_budget_estimates(db, trip)
+
+
+@router.post("/{trip_id}/budget/lock", response_model=BudgetResponse)
+async def post_lock_trip_budget(
+    trip_id: uuid.UUID, request: BudgetLockRequest,
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    trip = await _owned_trip(db, trip_id, identity)
+    from app.services.budget import lock_budget
+    return await lock_budget(db, trip, accept_suggestions=request.accept_suggestions)
+
+
+@router.post("/{trip_id}/budget/unlock", response_model=BudgetResponse)
+async def post_unlock_trip_budget(
+    trip_id: uuid.UUID,
+    identity: RequestIdentity = Depends(get_request_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    trip = await _owned_trip(db, trip_id, identity)
+    from app.services.budget import unlock_budget
+    return await unlock_budget(db, trip)
 
 
 @router.post("/{trip_id}/route-metrics")

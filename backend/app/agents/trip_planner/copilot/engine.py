@@ -23,10 +23,11 @@ item: {name, base, area, category, tags[], est_cost, duration_hours, why, source
 import math
 import re
 from typing import Any
+from app.services import route_reality
 
 PACE_HOURS = {"relaxed": 6.0, "balanced": 8.0, "packed": 11.0}
 MODES = ("walk", "transit", "taxi", "drive")
-# ponytail: one flat hop time per mode between areas; swap for route_metrics once items are geocoded.
+# Used only when a place has no verified coordinates; shown as provisional.
 HOP_MINUTES = {"walk": 30, "transit": 35, "taxi": 25, "drive": 30}
 CURRENCIES = {"INR", "JPY", "USD", "EUR", "GBP", "AUD", "CAD"}
 COMFORT = ("budget", "mid_range", "comfortable")
@@ -90,6 +91,7 @@ def new_copilot(*, destination: str, duration_days: int, currency: str | None,
         "pool": [],
         "researched": [],
         "last_suggestions": [],
+        "route_points": {}, "route_queries": [], "route_times": {}, "route_requests": [],
     }
 
 
@@ -98,6 +100,7 @@ def make_item(raw: dict, basis: str = "model_estimate") -> dict | None:
     if not name:
         return None
     hours = number(raw.get("duration_hours"))
+    coordinates = route_reality.point(raw)
     return {
         "name": name,
         "base": clean(raw.get("base")) or None,
@@ -106,6 +109,8 @@ def make_item(raw: dict, basis: str = "model_estimate") -> dict | None:
         "tags": [clean(tag, 30).lower() for tag in (raw.get("tags") or [])[:8] if clean(tag, 30)],
         "est_cost": number(raw.get("est_cost")),
         "duration_hours": min(hours, 12.0) if hours else 2.0,
+        "time_of_day": raw.get("time_of_day") if raw.get("time_of_day") in ("morning", "afternoon", "evening") else None,
+        **({"lat": coordinates[0], "lon": coordinates[1]} if coordinates else {}),
         "why": clean(raw.get("why"), 300),
         "source": clean(raw.get("source"), 300) or None,
         "basis": basis,
@@ -198,8 +203,11 @@ def day_cost(copilot: dict, items: list[dict]) -> float:
     return (sum(item["est_cost"] or 0 for item in items) + _hops(items) * (hop_cost(copilot) or 0)) * people
 
 
-def day_hours(copilot: dict, items: list[dict]) -> float:
+def day_hours(copilot: dict, items: list[dict], base: str | None = None) -> float:
     mode = copilot["profile"]["travel_mode"]
+    if base:
+        travel = route_reality.day_travel(copilot, base, items, mode, HOP_MINUTES[mode])
+        return sum(item["duration_hours"] for item in items) + travel["hours"]
     return sum(item["duration_hours"] for item in items) + _hops(items) * HOP_MINUTES[mode] / 60
 
 
@@ -211,11 +219,18 @@ def baseline(copilot: dict) -> float:
 
 
 def budget_status(copilot: dict) -> dict:
-    by_day = [{"day": day["day"], "base": day["base"],
-               "cost": round(day_cost(copilot, day["items"]), 2),
-               "hours": round(day_hours(copilot, day["items"]), 1),
-               "capacity_hours": PACE_HOURS[copilot["profile"]["pace"]]} for day in copilot["days"]]
-    committed = round(baseline(copilot) + sum(day["cost"] for day in by_day), 2)
+    by_day = []
+    for day in copilot["days"]:
+        travel = route_reality.day_travel(copilot, day["base"], day["items"], copilot["profile"]["travel_mode"],
+                                          HOP_MINUTES[copilot["profile"]["travel_mode"]])
+        by_day.append({"day": day["day"], "base": day["base"],
+                       "cost": round(day_cost(copilot, day["items"]), 2),
+                       "hours": round(day_hours(copilot, day["items"], day["base"]), 1),
+                       "travel_hours": travel["hours"], "distance_km": travel["distance_km"],
+                       "unverified_legs": travel["unverified_legs"], "travel_basis": travel["basis"],
+                       "capacity_hours": PACE_HOURS[copilot["profile"]["pace"]]})
+    committed = round(baseline(copilot) + sum(day["cost"] for day in by_day)
+                      + (copilot.get("ledger_adjustment") or 0), 2)
     budget = copilot["budget"]
     missing = [name for name, value in (("stay_per_night", copilot["rates"]["stay_per_night"]),
                                         ("food_per_day", copilot["rates"]["food_per_day"]),
@@ -238,7 +253,7 @@ def check_add(copilot: dict, day_no: int, item: dict) -> dict:
     day = day_of(copilot, day_no)
     after = [*day["items"], item]
     delta = round(day_cost(copilot, after) - day_cost(copilot, day["items"]), 2)
-    hours = day_hours(copilot, after)
+    hours = day_hours(copilot, after, day["base"])
     reasons = []
     conflicts = hard_conflicts(copilot["profile"], item)
     if conflicts:
@@ -246,6 +261,15 @@ def check_add(copilot: dict, day_no: int, item: dict) -> dict:
     if any(key(item["name"]) == key(name) for name in copilot["profile"]["rejected"]):
         reasons.append({"code": "rejected_before"})
     capacity = PACE_HOURS[copilot["profile"]["pace"]]
+    travel = route_reality.day_travel(copilot, day["base"], after, copilot["profile"]["travel_mode"],
+                                      HOP_MINUTES[copilot["profile"]["travel_mode"]])
+    direct = route_reality.leg(copilot, route_reality.base_point(copilot, day["base"]),
+                               route_reality.item_point(copilot, item), copilot["profile"]["travel_mode"])
+    if travel["known_hours"] >= capacity or (item.get("time_of_day") in ("afternoon", "evening")
+                                     and direct and direct["hours"] > 3.5):
+        reasons.append({"code": "unreachable", "from": day["base"],
+                        "one_way_hours": direct["hours"] if direct else None,
+                        "travel_hours": travel["hours"], "distance_km": travel["distance_km"]})
     if hours > capacity:
         reasons.append({"code": "day_full", "hours_after": round(hours, 1), "capacity_hours": capacity})
     status = budget_status(copilot)
@@ -310,7 +334,7 @@ def move_suggestions(copilot: dict, limit: int = 2) -> list[dict]:
             after = [*target["items"], item]
             added = day_cost(copilot, after) - day_cost(copilot, target["items"])
             added_hops = _hops(after) - _hops(target["items"])
-            if day_hours(copilot, after) > PACE_HOURS[copilot["profile"]["pace"]] or added_hops >= freed_hops:
+            if day_hours(copilot, after, target["base"]) > PACE_HOURS[copilot["profile"]["pace"]] or added_hops >= freed_hops:
                 continue
             found.append({"name": item["name"], "from_day": day["day"], "to_day": target["day"],
                           "saves": round(freed - added, 2),
@@ -326,7 +350,7 @@ def alternatives_for(copilot: dict, blocked: dict) -> dict:
         **blocked,
         "alternatives": rank(copilot, day_no, 3, category=item["category"],
                              cheaper_than=item["est_cost"] if "over_budget" in codes and item["est_cost"] else None),
-        "fits_on_days": other_days_that_fit(copilot, item, day_no) if codes <= {"day_full", "over_budget"} else [],
+        "fits_on_days": other_days_that_fit(copilot, item, day_no) if codes <= {"day_full", "over_budget", "unreachable"} else [],
     }
 
 
@@ -346,7 +370,7 @@ def _heads_up(copilot: dict, day_no: int) -> str:
     """What an edit the traveler asked for strained, said in the event itself."""
     status, day = budget_status(copilot), day_of(copilot, day_no)
     notes = []
-    hours, capacity = round(day_hours(copilot, day["items"]), 1), PACE_HOURS[copilot["profile"]["pace"]]
+    hours, capacity = round(day_hours(copilot, day["items"], day["base"]), 1), PACE_HOURS[copilot["profile"]["pace"]]
     if hours > capacity:
         notes.append(f"day {day_no} is now {hours:g} h, over the {capacity:g} h a {copilot['profile']['pace']} day holds")
     if status["over"]:
@@ -380,7 +404,12 @@ def apply_ops(copilot: dict, ops: list[Any]) -> tuple[list[str], list[dict], lis
             if find([i for _, i in scheduled(copilot)], item["name"]):
                 events.append(f"{item['name']} is already in the plan")
                 continue
-            rules = [r for r in check_add(copilot, day_no, item)["reasons"] if r["code"] in ASK_FIRST]
+            fit = check_add(copilot, day_no, item)
+            impossible = [r for r in fit["reasons"] if r["code"] == "unreachable"]
+            if impossible:
+                blocked.append({"item": item, "day": day_no, "reasons": impossible, "cost_delta": 0})
+                continue
+            rules = [r for r in fit["reasons"] if r["code"] in ASK_FIRST]
             if rules and op.get("force") is not True:
                 blocked.append({"item": item, "day": day_no, "reasons": rules, "cost_delta": 0})
                 continue
@@ -404,6 +433,10 @@ def apply_ops(copilot: dict, ops: list[Any]) -> tuple[list[str], list[dict], lis
             source, item = hit
             if source["day"] == day_no:
                 events.append(f"{item['name']} is already on day {day_no}")
+                continue
+            impossible = [r for r in check_add(copilot, day_no, item)["reasons"] if r["code"] == "unreachable"]
+            if impossible:
+                blocked.append({"item": item, "day": day_no, "reasons": impossible, "cost_delta": 0})
                 continue
             before = budget_status(copilot)["committed"]
             source["items"].remove(item)
@@ -473,10 +506,21 @@ def apply_ops(copilot: dict, ops: list[Any]) -> tuple[list[str], list[dict], lis
             events.append(f"Vibe: {', '.join(profile['vibe'])}")
         elif kind == "set_base" and clean(op.get("base")):
             days = op.get("days") if isinstance(op.get("days"), list) else [day_no]
+            changed = []
             for value in days:
                 if type(value) is int and 1 <= value <= len(copilot["days"]):
-                    day_of(copilot, value)["base"] = clean(op["base"])
-            events.append(f"Base for day(s) {', '.join(map(str, days))}: {clean(op['base'])}")
+                    target = day_of(copilot, value)
+                    old = target["base"]
+                    target["base"] = clean(op["base"])
+                    route = route_reality.day_travel(copilot, target["base"], target["items"],
+                                                     profile["travel_mode"], HOP_MINUTES[profile["travel_mode"]])
+                    if route["known_hours"] >= PACE_HOURS[profile["pace"]]:
+                        target["base"] = old
+                        events.append(f"Kept day {value} in {old}; travel from {clean(op['base'])} would take about {route['hours']:g} h")
+                    else:
+                        changed.append(value)
+            if changed:
+                events.append(f"Base for day(s) {', '.join(map(str, changed))}: {clean(op['base'])}")
         elif kind in ("goto_day", "next_day"):
             copilot["current_day"] = current = (min(current + 1, len(copilot["days"])) if kind == "next_day"
                                                 else _day_arg(copilot, op.get("day"), current))

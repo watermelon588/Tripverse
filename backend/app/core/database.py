@@ -76,6 +76,11 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         if "sqlite" in engine.name:
+            plan_columns = {column[1] for column in (await conn.execute(text("PRAGMA table_info(budget_plans)"))).all()}
+            if plan_columns and "is_locked" not in plan_columns:
+                await conn.execute(text("ALTER TABLE budget_plans ADD COLUMN is_locked BOOLEAN NOT NULL DEFAULT 0"))
+                await conn.execute(text("ALTER TABLE budget_plans ADD COLUMN locked_at DATETIME"))
+                await conn.execute(text("ALTER TABLE budget_plans ADD COLUMN locked_total NUMERIC(12, 2)"))
             columns = (await conn.execute(text("PRAGMA table_info(trips)"))).all()
             if columns and not any(column[1] == "places_to_visit" for column in columns):
                 await conn.execute(text("ALTER TABLE trips ADD COLUMN places_to_visit JSON NOT NULL DEFAULT '[]'"))
@@ -87,6 +92,9 @@ async def init_db():
                 await conn.execute(text("ALTER TABLE budget_items ADD COLUMN estimate_note VARCHAR(255)"))
         if "postgresql" in engine.name:
             try:
+                await conn.execute(text("ALTER TABLE budget_plans ADD COLUMN IF NOT EXISTS is_locked BOOLEAN NOT NULL DEFAULT FALSE"))
+                await conn.execute(text("ALTER TABLE budget_plans ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ"))
+                await conn.execute(text("ALTER TABLE budget_plans ADD COLUMN IF NOT EXISTS locked_total NUMERIC(12, 2)"))
                 await conn.execute(text("ALTER TABLE trips ADD COLUMN IF NOT EXISTS places_to_visit JSON NOT NULL DEFAULT '[]'"))
                 await conn.execute(text("ALTER TABLE trips ADD COLUMN IF NOT EXISTS planning_preferences JSON NOT NULL DEFAULT '{}'"))
                 await conn.execute(text("ALTER TABLE trips ADD COLUMN IF NOT EXISTS guest_id VARCHAR(64);"))

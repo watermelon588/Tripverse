@@ -19,6 +19,7 @@ import { CheckIcon, ClockIcon, LayersIcon, PinIcon, PlaneIcon, WalletIcon } from
 import { EASE, prefersReducedMotion } from '../home/v2/motion';
 import type { ItineraryGraph } from './itineraryGraph';
 import type { CopilotOp, CopilotState } from './CopilotPanel';
+import type { RouteWarning } from '../../services/tripService';
 
 /** One line of a turn's receipt: what the planner actually changed (the server's record, not the reply's words). */
 export interface PlanChange {
@@ -36,7 +37,8 @@ export interface ChatMessageItem {
   stage?: string;
   payload?: {
     action?: string; values?: Record<string, unknown>; kind?: string; graph?: ItineraryGraph;
-    copilot?: CopilotState; changes?: PlanChange[];
+    copilot?: CopilotState; changes?: PlanChange[]; offer_lock_budget?: boolean; offer_finalize_trip?: boolean;
+    route_reality?: { warnings?: RouteWarning[] };
   } | null;
   metadata?: {
     destination?: string;
@@ -53,6 +55,8 @@ interface ChatMessageProps {
   onOpenStudio?: () => void;
   /** "Add anyway" on a held-back add; only the latest reply gets it. */
   onRetry?: (change: PlanChange) => void;
+  onLockBudget?: () => void;
+  onFinalizeTrip?: () => void;
 }
 
 function PlanReceipt({ changes, onOpenStudio, onRetry }: { changes: PlanChange[] } & Omit<ChatMessageProps, 'message'>) {
@@ -90,7 +94,7 @@ function PlanReceipt({ changes, onOpenStudio, onRetry }: { changes: PlanChange[]
   );
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onOpenStudio, onRetry }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onOpenStudio, onRetry, onLockBudget, onFinalizeTrip }) => {
   const { user } = useAuth();
   const root = useRef<HTMLDivElement>(null);
   const guide = useGuide();
@@ -171,6 +175,22 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onOpenStudio,
         {!isUser && message.payload?.changes?.length ? (
           <PlanReceipt changes={message.payload.changes} onOpenStudio={onOpenStudio} onRetry={onRetry} />
         ) : null}
+        {!isUser && Boolean(message.payload?.route_reality?.warnings?.length) && (
+          <section className="tv-receipt" aria-label="Travel check">
+            <header><span className="tv-label">Travel check · estimates</span></header>
+            <ul>{message.payload!.route_reality!.warnings!.map((warning, index) => (
+              <li key={`${warning.day}-${index}`} className={warning.severity === 'impossible' ? 'is-skipped' : ''}>
+                <span className="tv-receipt__dash" aria-hidden="true">–</span>
+                <span>Day {warning.day}: {warning.message}<small>
+                  {warning.distance_km > 0 ? `${warning.distance_km} km straight line · ` : ''}
+                  {warning.basis === 'road' ? 'road time' : 'distance estimate'}
+                </small></span>
+              </li>
+            ))}</ul>
+          </section>
+        )}
+        {!isUser && message.payload?.offer_lock_budget && onLockBudget && <button type="button" className="tv-receipt__open" onClick={onLockBudget}>Lock this budget</button>}
+        {!isUser && message.payload?.offer_finalize_trip && onFinalizeTrip && <button type="button" className="tv-receipt__open" onClick={onFinalizeTrip}>Review & finalize trip</button>}
       </div>
     </article>
   );

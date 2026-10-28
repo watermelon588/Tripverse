@@ -22,6 +22,7 @@ from app.agents.trip_planner.copilot import engine
 from app.agents.trip_planner.copilot.research import initial_queries, research
 from app.agents.trip_planner.nodes.extract_itinerary_node import build_itinerary_graph
 from app.services.enrichment import agent_facts, get_enrichment
+from app.services import route_reality
 from app.services.llm.service import llm_service
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,7 @@ class CopilotState(TypedDict, total=False):
     plan_bases: bool
     focus_day: int | None
     nav_only: bool
+    route_turn_start: int
     defer_reply: bool
     facts: dict
     assistant_response: str
@@ -108,11 +110,13 @@ FACTS come from the planner and are your only source of truth:
   Yokocho").
 - An event with a "heads-up" went through but strains the day or the budget: mention it in a few words and offer
   one fix (move something to a lighter day, drop something).
-- If something was blocked, it clashes with their own rule (a no-X preference) or a place they turned down: say
-  so in their words ("you said no museums"), offer its alternatives by name, and say they can tell you to add it
-  anyway. Never say "hard", "soft", "avoid rule", "blocked" or "preference" to them: those are planner words.
+- If a place cannot fit because travel alone is too long, say the approximate one-way and day travel time in plain
+  words and suggest another day, a closer base, or an overnight stay. Do not offer "add anyway" for that case.
+  A conflict with the traveler's own no-X rule can still be overridden after warning.
 - Totals come from FACTS only: the trip total is budget.committed and a day's total is its cost. Never add
   numbers up yourself.
+- If offer_lock_budget is true, offer once to lock the completed budget in one short sentence. The traveler
+  can use the button or say "lock the budget". If budget.is_locked is true, describe it as final.
 - Mention a money_moves entry only when it saves something meaningful, as a friendly tip.
 - The traveler can already see hours and totals in the day panel. Only bring up the budget when it changed a
   lot, is over, or they asked. If budget.baseline (stay + food) alone exceeds the budget, say so kindly and
@@ -180,9 +184,44 @@ async def interpret(state: CopilotState) -> dict:
     return {"ops": parsed.get("ops") if isinstance(parsed.get("ops"), list) else []}
 
 
-def apply(state: CopilotState) -> dict:
+async def _hydrate_route(copilot: dict, day: dict, items: list[dict], *, per_turn: int = 3,
+                         roads: bool = True) -> None:
+    requests = route_reality.requests_for_day(copilot["destination"], day["base"], items)
+    await route_reality.resolve_points(copilot, requests, per_turn=per_turn)
+    for item in items:
+        position = route_reality.item_point(copilot, item)
+        if position:
+            item["lat"], item["lon"] = position
+    if roads and copilot["profile"]["travel_mode"] in ("taxi", "drive"):
+        await route_reality.resolve_roads(copilot, route_reality.road_pairs_for_day(copilot, day["base"], items))
+
+
+async def apply(state: CopilotState) -> dict:
     copilot = state["copilot"]
     ops = state.get("ops") or []
+    roads_used = False
+    route_turn_start = len(copilot.get("route_queries") or [])
+    for op in ops[:3] if isinstance(ops, list) else []:
+        if not isinstance(op, dict) or op.get("op") not in ("add", "move", "set_base"):
+            continue
+        day = engine.day_of(copilot, op.get("day") if type(op.get("day")) is int else copilot["current_day"])
+        if op.get("op") == "set_base" and op.get("base"):
+            await route_reality.resolve_points(copilot, route_reality.requests_for_day(
+                copilot["destination"], str(op["base"]), []), per_turn=1)
+            continue
+        name = engine.clean(op.get("name"))
+        if not name:
+            continue
+        item = engine.find(copilot["pool"], name) or engine.find([i for d in copilot["days"] for i in d["items"]], name)
+        if item is None:
+            item = op
+        remaining = max(0, 6 - (len(copilot.get("route_queries") or []) - route_turn_start))
+        await _hydrate_route(copilot, day, [*day["items"], item],
+                             per_turn=min(3, remaining), roads=not roads_used)
+        roads_used = True
+        position = route_reality.item_point(copilot, item)
+        if position:
+            op["lat"], op["lon"] = position
     events, blocked, queries = engine.apply_ops(copilot, ops)
     # Switching days only changes focus: no research, and respond replays that day's held reply.
     nav_only = bool(ops) and all(isinstance(op, dict) and op.get("op") in ("goto_day", "next_day") for op in ops)
@@ -191,6 +230,7 @@ def apply(state: CopilotState) -> dict:
         likes = " ".join((copilot["profile"]["soft"]["likes"] + copilot["profile"]["vibe"])[:2])
         queries.append(f"{day['base']} {likes} recommendations local tips".replace("  ", " "))
     return {"copilot": copilot, "events": events, "blocked": blocked, "queries": queries,
+            "route_turn_start": route_turn_start,
             "plan_bases": False, "nav_only": nav_only}
 
 
@@ -225,6 +265,13 @@ async def recommend(state: CopilotState) -> dict:
     day_no = copilot["current_day"]
     conditions = await _conditions(state, copilot)
     day = engine.day_of(copilot, day_no)
+    nearby_candidates = engine.rank(copilot, day_no, 2)
+    road_calls_used = any(isinstance(op, dict) and op.get("op") in ("add", "move")
+                          for op in state.get("ops") or [])
+    remaining = max(0, 6 - (len(copilot.get("route_queries") or []) -
+                            state.get("route_turn_start", len(copilot.get("route_queries") or []))))
+    await _hydrate_route(copilot, day, [*day["items"], *nearby_candidates],
+                         per_turn=min(3, remaining), roads=not road_calls_used)
     blocked = [engine.alternatives_for(copilot, b) for b in state.get("blocked") or []]
     suggestions = engine.rank(copilot, day_no, 3)
     status = engine.budget_status(copilot)
@@ -261,9 +308,11 @@ def _fallback_reply(facts: dict) -> str:
     budget, day = facts["budget"], facts["current_day"]
     lines = [f"- {event}" for event in facts["events"]]
     for b in facts["blocked"]:
-        why = ", ".join(r["code"].replace("_", " ") for r in b["reasons"])
-        options = ", ".join(a["name"] for a in b["alternatives"]) or "nothing cheaper yet"
-        lines.append(f"- Couldn't add **{b['name']}** ({why}). Alternatives: {options}.")
+        why = ", ".join(_reason_text(r) for r in b["reasons"])
+        options = ", ".join(a["name"] for a in b["alternatives"])
+        lines.append(f"- Couldn't add **{b['name']}** to day {b['day']}: {why}. "
+                     + (f"It may fit on day {', '.join(map(str, b['fits_on_days']))}." if b["fits_on_days"] else
+                        f"{('Closer options: ' + options + '.') if options else 'Try a closer base or an overnight stop.'}"))
     for move in facts["money_moves"][:1]:
         lines.append(f"- Tip: move **{move['name']}** from day {move['from_day']} to day {move['to_day']} "
                      f"to save ~{move['saves']:g} {budget['currency']} and {move['saves_minutes']} min.")
@@ -420,12 +469,21 @@ _ASKS_FOR_CHANGE = re.compile(r"\b(add|swap|move|replace|remove|delete|drop|swit
 REASON_WORDS = {"hard_avoid": "it clashes with your no-{} rule", "rejected_before": "you turned it down before"}
 
 
+def _reason_text(reason: dict) -> str:
+    if reason.get("code") == "unreachable":
+        hours = reason.get("one_way_hours") or reason.get("travel_hours") or 0
+        return f"too far from {reason.get('from') or 'the base'} for this day (about {hours:g} h travel)"
+    template = REASON_WORDS.get(reason.get("code"))
+    return template.format(", ".join(reason.get("detail") or [])) if template else reason.get("code", "could not fit")
+
+
 def turn_changes(facts: dict | None) -> list[dict]:
     """The receipt shown under the reply: the engine's own record of this turn, never the model's."""
     facts = facts or {}
     skipped = [{"status": "skipped", "text": f"Didn't add {b['name']} to day {b['day']}: " + "; ".join(
-        REASON_WORDS[r["code"]].format(", ".join(r.get("detail") or [])) for r in b["reasons"] if r["code"] in REASON_WORDS),
-        "retry": {"op": "add", "name": b["name"], "day": b["day"], "force": True}}  # the "Add anyway" button
+        _reason_text(r) for r in b["reasons"]),
+        **({} if any(r["code"] == "unreachable" for r in b["reasons"]) else
+           {"retry": {"op": "add", "name": b["name"], "day": b["day"], "force": True}})}
         for b in facts.get("blocked") or []]
     changes = [{"status": "done", "text": event} for event in facts.get("events") or []] + skipped
     # A request to change the plan that changed nothing (the interpreter found no operation in it) says so,

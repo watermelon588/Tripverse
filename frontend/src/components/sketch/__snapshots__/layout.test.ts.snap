@@ -105,7 +105,7 @@ exports[`layoutSketch > matches the Tokyo and Kyoto fixtures > kyoto 1`] = `
         "id": "rc-0-l",
         "kind": "text",
         "lines": [
-          "Planned",
+          "Budget",
         ],
         "size": 21,
         "tone": "ink",
@@ -117,35 +117,12 @@ exports[`layoutSketch > matches the Tokyo and Kyoto fixtures > kyoto 1`] = `
         "id": "rc-0-v",
         "kind": "text",
         "lines": [
-          "₹30,000",
-        ],
-        "size": 21,
-        "tone": "ink",
-        "x": 1057,
-        "y": 624,
-      },
-      {
-        "id": "rc-1-l",
-        "kind": "text",
-        "lines": [
-          "Budget",
-        ],
-        "size": 21,
-        "tone": "ink",
-        "x": 808,
-        "y": 652,
-      },
-      {
-        "anchor": "end",
-        "id": "rc-1-v",
-        "kind": "text",
-        "lines": [
           "₹50,000",
         ],
         "size": 21,
         "tone": "ink",
         "x": 1057,
-        "y": 652,
+        "y": 624,
       },
       {
         "dashed": true,
@@ -154,11 +131,11 @@ exports[`layoutSketch > matches the Tokyo and Kyoto fixtures > kyoto 1`] = `
         "points": [
           [
             806,
-            676,
+            648,
           ],
           [
             1059,
-            676,
+            648,
           ],
         ],
         "tone": "muted",
@@ -173,7 +150,7 @@ exports[`layoutSketch > matches the Tokyo and Kyoto fixtures > kyoto 1`] = `
         "size": 24,
         "tone": "ink",
         "x": 808,
-        "y": 704,
+        "y": 676,
       },
       {
         "anchor": "end",
@@ -186,7 +163,7 @@ exports[`layoutSketch > matches the Tokyo and Kyoto fixtures > kyoto 1`] = `
         "size": 24,
         "tone": "ink",
         "x": 1057,
-        "y": 704,
+        "y": 676,
       },
     ],
     "h": 794,
@@ -789,7 +766,7 @@ exports[`layoutSketch > matches the Tokyo and Kyoto fixtures > tokyo 1`] = `
         "id": "rc-0-l",
         "kind": "text",
         "lines": [
-          "Planned",
+          "Entered",
         ],
         "size": 21,
         "tone": "ink",
@@ -801,7 +778,7 @@ exports[`layoutSketch > matches the Tokyo and Kyoto fixtures > tokyo 1`] = `
         "id": "rc-0-v",
         "kind": "text",
         "lines": [
-          "¥110,000",
+          "¥20,000",
         ],
         "size": 21,
         "tone": "ink",
@@ -812,7 +789,7 @@ exports[`layoutSketch > matches the Tokyo and Kyoto fixtures > tokyo 1`] = `
         "id": "rc-1-l",
         "kind": "text",
         "lines": [
-          "Spent so far",
+          "Budget",
         ],
         "size": 21,
         "tone": "ink",
@@ -824,35 +801,12 @@ exports[`layoutSketch > matches the Tokyo and Kyoto fixtures > tokyo 1`] = `
         "id": "rc-1-v",
         "kind": "text",
         "lines": [
-          "¥20,000",
-        ],
-        "size": 21,
-        "tone": "ink",
-        "x": 1057,
-        "y": 652,
-      },
-      {
-        "id": "rc-2-l",
-        "kind": "text",
-        "lines": [
-          "Budget",
-        ],
-        "size": 21,
-        "tone": "ink",
-        "x": 808,
-        "y": 680,
-      },
-      {
-        "anchor": "end",
-        "id": "rc-2-v",
-        "kind": "text",
-        "lines": [
           "¥120,000",
         ],
         "size": 21,
         "tone": "ink",
         "x": 1057,
-        "y": 680,
+        "y": 652,
       },
       {
         "dashed": true,
@@ -861,11 +815,11 @@ exports[`layoutSketch > matches the Tokyo and Kyoto fixtures > tokyo 1`] = `
         "points": [
           [
             806,
-            704,
+            676,
           ],
           [
             1059,
-            704,
+            676,
           ],
         ],
         "tone": "muted",
@@ -880,7 +834,7 @@ exports[`layoutSketch > matches the Tokyo and Kyoto fixtures > tokyo 1`] = `
         "size": 24,
         "tone": "ink",
         "x": 808,
-        "y": 732,
+        "y": 704,
       },
       {
         "anchor": "end",
@@ -893,11 +847,11 @@ exports[`layoutSketch > matches the Tokyo and Kyoto fixtures > tokyo 1`] = `
         "size": 24,
         "tone": "red",
         "x": 1057,
-        "y": 732,
+        "y": 704,
       },
       {
         "cx": 1014.28,
-        "cy": 724,
+        "cy": 696,
         "h": 42,
         "id": "rc-circle",
         "kind": "ellipse",
@@ -914,7 +868,7 @@ exports[`layoutSketch > matches the Tokyo and Kyoto fixtures > tokyo 1`] = `
         "size": 19,
         "tone": "red",
         "x": 1057,
-        "y": 758,
+        "y": 730,
       },
     ],
     "h": 794,

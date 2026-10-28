@@ -18,6 +18,7 @@ import { ChatComposer } from './ChatComposer';
 import { TripOnboardingForm, type OnboardingValues } from './TripOnboardingForm';
 import { TripPlanningChoice } from './TripPlanningChoice';
 import { CopilotPanel, type CopilotOp, type CopilotState } from './CopilotPanel';
+import type { TripBudget } from '../../services/tripService';
 import { ThemeToggle } from '../common/ThemeToggle';
 import { MenuIcon, LayersIcon, GraphIcon, WalletIcon } from '../home/v2/IconsV2';
 
@@ -47,6 +48,10 @@ interface ChatWorkspaceProps {
   onGenerateFull?: () => void;
   onStartBuild?: () => void;
   copilot?: CopilotState | null;
+  budget?: TripBudget;
+  isFinal?: boolean;
+  canFinalize?: boolean;
+  onRequestFinalize?: () => void;
   onCopilotOps?: (ops: CopilotOp[], label: string, day: number) => void;
   copilotDay?: number | null;
   onCopilotDay?: (day: number) => void;
@@ -87,6 +92,10 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onGenerateFull,
   onStartBuild,
   copilot,
+  budget,
+  isFinal = false,
+  canFinalize = false,
+  onRequestFinalize,
   onCopilotOps,
   copilotDay,
   onCopilotDay,
@@ -153,7 +162,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         <div className="tv-chat__title">
           <GraphIcon width={15} height={15} />
           <h1>{activeChatTitle || 'New trip'}</h1>
-          {variant === 'page' && planned && <span className="tv-meta tv-chat__saved">Changes save to your studio</span>}
+          {variant === 'page' && planned && <span className="tv-meta tv-chat__saved">{isFinal ? 'Final trip · read-only' : 'Changes save to your studio'}</span>}
         </div>
 
         <span className="tv-app__bar-spacer" />
@@ -171,6 +180,8 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           onClick={onToggleBudget} aria-pressed={isBudgetOpen} aria-label="Trip budget">
           <WalletIcon width={14} height={14} /><span className="tv-hide-mobile">Budget</span>
         </button>}
+
+        {variant === 'page' && canFinalize && onRequestFinalize && <button type="button" className="tv-btn tv-btn--sm tv-btn--ghost" onClick={onRequestFinalize}>Finalize trip</button>}
 
         {variant === 'page' && onOpenStudio && (
           <button type="button" className="tv-btn tv-btn--sm tv-btn--primary" onClick={onOpenStudio} aria-label="Open studio">
@@ -193,7 +204,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             {messages.map((msg, index) => (
               <React.Fragment key={msg.id}>
                 <ChatMessage message={msg} onOpenStudio={variant === 'page' ? onOpenStudio : undefined}
-                  onRetry={msg.id === latestReplyId && !isLoading && copilot && onCopilotOps ? retry : undefined} />
+                  onRetry={msg.id === latestReplyId && !isLoading && copilot && onCopilotOps ? retry : undefined}
+                  onLockBudget={msg.id === latestReplyId && !isLoading && !isFinal ? () => onSendMessage('Lock this budget') : undefined}
+                  onFinalizeTrip={msg.id === latestReplyId && !isLoading && canFinalize ? onRequestFinalize : undefined} />
                 {index === planIndex && tripPreview}
               </React.Fragment>
             ))}
@@ -227,10 +240,10 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
         )}
       </div>
 
-      {copilot && onCopilotOps && onCopilotDay && <CopilotPanel copilot={copilot} disabled={isLoading}
+      {copilot && onCopilotOps && onCopilotDay && <CopilotPanel copilot={copilot} budget={budget} disabled={isLoading || budget?.is_locked || isFinal}
         viewDay={copilotDay || copilot.current_day} onViewDay={onCopilotDay} onOps={onCopilotOps} />}
 
-      {showComposer && <div className="tv-chat__composer">
+      {showComposer && !isFinal && <div className="tv-chat__composer">
         <ChatComposer
           onSendMessage={onSendMessage}
           initialValue={draft}

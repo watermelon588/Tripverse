@@ -15,8 +15,8 @@ import { TripStudio } from '../components/studio/TripStudio';
 import { prefersReducedMotion } from '../components/home/v2/motion';
 import { useTheme } from '../context/ThemeContext';
 import {
-  createTrip, deleteTrip, getItineraryGraph, getTripDocument, getTripMessages, listTrips, sendTripMessageStream,
-  type TripDocument, type TripModelResponse,
+  createTrip, deleteTrip, finalizeTrip, getItineraryGraph, getTripBudget, getTripDocument, getTripMessages, listTrips, sendTripMessageStream,
+  type TripBudget, type TripDocument, type TripModelResponse,
 } from '../services/tripService';
 
 gsap.registerPlugin(Flip);
@@ -42,7 +42,7 @@ function tripContext(trip: TripModelResponse): CurrentTripContext {
     destination: trip.destination || undefined,
     origin: trip.origin_text || undefined,
     days: trip.duration_days || undefined,
-    status: trip.onboarding_status !== 'COMPLETE' ? 'ONBOARDING' : trip.status === 'DRAFT' ? 'CHOOSING' : 'ROUTING',
+    status: trip.status === 'COMPLETED' ? 'FINAL' : trip.onboarding_status !== 'COMPLETE' ? 'ONBOARDING' : trip.status === 'DRAFT' ? 'CHOOSING' : 'ROUTING',
   };
 }
 
@@ -51,7 +51,7 @@ function sessionItem(trip: TripModelResponse): ChatSessionItem {
     id: sessionId(trip.id),
     title: (trip.destination ? trip.destination + ' voyage' : 'New voyage').toUpperCase(),
     timestamp: timeLabel(trip.updated_at),
-    preview: trip.destination ? String(trip.duration_days || 0) + ' days in ' + trip.destination : 'Journey details needed',
+    preview: trip.destination ? (trip.status === 'COMPLETED' ? 'Final · ' : '') + String(trip.duration_days || 0) + ' days in ' + trip.destination : 'Journey details needed',
   };
 }
 
@@ -66,6 +66,15 @@ function cachedStudioDoc(tripId: string): TripDocument | null {
   } catch {
     return null;
   }
+}
+
+function tripDateRange(start?: string | null, days?: number | null): string {
+  if (!start) return 'Not set';
+  const first = new Date(`${start}T00:00:00Z`);
+  if (Number.isNaN(first.getTime())) return 'Not set';
+  const last = new Date(first);
+  last.setUTCDate(last.getUTCDate() + Math.max(0, (days || 1) - 1));
+  return `${start} to ${last.toISOString().slice(0, 10)}`;
 }
 
 export const CreateTrip: React.FC<CreateTripProps> = ({
@@ -87,6 +96,10 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
   const studioFlip = useRef<Flip.FlipState | null>(null);
   const [isBudgetOpen, setIsBudgetOpen] = useState(false);
   const [budgetRevision, setBudgetRevision] = useState(0);
+  const [finalizeOpen, setFinalizeOpen] = useState(false);
+  const [finalizeSaving, setFinalizeSaving] = useState(false);
+  const [finalizeError, setFinalizeError] = useState<string | null>(null);
+  const [budgets, setBudgets] = useState<Record<string, TripBudget>>({});
   const [backfilledGraphs, setBackfilledGraphs] = useState<Record<string, ItineraryGraph>>({});
   // Build-with-agent state streamed mid-turn; the saved message takes over once the reply is done.
   const [liveCopilots, setLiveCopilots] = useState<Record<string, CopilotState>>({});
@@ -309,6 +322,11 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
             tokenFrame = 0;
             pendingTokens = '';
             setBudgetRevision((value) => value + 1);
+            if (result.trip.status === 'COMPLETED') {
+              setStudioDoc((previous) => previous?.trip_id === result.trip.id ? { ...previous, is_final: true } : previous);
+              const cached = cachedStudioDoc(result.trip.id);
+              if (cached) try { localStorage.setItem(STUDIO_DOC_KEY, JSON.stringify({ ...cached, is_final: true })); } catch { /* cache only */ }
+            }
             setTripsMap((prev) => ({ ...prev, [currentId]: result.trip }));
             setSessions((prev) => prev.map((item) =>
               item.id === currentId ? sessionItem(result.trip) : item,
@@ -366,6 +384,15 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
 
   const activeMessages = activeSessionId ? messagesMap[activeSessionId] || [] : [];
   const activeTrip = activeSessionId ? tripsMap[activeSessionId] : undefined;
+  const activeBudget = activeTrip ? budgets[activeTrip.id] : undefined;
+  useEffect(() => {
+    if (!activeTrip || activeTrip.status === 'DRAFT') return;
+    let alive = true;
+    void getTripBudget(activeTrip.id).then((value) => {
+      if (alive) setBudgets((previous) => ({ ...previous, [activeTrip.id]: value }));
+    }).catch((error) => console.warn('Could not refresh trip budget', error));
+    return () => { alive = false; };
+  }, [activeTrip?.id, activeTrip?.status, budgetRevision]);
   const latestAssistant = [...activeMessages].reverse().find((message) => message.sender === 'assistant');
   const formMessage = latestAssistant?.payload?.action === 'SHOW_ONBOARDING_FORM' ? latestAssistant : null;
   const onboardingValues = activeTrip?.onboarding_status === 'COMPLETE'
@@ -399,11 +426,33 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
     () => {
       if (!activeTrip) return null;
       const doc = studioDoc?.trip_id === activeTrip.id ? studioDoc : cachedStudioDoc(activeTrip.id);
-      return doc ? withCopilot(doc, activeCopilot) : null;
+      return doc ? withCopilot(doc, activeCopilot, activeBudget) : null;
     },
-    [activeTrip, studioDoc, activeCopilot],
+    [activeTrip, studioDoc, activeCopilot, activeBudget],
   );
   const planned = Boolean(activeTrip && activeTrip.onboarding_status === 'COMPLETE' && activeTrip.status !== 'DRAFT' && activeGraph);
+  const isFinal = activeTrip?.status === 'COMPLETED';
+  const canFinalize = Boolean(planned && activeTrip?.status === 'PLANNING' && !isLoading
+    && (!activeCopilot || activeCopilot.status === 'complete'));
+  const confirmFinalize = async () => {
+    if (!activeTrip || !canFinalize || finalizeSaving) return;
+    setFinalizeSaving(true);
+    setFinalizeError(null);
+    try {
+      const updated = await finalizeTrip(activeTrip.id);
+      setTripsMap((previous) => ({ ...previous, [activeSessionId!]: updated }));
+      setSessions((previous) => previous.map((item) => item.id === activeSessionId ? sessionItem(updated) : item));
+      setStudioDoc((previous) => previous?.trip_id === updated.id ? { ...previous, is_final: true } : previous);
+      const cached = cachedStudioDoc(updated.id);
+      if (cached) try { localStorage.setItem(STUDIO_DOC_KEY, JSON.stringify({ ...cached, is_final: true })); } catch { /* cache only */ }
+      setBudgetRevision((revision) => revision + 1);
+      setFinalizeOpen(false);
+    } catch (error) {
+      setFinalizeError(error instanceof Error ? error.message : 'Could not finalize the trip. Try again.');
+    } finally {
+      setFinalizeSaving(false);
+    }
+  };
   useEffect(() => {
     if (studioOpen && !planned && !isLoading && activeTrip) closeStudio();
   }, [studioOpen, planned, isLoading, activeTrip]);
@@ -463,6 +512,10 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
     onGenerateFull: () => { void sendMessage('Generate the full itinerary', undefined, undefined, { action: 'GENERATE_FULL_ITINERARY' }); },
     onStartBuild: () => { void sendMessage("Let's build it day by day together", undefined, undefined, { action: 'START_BUILD_WITH_AGENT' }); },
     copilot: activeCopilot,
+    budget: activeBudget,
+    isFinal,
+    canFinalize,
+    onRequestFinalize: () => { setFinalizeError(null); setFinalizeOpen(true); },
     copilotDay: activeCopilot ? copilotDay ?? activeCopilot.current_day : null,
     onCopilotDay: setCopilotDay,
     onCopilotOps: (ops: CopilotOp[], label: string, day: number) => { void sendMessage(label, undefined, undefined, { action: 'COPILOT_OPS', ops, copilot_day: day }); },
@@ -476,6 +529,7 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
   // "Add to day N" from Around here. Build-with-the-agent trips take a structured add (budget and day
   // checks run in the engine); one-shot plans get the same request as a chat message, which revises the draft.
   const addPlace = (name: string, day: number | null) => {
+    if (isFinal) return;
     if (activeCopilot) {
       const target = day ?? copilotDay ?? activeCopilot.current_day;
       void sendMessage(`Add ${name} to day ${target}`, undefined, undefined,
@@ -518,13 +572,30 @@ export const CreateTrip: React.FC<CreateTripProps> = ({
           document={liveDoc} dark={theme === 'dark'}
           isLoading={isLoading} loadingStage={loadingStage} day={studioDay} onSelectDay={setStudioDay}
           onBack={() => closeStudio()} onOpenBudget={() => setIsBudgetOpen(true)}
-          onAddPlace={isLoading ? undefined : addPlace}
+          onFinalize={canFinalize ? () => { setFinalizeError(null); setFinalizeOpen(true); } : undefined}
+          onAddPlace={isLoading || isFinal ? undefined : addPlace}
           chat={<ChatWorkspace key={`drawer-${activeSessionId}`} {...chatProps} variant="drawer" />} />
       )}
       {isBudgetOpen && activeTrip && <React.Suspense fallback={null}>
-        <BudgetWorkspace tripId={activeTrip.id} destination={activeTrip.destination} graph={activeGraph}
-          refreshVersion={budgetRevision} onClose={() => setIsBudgetOpen(false)} />
+        <BudgetWorkspace tripId={activeTrip.id} destination={activeTrip.destination} graph={activeGraph} finalTrip={isFinal}
+          refreshVersion={budgetRevision} onClose={() => setIsBudgetOpen(false)}
+          onChange={(value) => { setBudgets((previous) => ({ ...previous, [activeTrip.id]: value })); setBudgetRevision((revision) => revision + 1); }} />
       </React.Suspense>}
+      {finalizeOpen && activeTrip && <div className="tv-finalize" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !finalizeSaving) setFinalizeOpen(false); }}>
+        <section className="tv-finalize__card" role="dialog" aria-modal="true" aria-labelledby="tv-finalize-title">
+          <span className="tv-label">FINAL REVIEW</span>
+          <h2 id="tv-finalize-title">Finalize this trip?</h2>
+          <p>Check the plan before making it read-only. You can still view and export it afterward.</p>
+          <dl>
+            <div><dt>Trip</dt><dd>{activeTrip.duration_days || 0} days in {activeTrip.destination || 'your destination'}</dd></div>
+            <div><dt>Places</dt><dd>{[...new Set(activeGraph?.nodes.filter((node) => node.kind === 'stop').map((node) => node.name) || [])].join(' · ') || 'See itinerary'}</dd></div>
+            <div><dt>Dates</dt><dd>{tripDateRange(activeTrip.planning_preferences?.start_date, activeTrip.duration_days)}</dd></div>
+            <div><dt>Budget</dt><dd>{activeBudget ? `${activeBudget.is_locked ? 'Locked' : 'Estimated'} ${new Intl.NumberFormat(undefined, { style: 'currency', currency: activeBudget.currency }).format(Number(activeBudget.is_locked ? activeBudget.locked_total : activeBudget.projected_total))}${activeBudget.unpriced_count ? ` · ${activeBudget.unpriced_count} costs unknown` : ''}` : 'Loading budget…'}</dd></div>
+          </dl>
+          {finalizeError && <p className="tv-finalize__error" role="alert">{finalizeError}</p>}
+          <div className="tv-finalize__actions"><button type="button" className="tv-btn tv-btn--ghost" disabled={finalizeSaving} onClick={() => setFinalizeOpen(false)}>Keep editing</button><button type="button" className="tv-btn tv-btn--primary" disabled={finalizeSaving || !activeBudget} onClick={() => { void confirmFinalize(); }}>{finalizeSaving ? 'Finalizing…' : 'Confirm final trip'}</button></div>
+        </section>
+      </div>}
     </div>
   );
 };

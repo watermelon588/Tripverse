@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
-  acceptBudgetEstimates, addBudgetItem, deleteBudgetItem, estimateBudget, getTripBudget, updateBudgetItem,
+  acceptBudgetEstimates, addBudgetItem, deleteBudgetItem, estimateBudget, getTripBudget, lockTripBudget, unlockTripBudget, updateBudgetItem,
   updateBudgetSettings,
   type BudgetCategory, type BudgetCurrency, type BudgetItem, type BudgetItemInput, type TripBudget,
 } from '../../services/tripService';
@@ -65,8 +65,8 @@ function ItemEditor({ item, onSave, onCancel, onDelete, saving }: {
   </form>;
 }
 
-function BudgetLine({ item, currency, editing, saving, onEdit, onCancel, onSave, onDelete }: {
-  item: BudgetItem; currency: BudgetCurrency; editing: boolean; saving: boolean;
+function BudgetLine({ item, currency, editing, saving, locked, onEdit, onCancel, onSave, onDelete }: {
+  item: BudgetItem; currency: BudgetCurrency; editing: boolean; saving: boolean; locked: boolean;
   onEdit: () => void; onCancel: () => void;
   onSave: (value: BudgetItemInput) => Promise<boolean>;
   onDelete: () => void;
@@ -85,19 +85,20 @@ function BudgetLine({ item, currency, editing, saving, onEdit, onCancel, onSave,
       <span className={`tv-budget__line-total ${suggestion !== null ? 'is-estimate' : ''}`}>
         {total !== null ? money(total, currency) : suggestion !== null ? `~${money(suggestion * Number(item.quantity), currency)}` : 'No amount'}
       </span>
-      <div className="tv-budget__line-actions">
+      {!locked && <div className="tv-budget__line-actions">
         {suggestion !== null && <button type="button" disabled={saving} aria-label={`Use suggested amount for ${item.label}`}
           onClick={() => { void onSave({ label: item.label, category: item.category, place_name: item.place_name,
             quantity: item.quantity, unit_amount: item.estimate_amount, is_included: item.is_included }); }}>Use</button>}
         <button type="button" onClick={onEdit} aria-label={`Edit ${item.label}`}>Edit</button>
-      </div>
+      </div>}
     </>}
   </div>;
 }
 
-interface Props { tripId: string; destination?: string | null; graph?: ItineraryGraph | null; refreshVersion: number; onClose: () => void }
+interface Props { tripId: string; destination?: string | null; graph?: ItineraryGraph | null; refreshVersion: number; finalTrip?: boolean;
+  onClose: () => void; onChange?: (budget: TripBudget) => void }
 
-export function BudgetWorkspace({ tripId, destination, graph, refreshVersion, onClose }: Props) {
+export function BudgetWorkspace({ tripId, destination, graph, refreshVersion, finalTrip = false, onClose, onChange }: Props) {
   const [budget, setBudget] = useState<TripBudget | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -120,11 +121,12 @@ export function BudgetWorkspace({ tripId, destination, graph, refreshVersion, on
   const mutate = async (operation: () => Promise<TripBudget>): Promise<boolean> => {
     setSaving(true);
     setError(null);
-    try { setBudget(await operation()); return true; }
+    try { const updated = await operation(); setBudget(updated); onChange?.(updated); return true; }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Budget update failed. Try again.'); return false; }
     finally { setSaving(false); }
   };
   const active = budget?.items.filter((item) => item.is_current) || [];
+  const readOnly = finalTrip || Boolean(budget?.is_locked);
   const stops = useMemo(() => {
     const groups: Record<string, BudgetItem[]> = {};
     active.filter((item) => item.scope === 'stop').forEach((item) => {
@@ -159,7 +161,8 @@ export function BudgetWorkspace({ tripId, destination, graph, refreshVersion, on
         : largestCategory === 'food' ? 'Food is your largest entered cost. Check whether daily meal assumptions fit your plans.'
           : 'Review your largest entered costs first; every edit updates the total immediately.';
   const renderLine = (item: BudgetItem) => <BudgetLine key={item.id} item={item} currency={budget!.currency}
-    editing={editingId === item.id} saving={saving} onEdit={() => setEditingId(item.id)} onCancel={() => setEditingId(null)}
+    editing={!readOnly && editingId === item.id} saving={saving} locked={readOnly}
+    onEdit={() => setEditingId(item.id)} onCancel={() => setEditingId(null)}
     onSave={(value) => mutate(() => updateBudgetItem(tripId, item.id, value))}
     onDelete={() => { if (window.confirm(`Delete “${item.label}” from this budget?`)) {
       void mutate(() => deleteBudgetItem(tripId, item.id)).then((done) => { if (done) setEditingId(null); });
@@ -178,18 +181,19 @@ export function BudgetWorkspace({ tripId, destination, graph, refreshVersion, on
         </ol>
         {error && <div className="tv-budget__error" role="alert">{error}<button type="button" onClick={() => { setError(null); setLoading(true); void getTripBudget(tripId).then((data) => { setBudget(data); setTarget(data.target_amount || ''); setCurrency(data.currency); }).catch((cause: Error) => setError(cause.message)).finally(() => setLoading(false)); }}>Retry</button></div>}
         {loading ? <p className="tv-budget__loading" role="status">Loading budget…</p> : budget && <>
+          {readOnly && <div className="tv-budget__locked" role="status"><div><strong>{finalTrip && !budget.is_locked ? 'Budget estimate in final trip' : 'Final budget'} · {money(finalTrip && !budget.is_locked ? budget.projected_total : budget.locked_total || budget.priced_total, budget.currency)}</strong><span>{finalTrip ? 'This trip is finalized, so its costs are read-only.' : 'Costs are read-only. Unlock the budget before changing costs or the trip route.'}</span></div>{!finalTrip && <button type="button" disabled={saving} onClick={() => { void mutate(() => unlockTripBudget(tripId)); }}>Unlock budget</button>}</div>}
           <section className="tv-budget__summary" aria-label="Budget summary">
             {pendingSuggestions > 0 && <div><span>PROJECTED TRIP COST</span><strong>~{money(projected, budget.currency)}</strong><small>Entered amounts plus {pendingSuggestions} suggested{budget.unestimated_count ? ` · ${budget.unestimated_count} still unknown` : ''}</small></div>}
-            <div><span>ENTERED SO FAR</span><strong>{money(budget.priced_total, budget.currency)}</strong><small>{budget.unpriced_count ? `${budget.unpriced_count} costs still missing · total is incomplete` : active.length ? 'All included costs have amounts' : 'No costs entered yet'}</small></div>
+            <div><span>{budget.is_locked ? 'FINAL BUDGET' : 'ENTERED SO FAR'}</span><strong>{money(budget.is_locked ? budget.locked_total || budget.priced_total : budget.priced_total, budget.currency)}</strong><small>{budget.unpriced_count ? `${budget.unpriced_count} costs still missing · total is incomplete` : active.length ? 'All included costs have amounts' : 'No costs entered yet'}</small></div>
             <div><span>{budget.target_amount === null ? 'TARGET' : Number(budget.remaining) < 0 ? 'ABOVE TARGET' : 'LEFT TO TARGET'}</span><strong>{budget.target_amount === null ? 'Set one below' : money(Math.abs(Number(budget.remaining)), budget.currency)}</strong><small>{budget.target_amount === null ? 'A target helps you compare options' : budget.unpriced_count ? 'Provisional while costs are missing' : active.length ? 'Based on entered costs' : 'No costs entered yet'}</small></div>
           </section>
           {budget.target_amount !== null && <div className="tv-budget__meter" role="progressbar" aria-label="Budget used" aria-valuenow={Math.round(progress)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${progress}%` }} /></div>}
-          <form className="tv-budget__settings" onSubmit={(event) => { event.preventDefault(); void mutate(() => updateBudgetSettings(tripId, { currency, target_amount: target.trim() || null })); }}>
+          {!readOnly && <form className="tv-budget__settings" onSubmit={(event) => { event.preventDefault(); void mutate(() => updateBudgetSettings(tripId, { currency, target_amount: target.trim() || null })); }}>
             <label>Budget target<input type="number" min="0" step="0.01" value={target} onChange={(event) => setTarget(event.target.value)} placeholder="Optional" /></label>
             <label>Currency<select value={currency} disabled={hasEnteredAmounts} onChange={(event) => setCurrency(event.target.value as BudgetCurrency)}>{currencies.map((code) => <option key={code} value={code}>{code}</option>)}</select></label>
             <button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save target'}</button>
-          </form>
-          {(canEstimate || pendingSuggestions > 0) && <section className="tv-budget__estimate" aria-label="Suggested amounts">
+          </form>}
+          {!readOnly && (canEstimate || pendingSuggestions > 0) && <section className="tv-budget__estimate" aria-label="Suggested amounts">
             <p>{pendingSuggestions > 0
               ? `${pendingSuggestions} suggested ${pendingSuggestions === 1 ? 'amount is' : 'amounts are'} ready. They add about ${money(projected - total, budget.currency)} and stay out of your total until you use them.`
               : 'Not sure what things cost? TripVerse can suggest typical amounts for every row from traveler reports and your plan.'}</p>
@@ -200,6 +204,7 @@ export function BudgetWorkspace({ tripId, destination, graph, refreshVersion, on
                 onClick={() => { void suggest(); }}>{estimating ? 'Checking traveler reports…' : pendingSuggestions ? 'Suggest the rest' : 'Suggest amounts'}</button>}
             </div>
           </section>}
+          {!readOnly && graph && <section className="tv-budget__lock-action" aria-label="Finalize budget"><div><strong>Ready to keep this budget?</strong><span>All included rows need an amount. You can unlock it later while the trip is still being planned.</span></div><div><button type="button" disabled={saving || !active.some((item) => item.is_included)} onClick={() => { void mutate(() => lockTripBudget(tripId)); }}>Lock this budget</button>{pendingSuggestions > 0 && <button type="button" disabled={saving} onClick={() => { void mutate(() => lockTripBudget(tripId, true)); }}>Use suggestions & lock</button>}</div></section>}
           {hasEnteredAmounts && <p className="tv-budget__note">Currency is locked while amounts are entered. No exchange conversion happens behind the scenes.</p>}
           {distribution.length > 0 && <section className="tv-budget__distribution"><h3>Where the entered money goes</h3>{distribution.map((entry) => <div key={entry.value} className="tv-budget__distribution-row"><span>{entry.label}</span><div><i style={{ width: `${Math.max(2, entry.amount / total * 100)}%` }} /></div><strong>{money(entry.amount, budget.currency)}</strong></div>)}</section>}
           {total > targetNumber && targetNumber > 0 && <p className="tv-budget__suggestion">Entered costs are above your target. {budgetSuggestion}</p>}
@@ -211,8 +216,8 @@ export function BudgetWorkspace({ tripId, destination, graph, refreshVersion, on
           </details>) : <p className="tv-budget__empty">Destination cost rows will appear when an itinerary is generated. You can set a target or add an expense now.</p>}
           {!!legs.length && <details className="tv-budget__group" open><summary><strong>Travel between places</strong><span>{legs.length} connections</span></summary>{legs.map(renderLine)}</details>}
           {!!manual.length && <details className="tv-budget__group" open><summary><strong>Other expenses</strong><span>{manual.length} items</span></summary>{manual.map(renderLine)}</details>}
-          <div className="tv-budget__section-head"><h3>Add a cost</h3><span>Tickets, insurance, or anything else</span></div>
-          <ItemEditor key={manualFormVersion} saving={saving} onCancel={() => setManualFormVersion((value) => value + 1)} onSave={(value) => mutate(() => addBudgetItem(tripId, value))} />
+          {!readOnly && <><div className="tv-budget__section-head"><h3>Add a cost</h3><span>Tickets, insurance, or anything else</span></div>
+          <ItemEditor key={manualFormVersion} saving={saving} onCancel={() => setManualFormVersion((value) => value + 1)} onSave={(value) => mutate(() => addBudgetItem(tripId, value))} /></>}
           {!!review.length && <details className="tv-budget__group tv-budget__review"><summary><strong>Needs review after route change</strong><span>{review.length} no longer counted</span></summary>
             <p>These rows belonged to places or travel legs removed from the latest itinerary. Entered values are kept here for reference and excluded from the total.</p>
             {review.map((item) => <div className="tv-budget__line" key={item.id}><div className="tv-budget__line-copy"><strong>{item.label}</strong><small>{item.unit_amount === null ? 'No amount entered' : `${item.quantity} × ${money(item.unit_amount, budget.currency)}`}</small></div><span className="tv-budget__line-total">{itemTotal(item) === null ? 'Not priced' : money(itemTotal(item)!, budget.currency)}</span></div>)}

@@ -96,13 +96,14 @@ interface Props {
   onSelectDay: (day: number | null) => void;
   onBack: () => void;
   onOpenBudget: () => void;
+  onFinalize?: () => void;
   /** "Add to day N" in Around here; left out while a reply is streaming, which hides the button. */
   onAddPlace?: (name: string, day: number | null) => void;
   chat: React.ReactNode;
 }
 
 export function TripStudio({
-  trip, tripContext, graph, document, dark, isLoading, loadingStage, day, onSelectDay, onBack, onOpenBudget, onAddPlace, chat,
+  trip, tripContext, graph, document, dark, isLoading, loadingStage, day, onSelectDay, onBack, onOpenBudget, onFinalize, onAddPlace, chat,
 }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -200,6 +201,8 @@ export function TripStudio({
         <span className="tv-app__bar-spacer" />
         {isLoading && <span className="tv-studio__live" role="status"><i aria-hidden="true" />{guide.name}: {loadingStage}</span>}
         <ThemeToggle />
+        {trip.status === 'COMPLETED' ? <span className="tv-tag tv-tag--green">Final trip</span>
+          : onFinalize && <button type="button" className="tv-btn tv-btn--primary tv-btn--sm" onClick={onFinalize}>Finalize trip</button>}
         <button type="button" className="tv-btn tv-btn--ghost tv-btn--sm" onClick={onOpenBudget}>Budget</button>
         <ExportMenu document={document}
           pdf={document ? () => import('../../lib/exporters/pdf').then(({ tripPdf }) => tripPdf(document, guide)) : undefined} />

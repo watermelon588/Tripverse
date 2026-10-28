@@ -5,6 +5,11 @@ from httpx import AsyncClient
 
 from app.models.enums import MessageRole, MessageType
 from app.models.trip import ConversationMessage
+from app.models.trip import Trip
+from app.models.enums import TripStatus
+from app.core.auth import RequestIdentity
+from app.schemas.trip import SendMessageRequest
+from app.services.conversation import conversation_service
 from app.services.budget import _desired_rows
 from conftest import TestingSessionLocal
 
@@ -107,6 +112,8 @@ async def test_budget_manual_items_validation_and_ownership(client: AsyncClient)
     })
     assert added.status_code == 201
     assert added.json()["priced_total"] == "251.00"
+    assert (await client.post(f"{url}/lock", headers=headers,
+                              json={"accept_suggestions": False})).status_code == 409  # no finalized budget before a plan
     item_id = added.json()["items"][0]["id"]
     assert (await client.put(f"{url}/settings", headers=headers, json={
         "currency": "USD", "target_amount": "1000",
@@ -169,3 +176,50 @@ async def test_estimates_are_suggested_projected_then_accepted(client: AsyncClie
 def test_single_stop_without_day_ranges_covers_the_whole_trip():
     rows = {row["label"]: row["quantity"] for row in _desired_rows(itinerary(["Kyoto"]), trip_days=3).values()}
     assert (rows["Stay in Kyoto"], rows["Food in Kyoto"], rows["Local travel in Kyoto"]) == (2, 3, 3)
+
+
+@pytest.mark.asyncio
+async def test_final_budget_is_persistent_read_only_and_unlockable_in_chat(client: AsyncClient):
+    headers = {"X-Guest-ID": str(uuid.uuid4())}
+    created = (await client.post("/api/trips", headers=headers)).json()
+    trip_id = created["trip_id"]
+    async with TestingSessionLocal() as db:
+        trip = await db.get(Trip, uuid.UUID(trip_id))
+        trip.status = TripStatus.PLANNING
+        db.add(ConversationMessage(session_id=uuid.UUID(created["session_id"]), role=MessageRole.ASSISTANT,
+                                   message_type=MessageType.TEXT, content="Trip draft",
+                                   payload={"kind": "ITINERARY_GRAPH", "graph": itinerary(["Kyoto"])}))
+        await db.commit()
+    url = f"/api/trips/{trip_id}/budget"
+    initial = (await client.get(url, headers=headers)).json()
+    assert (await client.post(f"{url}/lock", headers=headers, json={"accept_suggestions": False})).status_code == 409
+    for item in initial["items"]:
+        saved = await client.put(f"{url}/items/{item['id']}", headers=headers, json={
+            "label": item["label"], "category": item["category"], "place_name": item["place_name"],
+            "quantity": item["quantity"], "unit_amount": "100", "is_included": True})
+        assert saved.status_code == 200
+    locked = (await client.post(f"{url}/lock", headers=headers, json={"accept_suggestions": False})).json()
+    assert locked["is_locked"] is True and locked["locked_total"] == locked["priced_total"]
+    assert (await client.get(url, headers=headers)).json()["locked_total"] == locked["locked_total"]
+    assert (await client.put(f"{url}/settings", headers=headers,
+                             json={"currency": "INR", "target_amount": "999"})).status_code == 409
+    assert (await client.post(f"{url}/items", headers=headers,
+                              json={"label": "Taxi", "category": "travel", "unit_amount": "50"})).status_code == 409
+    assert (await client.put(f"{url}/items/{initial['items'][0]['id']}", headers=headers,
+                             json={"label": "Changed", "category": "travel", "unit_amount": "1"})).status_code == 409
+    assert (await client.post(f"{url}/estimates", headers=headers)).status_code == 409
+    doc = (await client.get(f"/api/trips/{trip_id}/document", headers=headers)).json()
+    assert doc["budget"]["is_locked"] is True and doc["budget"]["locked_total"] == float(locked["locked_total"])
+    refused = (await client.post(f"/api/trips/{trip_id}/messages", headers=headers,
+                                 json={"message_type": "TEXT", "content": "Move Kyoto to day 2"})).json()
+    assert "Unlock it" in refused["assistant_message"]["content"]
+    unlocked = (await client.post(f"/api/trips/{trip_id}/messages", headers=headers,
+                                  json={"message_type": "TEXT", "content": "Unlock the budget"})).json()
+    assert "unlocked" in unlocked["assistant_message"]["content"].lower()
+    assert (await client.get(url, headers=headers)).json()["is_locked"] is False
+    async with TestingSessionLocal() as db:
+        relocked = [event async for event in conversation_service.process_message_stream(
+            db, uuid.UUID(trip_id), SendMessageRequest(message_type=MessageType.TEXT, content="Lock this budget"),
+            RequestIdentity(guest_id=headers["X-Guest-ID"]))]
+    assert any("Budget locked" in event for event in relocked)
+    assert (await client.get(url, headers=headers)).json()["is_locked"] is True

@@ -84,6 +84,8 @@ You are TripVerse, revising a traveler's itinerary while chatting with them.
 - Every day stays in the same day-by-day format with its day number, so the change shows up in their Trip Studio.
 - The update is saved to their Trip Studio as soon as you finish: don't ask them to confirm or finalize it.
 - Never invent prices, schedules, availability or bookings; flag details to verify.
+- If BUDGET LEDGER is supplied, its projected total and target are authoritative. Do not add up prices
+  from the prose or call entered planning costs "spent" money.
 - Markdown only: no raw HTML, no code fences. Never mention internal systems.
 """
 
@@ -96,6 +98,7 @@ If JUST SAVED lists something, confirm it in a few words first.
 If they say the plan is final, or ask to save it or update the studio: every change is saved to their Trip Studio
 the moment it's made, so tell them it's already saved and they can open the studio to see it.
 Never invent prices, schedules or bookings. Markdown only, no headings. Never mention internal systems.
+If BUDGET LEDGER is supplied, use only its total and target when discussing the overall budget.
 """
 
 
@@ -108,6 +111,7 @@ def build_followup_prompt(
     planning_preferences: dict[str, Any] | None,
     last_reply: str | None = None,
     saved: list[str] | None = None,
+    budget_context: dict[str, Any] | None = None,
 ) -> str:
     """Prompt for revising or discussing an existing itinerary without re-researching the trip.
 
@@ -120,6 +124,7 @@ def build_followup_prompt(
         f"CURRENT ITINERARY:\n{previous_plan[:16000]}\n\n"
         + (f"YOUR LAST MESSAGE:\n{last_reply[:3000]}\n\n" if last_reply else "")
         + (f"JUST SAVED: {'; '.join(saved)}\n\n" if saved else "")
+        + (f"BUDGET LEDGER (authoritative trip total): {json.dumps(budget_context)}\n\n" if budget_context else "")
         + f"TRAVELER'S MESSAGE:\n{message}"
     )
 

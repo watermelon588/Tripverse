@@ -61,6 +61,9 @@ class BudgetResponse(BaseModel):
     trip_id: UUID
     currency: BudgetCurrency
     target_amount: Optional[Decimal]
+    is_locked: bool = False
+    locked_at: Optional[datetime] = None
+    locked_total: Optional[Decimal] = None
     priced_total: Decimal
     remaining: Optional[Decimal]
     unpriced_count: int
@@ -71,3 +74,7 @@ class BudgetResponse(BaseModel):
     category_totals: dict[str, Decimal]
     place_totals: dict[str, Decimal]
     items: list[BudgetItemResponse]
+
+
+class BudgetLockRequest(BaseModel):
+    accept_suggestions: bool = False

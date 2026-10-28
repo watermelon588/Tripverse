@@ -2,7 +2,7 @@ import asyncio
 import logging
 import re
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -76,6 +76,9 @@ _TRIP_LENGTH = re.compile(r"\b(\d+|a|one|two|three|four|five|six|seven|eight|nin
 # "what if we…?", "how about…?" and "why not…?" are requests, so they aren't in here.
 _ADVICE = re.compile(r"^\W*(should|shall i|is(?! it possible)|are|does|do you think|which|where|when|what(?! if)|how(?! about)|why(?! not))\b",
                      re.I)
+_BUDGET_LOCK = re.compile(r"\b(lock|finali[sz]e|confirm)\b.{0,35}\bbudget\b|\bbudget\b.{0,35}\b(lock|finali[sz]e|confirm)\b", re.I)
+_BUDGET_UNLOCK = re.compile(r"\bunlock\b.{0,25}\bbudget\b|\bbudget\b.{0,25}\bunlock\b", re.I)
+_TRIP_FINALIZE = re.compile(r"\b(finali[sz]e|confirm|lock)\b.{0,35}\b(trip|itinerary|plan)\b|\bfinali[sz]e it\b", re.I)
 
 
 def _follow_up_mode(message: str, intent: str | None, offered: bool) -> str:
@@ -113,15 +116,120 @@ class ConversationService:
         self.conversation_repo = conversation_repo or ConversationRepository()
         self.message_repo = message_repo or MessageRepository()
 
+    async def _trip_finalization_turn(self, db: AsyncSession, trip, request: SendMessageRequest) -> tuple[str, dict] | None:
+        """Offer a compact confirmation, then finalize only after explicit agreement."""
+        if trip.status == TripStatus.COMPLETED:
+            return "This trip is finalized and read-only. You can view or export it, but its itinerary and budget can no longer be edited.", {"kind": "TRIP_FINALIZED"}
+        message = (request.content or "").strip()
+        action = (request.payload or {}).get("action")
+        asked = (action == "REQUEST_FINALIZE_TRIP" or bool(_TRIP_FINALIZE.search(message))
+                 or ("budget" not in message.lower() and bool(re.search(r"\bfinali[sz]e\b", message, re.I))))
+        confirmed = (action == "CONFIRM_FINALIZE_TRIP" or bool(re.match(
+            r"^\W*(yes|yeah|yep|yup|sure|ok(ay)?|please|do it|go ahead|sounds good|confirm(ed)?)\b",
+            message, re.I)))
+        agreed = confirmed or (bool(_AGREE.match(message)) and not asked)
+        if not asked and not agreed:
+            return None
+        from app.services.budget import budget_response, latest_itinerary_payload
+        payload = await latest_itinerary_payload(db, trip.id) or {}
+        offered = False
+        if agreed:
+            previous = await db.execute(
+                select(ConversationMessage).join(ConversationSession, ConversationMessage.session_id == ConversationSession.id)
+                .where(ConversationSession.trip_id == trip.id, ConversationMessage.role == MessageRole.ASSISTANT)
+                .order_by(ConversationMessage.created_at.desc(), ConversationMessage.id.desc()).limit(1))
+            last = previous.scalar_one_or_none()
+            offered = bool(last and (last.payload or {}).get("offer_finalize_trip"))
+            if not offered and not asked:
+                return None
+        if trip.status != TripStatus.PLANNING or not (payload.get("graph") or {}).get("nodes"):
+            return "Let's create an itinerary before finalizing the trip.", {"kind": "TRIP_EVENT"}
+        if payload.get("copilot") and payload["copilot"].get("status") != "complete":
+            return "Finish the guided day plan first, then we can finalize the trip.", {"kind": "TRIP_EVENT"}
+        if agreed and offered:
+            await trip_service.finalize_trip(db, trip)
+            return "Trip finalized. Your itinerary and budget are now read-only; you can view or export the final plan.", {
+                "kind": "TRIP_FINALIZED", "changes": [{"status": "done", "text": "Trip finalized"}]}
+        budget = await budget_response(db, trip, payload=payload)
+        places = list(dict.fromkeys(node.get("name") for node in payload["graph"]["nodes"]
+                                    if node.get("kind") == "stop" and node.get("name")))
+        start = (trip.planning_preferences or {}).get("start_date")
+        try:
+            end = (date.fromisoformat(start) + timedelta(days=(trip.duration_days or 1) - 1)).isoformat() if start else None
+        except ValueError:
+            end = None
+        dates = f"{start} to {end}" if end else "Dates not set"
+        amount = budget.locked_total if budget.is_locked else budget.projected_total
+        cost = f"{amount:,.2f} {budget.currency}" + (" final" if budget.is_locked else " estimated")
+        if budget.unpriced_count:
+            cost += f"; {budget.unpriced_count} costs still unknown"
+        summary = (f"Before I finalize this trip, please review: {trip.duration_days or 0} days; "
+                   f"{', '.join(places[:6]) or trip.destination}; {dates}; budget {cost}. "
+                   "Finalizing makes the plan and budget read-only. Reply 'yes, finalize' to confirm, or keep editing.")
+        return summary, {"kind": "TRIP_EVENT", "offer_finalize_trip": True}
+
     async def _copilot_context(self, db: AsyncSession, trip, request: SendMessageRequest) -> dict:
-        from app.services.budget import budget_target, latest_copilot_state, traveler_rates
+        from app.services.budget import budget_response, budget_target, latest_copilot_state, traveler_rates
         copilot = await latest_copilot_state(db, trip.id)
         if copilot:
             # Amounts typed into the budget planner are the truth the agent plans against.
             copilot["rates"].update(await traveler_rates(db, trip.id))
+            ledger = await budget_response(db, trip)
+            from app.agents.trip_planner.copilot import engine
+            raw = engine.baseline(copilot) + sum(engine.day_cost(copilot, day["items"]) for day in copilot["days"])
+            copilot["ledger_adjustment"] = round(float(ledger.projected_total) - raw, 2)
+            copilot["budget"] = float(ledger.target_amount) if ledger.target_amount is not None else None
+            copilot["summary"] = engine.budget_status(copilot)
         focus = (request.payload or {}).get("copilot_day")
         return {"copilot": copilot, "currency": trip.currency, "budget_target": await budget_target(db, trip.id),
                 "focus_day": focus if type(focus) is int else None}
+
+    async def _budget_turn(self, db: AsyncSession, trip, request: SendMessageRequest,
+                           last_reply: str | None = None) -> tuple[str, dict] | None:
+        """Handle budget finalization before either planner rewrites a trip."""
+        from app.models.budget import BudgetPlan
+        from app.services.budget import budget_response, lock_budget, unlock_budget
+
+        action = (request.payload or {}).get("action")
+        message = (request.content or "").strip()
+        unlock = action == "UNLOCK_BUDGET" or bool(_BUDGET_UNLOCK.search(message))
+        lock = action == "LOCK_BUDGET" or bool(_BUDGET_LOCK.search(message))
+        if not (lock or unlock) and _AGREE.match(message) and last_reply and _BUDGET_LOCK.search(last_reply):
+            lock = True
+        if not (lock or unlock) and _AGREE.match(message):
+            offered = await db.execute(
+                select(ConversationMessage).join(ConversationSession, ConversationMessage.session_id == ConversationSession.id)
+                .where(ConversationSession.trip_id == trip.id, ConversationMessage.role == MessageRole.ASSISTANT)
+                .order_by(ConversationMessage.created_at.desc(), ConversationMessage.id.desc()).limit(1))
+            latest = offered.scalar_one_or_none()
+            lock = bool((latest.payload or {}).get("offer_lock_budget")) if latest else False
+        plan = await db.get(BudgetPlan, trip.id)
+        if unlock:
+            if not plan or not plan.is_locked:
+                return "Your budget is already editable.", {"kind": "BUDGET_EVENT"}
+            await unlock_budget(db, trip)
+            return "Budget unlocked. You can update costs and the trip again.", {"kind": "BUDGET_EVENT", "changes": [{"status": "done", "text": "Budget unlocked"}]}
+        if lock:
+            if trip.status == TripStatus.DRAFT:
+                return "Let's make a trip plan and add costs before locking the budget.", {"kind": "BUDGET_EVENT"}
+            budget = await budget_response(db, trip)
+            if budget.is_locked:
+                return f"Your budget is already final at {budget.locked_total:,.2f} {budget.currency}.", {"kind": "BUDGET_EVENT"}
+            if budget.unpriced_count:
+                return (f"There are {budget.unpriced_count} included costs without amounts. Fill them in, use suggestions, or exclude them in Budget, then I can lock it.",
+                        {"kind": "BUDGET_EVENT"})
+            if not any(item.is_current and item.is_included for item in budget.items):
+                return "Add at least one cost in Budget before locking it.", {"kind": "BUDGET_EVENT"}
+            budget = await lock_budget(db, trip)
+            label = f"Budget locked at {budget.locked_total:,.2f} {budget.currency}"
+            return f"{label}. The costs are read-only now; you can unlock them in Budget while the trip is still being planned.", {
+                "kind": "BUDGET_EVENT", "changes": [{"status": "done", "text": label}]}
+        if plan and plan.is_locked:
+            ops = (request.payload or {}).get("ops") or []
+            editing_action = action == "COPILOT_OPS" and any(op.get("op") not in ("goto_day", "next_day", "finish") for op in ops if isinstance(op, dict))
+            if editing_action or (_EDIT.search(message) and not _ADVICE.match(message)) or re.search(r"\b(budget|cost|price)\b.*\d", message, re.I):
+                return "Your budget is final. Unlock it in Budget before changing costs or the itinerary; I can still answer questions.", {"kind": "BUDGET_EVENT"}
+        return None
 
     async def _apply_brief_budget(self, db: AsyncSession, trip, request: SendMessageRequest) -> None:
         """A submitted trip brief's budget and currency go to the budget ledger."""
@@ -186,7 +294,12 @@ class ConversationService:
                 yield sse({"type": "stage", "label": value})
             else:
                 result = value
+        from app.services.budget import align_copilot_budget
+        await align_copilot_budget(db, trip, result)
         copilot, graph = result["copilot"], result["itinerary_graph"]
+        if copilot.get("status") == "complete" and not copilot.get("trip_finalize_offered"):
+            result["offer_finalize_trip"] = True
+            copilot["trip_finalize_offered"] = True
         # The map and the day panel reflect the decision before the reply starts.
         yield sse({"type": "graph", "graph": graph, "final": True})
         yield sse({"type": "copilot", "copilot": copilot})
@@ -221,7 +334,8 @@ class ConversationService:
         assistant_msg = await self.message_repo.create_message(
             db, session_id=session.id, role=MessageRole.ASSISTANT, message_type=MessageType.TEXT,
             content=text.strip(),
-            payload=self._graph_payload({"itinerary_graph": graph, "copilot": copilot, "changes": result.get("changes")}),
+            payload=self._graph_payload({"itinerary_graph": graph, "copilot": copilot, "changes": result.get("changes"),
+                                         "offer_finalize_trip": result.get("offer_finalize_trip")}),
         )
         await db.commit()
         await db.refresh(trip)
@@ -235,7 +349,7 @@ class ConversationService:
         if not result.get("itinerary_graph"):
             return None
         payload = {"kind": "ITINERARY_GRAPH", "graph": result["itinerary_graph"]}
-        for key in ("copilot", "day_plan", "changes"):
+        for key in ("copilot", "day_plan", "changes", "offer_lock_budget", "offer_finalize_trip", "route_reality"):
             if result.get(key):
                 payload[key] = result[key]
         return payload
@@ -258,7 +372,7 @@ class ConversationService:
 
         # 2. Enforce trip-scoped authorization
         trip_service.verify_trip_ownership(trip, identity)
-        if ((request.payload or {}).get("action") == "SUBMIT_TRIP_ONBOARDING"
+        if (trip.status != TripStatus.COMPLETED and (request.payload or {}).get("action") == "SUBMIT_TRIP_ONBOARDING"
                 and trip.status != TripStatus.DRAFT):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                                 detail="Trip details can only be edited before itinerary generation.")
@@ -277,6 +391,23 @@ class ConversationService:
             content=request.content,
             payload=request.payload,
         )
+
+        prior = await self._history(db, trip.id) if _AGREE.match((request.content or "").strip()) else {}
+        control_turn = await self._trip_finalization_turn(db, trip, request)
+        if control_turn is None:
+            control_turn = await self._budget_turn(db, trip, request, prior.get("last_reply"))
+        if control_turn:
+            text, payload = control_turn
+            assistant_msg = await self.message_repo.create_message(
+                db, session_id=session.id, role=MessageRole.ASSISTANT,
+                message_type=MessageType.TEXT, content=text, payload=payload)
+            await db.commit()
+            await db.refresh(trip)
+            await db.refresh(session)
+            return TripStateResponse(
+                trip=TripResponse.model_validate(trip),
+                conversation=ConversationSessionResponse.model_validate(session),
+                assistant_message=ConversationMessageResponse.model_validate(assistant_msg))
 
         # 5. The graph handles form onboarding and subsequent conversation.
         user_name = identity.user_name if identity else None
@@ -302,6 +433,22 @@ class ConversationService:
         }
 
         graph_result = await trip_planner_graph.ainvoke(graph_state)
+        if graph_result.get("itinerary_graph") and not graph_result.get("day_plan"):
+            from app.services.trip_document import _legacy_days
+
+            graph_result["day_plan"] = _legacy_days(graph_result["itinerary_graph"],
+                                                    trip.duration_days or 1, trip.destination or "Trip")
+        if graph_result.get("itinerary_graph") and graph_result.get("day_plan"):
+            from app.services.budget import latest_itinerary_payload
+            from app.services.route_reality import assess_itinerary
+            previous = await latest_itinerary_payload(db, trip.id) or {}
+            graph_result["route_reality"] = await assess_itinerary(
+                graph_result["day_plan"], trip.destination or "Trip",
+                (trip.planning_preferences or {}).get("travel_mode") or "transit",
+                (trip.planning_preferences or {}).get("pace") or "balanced",
+                previous.get("route_reality"))
+        from app.services.budget import align_copilot_budget
+        await align_copilot_budget(db, trip, graph_result)
         await self._persist_copilot(db, trip, graph_result)
         await self._apply_brief_budget(db, trip, request)
 
@@ -344,7 +491,19 @@ class ConversationService:
             session.current_stage = ConversationStage.TRIP_BASICS
             assistant_text = graph_result.get("assistant_response") or "Tell me the basics of your journey."
 
-        assistant_payload = graph_result.get("ui_action") or self._graph_payload(graph_result)
+        route_warnings = (graph_result.get("route_reality") or {}).get("warnings") or []
+        impossible = [warning for warning in route_warnings if warning.get("severity") == "impossible"]
+        if impossible:
+            assistant_text += "\n\nTravel check: " + " ".join(
+                f"Day {warning['day']} needs a different base or day: {warning['message']}."
+                for warning in impossible[:3])
+            graph_result["changes"] = [*graph_result.get("changes", []), *(
+                {"status": "skipped", "text": f"Day {warning['day']} needs review: {warning['message']}"}
+                for warning in impossible)]
+
+        if graph_result.get("itinerary_graph") and (not graph_result.get("copilot") or graph_result["copilot"].get("status") == "complete"):
+            graph_result["offer_finalize_trip"] = True
+        assistant_payload = self._graph_payload(graph_result) or graph_result.get("ui_action")
         assistant_msg = await self.message_repo.create_message(
             db,
             session_id=session.id,
@@ -432,7 +591,7 @@ class ConversationService:
                 detail=f"Trip with ID '{trip_id}' not found.",
             )
         trip_service.verify_trip_ownership(trip, identity)
-        if ((request.payload or {}).get("action") == "SUBMIT_TRIP_ONBOARDING"
+        if (trip.status != TripStatus.COMPLETED and (request.payload or {}).get("action") == "SUBMIT_TRIP_ONBOARDING"
                 and trip.status != TripStatus.DRAFT):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                                 detail="Trip details can only be edited before itinerary generation.")
@@ -451,6 +610,21 @@ class ConversationService:
             content=request.content,
             payload=request.payload,
         )
+
+        control_turn = await self._trip_finalization_turn(db, trip, request)
+        if control_turn is None:
+            control_turn = await self._budget_turn(db, trip, request, history.get("last_reply"))
+        if control_turn:
+            response, payload = control_turn
+            assistant_msg = await self.message_repo.create_message(
+                db, session_id=session.id, role=MessageRole.ASSISTANT,
+                message_type=MessageType.TEXT, content=response, payload=payload)
+            await db.commit()
+            await db.refresh(trip)
+            await db.refresh(session)
+            yield f"data: {json.dumps({'type': 'token', 'delta': response})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'trip': TripResponse.model_validate(trip).model_dump(mode='json'), 'conversation': ConversationSessionResponse.model_validate(session).model_dump(mode='json'), 'assistant_message': ConversationMessageResponse.model_validate(assistant_msg).model_dump(mode='json')})}\n\n"
+            return
 
         # Draft trips move through form -> planning choice -> full itinerary.
         # Neither form nor choice makes an LLM call.
@@ -643,10 +817,17 @@ class ConversationService:
             candidates: list = []
             if previous_plan:
                 yield f"data: {json.dumps({'type': 'stage', 'label': 'Thinking about that' if answering else 'Updating your itinerary'})}\n\n"
+                from app.services.budget import budget_response
+                current_budget = await budget_response(db, trip)
                 plan_prompt = build_followup_prompt(
                     previous_plan, message, trip.destination, trip.duration_days,
                     trip.origin_text, trip.planning_preferences or {}, last_reply=last_reply,
                     saved=[change["text"] for change in changes if change["status"] == "done"],
+                    budget_context={"currency": current_budget.currency,
+                                    "target": str(current_budget.target_amount) if current_budget.target_amount is not None else None,
+                                    "projected_total": str(current_budget.projected_total),
+                                    "unpriced_count": current_budget.unpriced_count,
+                                    "is_locked": current_budget.is_locked},
                 )
                 system_instruction = ANSWER_SYSTEM_INSTRUCTION if answering else REVISION_SYSTEM_INSTRUCTION
             else:
@@ -740,6 +921,10 @@ class ConversationService:
                 })
                 itinerary_graph = graph_result.get("itinerary_graph")
                 day_plan = graph_result.get("day_plan")
+                if itinerary_graph and not day_plan and not previous_plan:
+                    from app.services.trip_document import _legacy_days
+
+                    day_plan = _legacy_days(itinerary_graph, trip.duration_days or 1, trip.destination or "Trip")
                 if previous_plan:
                     if day_plan is None:
                         # Extraction failed on a revision: keep the last good day plan rather than losing it.
@@ -751,6 +936,27 @@ class ConversationService:
                             {"status": "skipped", "text": "The day-by-day plan didn't change"}]
                 if itinerary_graph:
                     ui_action = {"kind": "ITINERARY_GRAPH", "graph": itinerary_graph, "day_plan": day_plan}
+                    if day_plan:
+                        from app.services.route_reality import assess_itinerary
+                        previous_route = (await latest_itinerary_payload(db, trip.id) or {}).get("route_reality")
+                        yield f"data: {json.dumps({'type': 'stage', 'label': 'Checking travel time'})}\n\n"
+                        ui_action["route_reality"] = await assess_itinerary(
+                            day_plan, trip.destination or "Trip",
+                            (trip.planning_preferences or {}).get("travel_mode") or "transit",
+                            (trip.planning_preferences or {}).get("pace") or "balanced", previous_route)
+                        impossible = [warning for warning in ui_action["route_reality"]["warnings"]
+                                      if warning["severity"] == "impossible"]
+                        if impossible:
+                            notice = "\n\nTravel check: " + " ".join(
+                                f"Day {warning['day']} needs a different base or day: {warning['message']}."
+                                for warning in impossible[:3])
+                            accumulated_text += notice
+                            changes += [{"status": "skipped", "text":
+                                         f"Day {warning['day']} needs review: {warning['message']}"}
+                                        for warning in impossible]
+                            yield f"data: {json.dumps({'type': 'token', 'delta': notice})}\n\n"
+                    if not previous_plan:
+                        ui_action["offer_finalize_trip"] = True
                     yield f"data: {json.dumps({'type': 'graph', 'graph': itinerary_graph, 'final': True})}\n\n"
         else:
             trip.onboarding_status = OnboardingStatus.IN_PROGRESS

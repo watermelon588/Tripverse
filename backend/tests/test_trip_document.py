@@ -54,9 +54,14 @@ async def test_one_shot_document_has_dated_days_from_the_extracted_day_plan(clie
                                                        "time_of_day": "noon"}]}]})
         return "| Day 1 | Kyoto | **Nishiki Market** |\n| Day 2 | Kyoto | **Fushimi Inari** |\n| Day 3 | Kyoto | Free |"
 
-    with patch.object(llm_service, "generate", side_effect=fake):
-        await client.post(f"/api/trips/{trip_id}/messages", headers=headers,
-                          json={"message_type": "UI_ACTION", "payload": {"action": "GENERATE_FULL_ITINERARY"}})
+    route_state = {"route_points": {}, "route_times": {}, "route_queries": [], "route_requests": [],
+                   "warnings": [{"day": 1, "severity": "unverified", "message": "Location not verified",
+                                 "travel_hours": 1.17, "distance_km": 0, "basis": "distance estimate"}]}
+    with patch.object(llm_service, "generate", side_effect=fake), \
+            patch("app.services.route_reality.assess_itinerary", new=AsyncMock(return_value=route_state)):
+        response = await client.post(f"/api/trips/{trip_id}/messages", headers=headers,
+                                     json={"message_type": "UI_ACTION", "payload": {"action": "GENERATE_FULL_ITINERARY"}})
+    assert response.json()["assistant_message"]["payload"]["route_reality"]["warnings"][0]["day"] == 1
     doc = (await client.get(f"/api/trips/{trip_id}/document", headers=headers)).json()
     assert doc["mode"] == "one_shot"
     assert (doc["start_date"], doc["end_date"]) == ("2026-10-12", "2026-10-14")
@@ -68,6 +73,8 @@ async def test_one_shot_document_has_dated_days_from_the_extracted_day_plan(clie
     assert doc["days"][1]["items"][0]["time_of_day"] == "morning"
     assert doc["travelers"] == {"adults": 2, "children": 1} and doc["budget"]["target"] == 150000
     assert doc["graph"]["nodes"] and doc["legs"][0]["source"] == "Delhi"
+    assert doc["days"][0]["travel_hours"] is not None
+    assert doc["route_warnings"][0]["message"] == "Location not verified"
 
     forbidden = await client.get(f"/api/trips/{trip_id}/document", headers={"X-Guest-ID": str(uuid.uuid4())})
     assert forbidden.status_code == 403
@@ -87,9 +94,12 @@ async def test_agent_document_carries_costs_tips_and_party_size(client: AsyncCli
         # One-click start: getting around, party size and comfort come from the brief.
         assert (copilot["profile"]["travel_mode"], copilot["profile"]["travelers"],
                 copilot["profile"]["comfort"], copilot["budget"]) == ("walk", 3, "comfortable", 90000)
-        await client.post(url, headers=headers, json={"message_type": "UI_ACTION", "payload": {
+        added = await client.post(url, headers=headers, json={"message_type": "UI_ACTION", "payload": {
             "action": "COPILOT_OPS", "ops": [{"op": "add", "name": "Nezu Museum", "day": 1}]}})
     doc = (await client.get(f"/api/trips/{trip_id}/document", headers=headers)).json()
+    ledger = (await client.get(f"/api/trips/{trip_id}/budget", headers=headers)).json()
+    assert added.json()["assistant_message"]["payload"]["copilot"]["summary"]["committed"] == float(ledger["projected_total"])
+    assert doc["budget"]["planned"] == float(ledger["projected_total"])
     assert doc["mode"] == "agent" and doc["status"] == "building"
     item = doc["days"][0]["items"][0]
     assert (item["name"], item["est_cost"], item["tip"], item["source_url"]) == (
